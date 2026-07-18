@@ -17,7 +17,7 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
+    () => (localStorage.getItem(storageKey) as Theme | null) ?? defaultTheme
   )
 
   // Load theme from persistent preferences
@@ -61,7 +61,7 @@ export function ThemeProvider({
       localStorage.setItem(storageKey, newTheme)
       setTheme(newTheme)
       // Notify other windows (e.g., quick pane) of theme change
-      void emit('theme-changed', { theme: newTheme }).catch(error => {
+      void emit('theme-changed', { theme: newTheme }).catch((error: unknown) => {
         logger.error('Failed to emit theme-changed event', { error })
       })
     },

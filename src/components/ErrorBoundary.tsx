@@ -60,8 +60,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
       await saveCrashState(appState, {
         error: error.message,
-        stack: error.stack || 'No stack trace available',
-        componentStack: errorInfo.componentStack || undefined,
+        stack: error.stack ?? 'No stack trace available',
+        componentStack: errorInfo.componentStack ?? undefined,
       })
       this.setState({ saveStatus: 'saved' })
     } catch (saveError) {

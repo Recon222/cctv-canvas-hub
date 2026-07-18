@@ -36,7 +36,7 @@ export function useMainWindowEventListeners() {
           unlisten = unlistenFn
         }
       })
-      .catch(error => {
+      .catch((error: unknown) => {
         logger.error('Failed to setup quick-pane-submit listener', { error })
       })
 

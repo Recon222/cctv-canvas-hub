@@ -27,8 +27,8 @@ export type { AppPreferences, JsonValue, RecoveryError } from './bindings'
 /**
  * Helper to unwrap a Result type, throwing on error
  */
-export function unwrapResult<T, E>(
-  result: { status: 'ok'; data: T } | { status: 'error'; error: E }
+export function unwrapResult<T>(
+  result: { status: 'ok'; data: T } | { status: 'error'; error: unknown }
 ): T {
   if (result.status === 'ok') {
     return result.data

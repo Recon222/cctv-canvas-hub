@@ -40,7 +40,7 @@ export type ContextMenuEntry = ContextMenuItem | ContextMenuSeparator
  * Type guard to check if an entry is a separator.
  */
 function isSeparator(item: ContextMenuEntry): item is ContextMenuSeparator {
-  return 'type' in item && item.type === 'separator'
+  return 'type' in item
 }
 
 /**

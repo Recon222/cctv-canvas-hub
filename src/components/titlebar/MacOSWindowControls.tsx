@@ -74,7 +74,7 @@ export function MacOSWindowControls({
     }
 
     let tauriUnlisten: (() => void) | null = null
-    setupTauriFocusListener().then(unlisten => {
+    void setupTauriFocusListener().then(unlisten => {
       tauriUnlisten = unlisten
     })
 

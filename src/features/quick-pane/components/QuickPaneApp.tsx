@@ -14,7 +14,7 @@ import { dismissQuickPane } from '../services/quickPaneService'
  */
 // Apply theme from localStorage to document
 function applyTheme() {
-  const theme = localStorage.getItem('ui-theme') || 'system'
+  const theme = localStorage.getItem('ui-theme') ?? 'system'
   const root = document.documentElement
 
   root.classList.remove('light', 'dark')
@@ -43,15 +43,15 @@ export default function QuickPaneApp() {
     })
 
     return () => {
-      unlisten.then(fn => fn())
+      void unlisten.then(fn => fn())
     }
   }, [])
 
   // Focus input when window becomes visible, hide on blur
   useEffect(() => {
     const currentWindow = getCurrentWindow()
-    const unlisten = currentWindow.onFocusChanged(
-      async ({ payload: focused }) => {
+    const unlisten = currentWindow.onFocusChanged(({ payload: focused }) => {
+      void (async () => {
         if (focused) {
           // Re-apply theme in case it changed while hidden
           applyTheme()
@@ -61,20 +61,20 @@ export default function QuickPaneApp() {
           // Use dismiss command for consistent behavior (no animation)
           await dismissQuickPane()
         }
-      }
-    )
+      })()
+    })
 
     return () => {
-      unlisten.then(fn => fn())
+      void unlisten.then(fn => fn())
     }
   }, [])
 
   // Handle Escape key to dismiss
   useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault() // Prevent system "boop" sound
-        await dismissQuickPane()
+        void dismissQuickPane()
       }
     }
 

@@ -23,16 +23,14 @@ export function CommandPalette() {
 
   // Get all available commands grouped by category
   const commands = getAllCommands(commandContext, search, t)
-  const commandGroups = commands.reduce(
+  const commandGroups = commands.reduce<Record<string, typeof commands>>(
     (groups, command) => {
-      const group = command.group || 'other'
-      if (!groups[group]) {
-        groups[group] = []
-      }
+      const group = command.group ?? 'other'
+      groups[group] ??= []
       groups[group].push(command)
       return groups
     },
-    {} as Record<string, typeof commands>
+    {}
   )
 
   // Handle command execution

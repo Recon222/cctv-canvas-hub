@@ -38,7 +38,9 @@ export async function buildAppMenu(): Promise<Menu> {
         await MenuItem.new({
           id: 'check-updates',
           text: t('menu.checkForUpdates'),
-          action: handleCheckForUpdates,
+          action: () => {
+            void handleCheckForUpdates()
+          },
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await MenuItem.new({
@@ -108,13 +110,15 @@ export async function buildAppMenu(): Promise<Menu> {
  * Returns an unsubscribe function for cleanup.
  */
 export function setupMenuLanguageListener(): () => void {
-  const handler = async () => {
+  const handler = () => {
     logger.info('Language changed, rebuilding menu')
-    try {
-      await buildAppMenu()
-    } catch (error) {
-      logger.error('Failed to rebuild menu on language change', { error })
-    }
+    void (async () => {
+      try {
+        await buildAppMenu()
+      } catch (error) {
+        logger.error('Failed to rebuild menu on language change', { error })
+      }
+    })()
   }
   i18n.on('languageChanged', handler)
   return () => i18n.off('languageChanged', handler)
@@ -134,16 +138,19 @@ async function handleCheckForUpdates(): Promise<void> {
   try {
     const update = await check()
     if (update) {
-      notifications.info(
+      void notifications.info(
         'Update Available',
         `Version ${update.version} is available`
       )
     } else {
-      notifications.success('Up to Date', 'You are running the latest version')
+      void notifications.success(
+        'Up to Date',
+        'You are running the latest version'
+      )
     }
   } catch (error) {
     logger.error('Update check failed', { error })
-    notifications.error('Update Check Failed', 'Could not check for updates')
+    void notifications.error('Update Check Failed', 'Could not check for updates')
   }
 }
 

@@ -122,6 +122,3 @@ class Logger {
 
 // Export a singleton logger instance
 export const logger = new Logger()
-
-// Export individual logging functions for convenience
-export const { trace, debug, info, warn, error } = logger

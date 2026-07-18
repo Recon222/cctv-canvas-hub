@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client'
 import { QuickPaneApp } from './features/quick-pane'
 import './quick-pane.css'
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <QuickPaneApp />
-)
+const rootElement = document.getElementById('root')
+if (!rootElement) throw new Error('Root element #root not found')
+
+ReactDOM.createRoot(rootElement).render(<QuickPaneApp />)

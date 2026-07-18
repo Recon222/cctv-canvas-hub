@@ -32,14 +32,16 @@ export function WindowsWindowControls() {
     let aborted = false
     let resolvedUnsub: (() => void) | null = null
 
-    appWindow
-      .onResized(async () => {
-        try {
-          const maximized = await appWindow.isMaximized()
-          if (!aborted) setIsMaximized(maximized)
-        } catch {
-          // Ignore errors during cleanup
-        }
+    void appWindow
+      .onResized(() => {
+        void (async () => {
+          try {
+            const maximized = await appWindow.isMaximized()
+            if (!aborted) setIsMaximized(maximized)
+          } catch {
+            // Ignore errors during cleanup
+          }
+        })()
       })
       .then(unsub => {
         // If already aborted, unsubscribe immediately

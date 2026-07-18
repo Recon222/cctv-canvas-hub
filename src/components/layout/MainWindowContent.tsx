@@ -14,7 +14,7 @@ export function MainWindowContent({
 
   return (
     <div className={cn('flex h-full flex-col bg-background', className)}>
-      {children || (
+      {children ?? (
         <div className="flex flex-1 flex-col items-center justify-center">
           <h1 className="text-4xl font-bold text-foreground">
             {lastQuickPaneEntry

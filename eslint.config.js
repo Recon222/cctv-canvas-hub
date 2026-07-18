@@ -8,8 +8,8 @@ import prettierConfig from 'eslint-config-prettier'
 
 export default tseslint.config(
   js.configs.recommended,
-  ...tseslint.configs.strict,
-  ...tseslint.configs.stylistic,
+  ...tseslint.configs.strictTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
@@ -53,6 +53,23 @@ export default tseslint.config(
         },
       ],
       '@typescript-eslint/no-import-type-side-effects': 'error',
+
+      // strictTypeChecked tunings — keep the bug-catchers, quiet the React/stylistic noise:
+      // `() => set(...)` arrow shorthand is idiomatic (Zustand setters, handlers)
+      '@typescript-eslint/no-confusing-void-expression': [
+        'error',
+        { ignoreArrowShorthand: true },
+      ],
+      // async functions as JSX event handlers are the React norm (fire-and-forget)
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { attributes: false } },
+      ],
+      // numbers/booleans interpolated into template literals are fine
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        { allowNumber: true, allowBoolean: true },
+      ],
     },
     settings: {
       react: {
@@ -67,6 +84,34 @@ export default tseslint.config(
       'react-refresh/only-export-components': 'off',
       // Disable compiler rule for UI components (from shadcn) and test files
       'react-compiler/react-compiler': 'off',
+    },
+  },
+  {
+    // Tests use mocks and deliberate `any` / non-Error throws — relax type-safety.
+    files: ['src/test/**/*.{ts,tsx}', '**/*.test.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/only-throw-error': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+    },
+  },
+  {
+    // shadcn/ui is vendored, generated code — exempt it from the strict
+    // type-aware *stylistic* rules (the bug-catchers still apply everywhere).
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-deprecated': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/prefer-nullish-coalescing': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
     },
   },
   {
@@ -93,6 +138,12 @@ export default tseslint.config(
       'no-console': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
     },
+  },
+  {
+    // Plain JS (scripts) is not part of the TS project, so type-aware rules from
+    // strictTypeChecked can't load type info and would crash — turn them off here.
+    files: ['**/*.{js,cjs,mjs}'],
+    ...tseslint.configs.disableTypeChecked,
   },
   {
     ignores: [

@@ -5,7 +5,10 @@ import './i18n'
 import App from './App'
 import { queryClient } from './lib/query-client'
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+const rootElement = document.getElementById('root')
+if (!rootElement) throw new Error('Root element #root not found')
+
+ReactDOM.createRoot(rootElement).render(
   <QueryClientProvider client={queryClient}>
     <App />
     <ReactQueryDevtools initialIsOpen={false} />

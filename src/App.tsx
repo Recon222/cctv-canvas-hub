@@ -58,10 +58,10 @@ function App() {
       }
     }
 
-    initLanguageAndMenu()
+    void initLanguageAndMenu()
 
     // Clean up old recovery files on startup
-    cleanupOldFiles().catch(error => {
+    cleanupOldFiles().catch((error: unknown) => {
       logger.warn('Failed to cleanup old recovery files', { error })
     })
 
@@ -123,7 +123,9 @@ function App() {
     }
 
     // Check for updates 5 seconds after app loads
-    const updateTimer = setTimeout(checkForUpdates, 5000)
+    const updateTimer = setTimeout(() => {
+      void checkForUpdates()
+    }, 5000)
     return () => clearTimeout(updateTimer)
   }, [])
 
