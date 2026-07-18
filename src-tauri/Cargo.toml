@@ -5,6 +5,12 @@ description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
 rust-version = "1.82"
+# This crate ships two binaries (tauri-app + gen_bindings). Without default-run,
+# a bare `cargo run` — which is what `tauri dev` / `npm run tauri dev` invoke —
+# aborts with "could not determine which binary to run". Pinning the app binary
+# makes every launch path (npx tauri dev, npm run tauri dev, cargo run) seamless;
+# `cargo run --bin gen_bindings` still works explicitly.
+default-run = "tauri-app"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
