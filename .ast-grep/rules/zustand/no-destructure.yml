@@ -9,9 +9,17 @@ message: |
 severity: error
 language: Tsx
 rule:
-  pattern: const { $$$PROPS } = useUIStore($$$ARGS)
+  pattern: const { $$$PROPS } = $STORE($$$ARGS)
+constraints:
+  STORE:
+    regex: '^use[A-Z][A-Za-z0-9]*Store$'
 note: |
   Destructuring causes render cascades - every store update triggers re-renders
   even if destructured values haven't changed.
+
+  Matches any Zustand store by the `use<Name>Store` convention (useUIStore,
+  useCaseStore, ...) - not just the template's example store. `useState`,
+  `useQuery`, etc. are excluded by the `Store` suffix. Destructuring off
+  `useXStore.getState()` is fine (member call, not matched).
 
   See: docs/developer/architecture-guide.md (Performance Patterns)
