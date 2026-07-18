@@ -26,22 +26,11 @@ src-tauri/src/
 │   │   ├── mod.rs
 │   │   ├── commands/mod.rs
 │   │   └── types/mod.rs
-│   ├── example_feature/      # Template for new features
-│   │   ├── mod.rs
-│   │   ├── commands/mod.rs
-│   │   ├── services/mod.rs
-│   │   └── types/mod.rs
-│   └── documentation/        # Complex nested feature example
+│   └── example_feature/      # Template for new features
 │       ├── mod.rs
-│       ├── case_notes/
-│       │   ├── commands/mod.rs
-│       │   ├── services/mod.rs
-│       │   └── types/mod.rs
-│       ├── notes/
-│       │   ├── commands/mod.rs
-│       │   ├── services/mod.rs
-│       │   └── types/mod.rs
-│       └── shared/mod.rs
+│       ├── commands/mod.rs
+│       ├── services/mod.rs
+│       └── types/mod.rs
 └── utils/           # Cross-cutting utility modules
     ├── mod.rs
     └── platform.rs  # Platform-specific helpers

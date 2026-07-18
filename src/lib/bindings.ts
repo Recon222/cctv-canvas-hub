@@ -168,72 +168,6 @@ async saveExampleData(data: ExampleData) : Promise<Result<null, ExampleError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
-},
-/**
- * Load a case note by ID.
- */
-async loadCaseNote(noteId: string) : Promise<Result<CaseNote, CaseNoteError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("load_case_note", { noteId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Save a case note.
- */
-async saveCaseNote(note: CaseNote) : Promise<Result<null, CaseNoteError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_case_note", { note }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Load a note by ID.
- */
-async loadNote(noteId: string) : Promise<Result<Note, NoteError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("load_note", { noteId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Save a note.
- */
-async saveNote(note: Note) : Promise<Result<null, NoteError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_note", { note }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * List all notes.
- */
-async listNotes() : Promise<Result<Note[], NoteError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("list_notes") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Delete a note by ID.
- */
-async deleteNote(noteId: string) : Promise<Result<null, NoteError>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("delete_note", { noteId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
 }
 }
 
@@ -263,14 +197,6 @@ quick_pane_shortcut: string | null;
  */
 language: string | null }
 /**
- * A case note document.
- */
-export type CaseNote = { id: string; case_id: string; title: string; content: string; created_at: number; updated_at: number }
-/**
- * Errors specific to case note operations.
- */
-export type CaseNoteError = { type: "NotFound"; id: string } | { type: "ValidationError"; message: string } | { type: "ExportError"; message: string } | { type: "IoError"; message: string }
-/**
  * Example data structure demonstrating feature-scoped types.
  * 
  * All feature types need these derives for tauri-specta integration:
@@ -286,14 +212,6 @@ export type ExampleData = { id: string; name: string; value: number }
  */
 export type ExampleError = { type: "NotFound"; id: string } | { type: "ValidationError"; message: string } | { type: "IoError"; message: string }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
-/**
- * A general note.
- */
-export type Note = { id: string; title: string; content: string; tags: string[]; created_at: number; updated_at: number }
-/**
- * Errors specific to note operations.
- */
-export type NoteError = { type: "NotFound"; id: string } | { type: "ValidationError"; message: string } | { type: "IoError"; message: string }
 /**
  * Error types for recovery operations (typed for frontend matching)
  */

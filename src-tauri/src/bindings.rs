@@ -2,8 +2,8 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::features::{
-        case_notes_commands, example_feature_commands, notes_commands, notifications_commands,
-        preferences_commands, quick_pane_commands, recovery_commands,
+        example_feature_commands, notifications_commands, preferences_commands,
+        quick_pane_commands, recovery_commands,
     };
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
@@ -26,14 +26,6 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         // Example feature (template)
         example_feature_commands::load_example_data,
         example_feature_commands::save_example_data,
-        // Documentation feature - case notes
-        case_notes_commands::load_case_note,
-        case_notes_commands::save_case_note,
-        // Documentation feature - notes
-        notes_commands::load_note,
-        notes_commands::save_note,
-        notes_commands::list_notes,
-        notes_commands::delete_note,
     ])
 }
 
