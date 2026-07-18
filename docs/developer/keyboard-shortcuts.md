@@ -13,12 +13,11 @@ Centralized keyboard shortcut management using native DOM event listeners.
 
 ## Architecture
 
-All shortcuts are handled in `src/hooks/useMainWindowEventListeners.ts`:
+Most shortcuts are handled in `src/hooks/use-keyboard-shortcuts.ts`. The `src/hooks/useMainWindowEventListeners.ts` hook composes it (via `useKeyboardShortcuts(commandContext)`) alongside cross-window event listeners. The exception is the Command Palette (Cmd/Ctrl+K), which registers its own listener inside `src/features/command-palette/components/CommandPalette.tsx`.
 
 ```typescript
-export function useMainWindowEventListeners() {
-  const commandContext = useCommandContext()
-
+// src/hooks/use-keyboard-shortcuts.ts
+export function useKeyboardShortcuts(commandContext: CommandContext) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
@@ -52,7 +51,7 @@ export function useMainWindowEventListeners() {
 ### 1. Add to event handler
 
 ```typescript
-// src/hooks/useMainWindowEventListeners.ts
+// src/hooks/use-keyboard-shortcuts.ts
 case '3': {
   e.preventDefault()
   commandContext.myNewAction()

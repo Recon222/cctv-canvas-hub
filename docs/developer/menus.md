@@ -81,10 +81,12 @@ function handleOpenPreferences(): void {
 Menus are automatically rebuilt when the language changes:
 
 ```typescript
-export function setupMenuLanguageListener(): void {
-  i18n.on('languageChanged', async () => {
+export function setupMenuLanguageListener(): () => void {
+  const handler = async () => {
     await buildAppMenu()
-  })
+  }
+  i18n.on('languageChanged', handler)
+  return () => i18n.off('languageChanged', handler) // unsubscribe for cleanup
 }
 ```
 

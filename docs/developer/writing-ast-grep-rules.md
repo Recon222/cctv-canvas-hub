@@ -58,24 +58,28 @@ npx ast-grep scan -r .ast-grep/rules/zustand/no-destructure.yml
 ```yaml
 id: no-destructure-zustand
 message: |
-  Don't destructure Zustand stores - use selectors instead.
+  Never destructure from Zustand stores. Use selector syntax instead.
 
-  BAD: const { visible } = useUIStore()
-  GOOD: const visible = useUIStore(state => state.visible)
+  BAD: const { leftSidebarVisible } = useUIStore()
+  GOOD: const leftSidebarVisible = useUIStore(state => state.leftSidebarVisible)
+
+  For multiple values, use multiple selectors or useShallow.
 severity: error
 language: Tsx
 rule:
-  any:
-    - pattern: const { $$$PROPS } = useUIStore($$$ARGS)
-    - pattern: const { $$$PROPS } = usePreferencesStore($$$ARGS)
+  pattern: const { $$$PROPS } = useUIStore($$$ARGS)
 note: |
-  Destructuring subscribes to the entire store, causing unnecessary re-renders.
-  See docs/developer/state-management.md for details.
+  Destructuring causes render cascades - every store update triggers re-renders
+  even if destructured values haven't changed.
+
+  See: docs/developer/architecture-guide.md (Performance Patterns)
 ```
 
 ## Adding New Stores to Existing Rules
 
-When you add a new Zustand store, update the no-destructure rule:
+The rule ships with a single pattern (`useUIStore`) because that's the only
+Zustand store in the template. When you add another store, switch to an `any:`
+block listing each store:
 
 ```yaml
 rule:

@@ -82,7 +82,7 @@ pub async fn fetch_user(user_id: u32) -> Result<User, String> {
 ### React Service
 
 ```typescript
-// src/services/users.ts
+// src/features/users/services/users.ts (feature-based; there is no top-level src/services/)
 export const userQueryKeys = {
   all: ['users'] as const,
   user: (id: number) => [...userQueryKeys.all, id] as const,

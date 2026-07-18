@@ -200,19 +200,20 @@ export function initializeCommandSystem(): void {
 
 ```typescript
 // src/hooks/use-command-context.ts
-export function useCommandContext(): CommandContext {
-  return useMemo(
-    () => ({
-      // ... existing actions
-      myNewAction: () => {
-        /* implementation */
-      },
-    }),
-    []
-  )
+// Module-level singleton — no useMemo (React Compiler handles memoization,
+// and getState() at call time keeps actions stable).
+const commandContext: CommandContext = {
+  // ... existing actions
+  myNewAction: () => {
+    /* implementation */
+  },
 }
 
-// Update CommandContext type in types.ts
+export function useCommandContext(): CommandContext {
+  return commandContext
+}
+
+// Update the CommandContext type in src/lib/commands/types.ts
 ```
 
 ## Command Groups

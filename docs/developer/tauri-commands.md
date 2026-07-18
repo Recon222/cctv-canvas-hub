@@ -98,15 +98,17 @@ const handleSave = async () => {
 
 ## Adding New Commands
 
-### 1. Define the Rust command
+Commands live in feature modules (`src-tauri/src/features/<feature>/commands/mod.rs`), not in `lib.rs` (which has zero commands). See [rust-architecture.md](./rust-architecture.md) for the full feature-module layout; the binding-specific steps are below.
+
+### 1. Define the Rust command in its feature
 
 ```rust
-// src-tauri/src/lib.rs
+// src-tauri/src/features/my_feature/commands/mod.rs
 
 #[tauri::command]
-#[specta::specta]  // Add this attribute
-pub async fn my_new_command(arg: String) -> Result<MyType, String> {
-    // implementation
+#[specta::specta]  // Required for binding generation
+pub async fn my_new_command(arg: String) -> Result<MyType, MyError> {
+    // Thin wrapper — delegate to the feature's service
 }
 ```
 
@@ -123,13 +125,17 @@ pub struct MyType {
 
 ### 3. Register in bindings.rs
 
+Re-export the feature's command module in `src-tauri/src/features/mod.rs` (`pub use my_feature::commands as my_feature_commands;`), then list the command in `bindings.rs`:
+
 ```rust
 // src-tauri/src/bindings.rs
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
+    use crate::features::{/* ...existing... */ my_feature_commands};
+
     Builder::<tauri::Wry>::new().commands(collect_commands![
         // ... existing commands
-        crate::my_new_command,  // Add here
+        my_feature_commands::my_new_command,  // Add here
     ])
 }
 ```
@@ -140,7 +146,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
 npm run rust:bindings
 ```
 
-This runs `cargo test export_bindings -- --ignored` which generates `src/lib/bindings.ts`.
+This runs the `gen_bindings` binary (`cargo run --bin gen_bindings`), which writes `src/lib/bindings.ts`. Debug builds also re-export on launch. Do **not** regenerate with `cargo test export_bindings` — it fails on Windows with `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139), because the test harness runs without the staged WebView2 loader DLL.
 
 ### 5. Use in frontend
 
@@ -154,16 +160,19 @@ const result = await commands.myNewCommand('arg')
 
 Always commit:
 
-- Rust changes (`src-tauri/src/lib.rs`, `src-tauri/src/bindings.rs`)
+- Rust changes (feature `commands/mod.rs`, `src-tauri/src/features/mod.rs`, `src-tauri/src/bindings.rs`)
 - Generated TypeScript (`src/lib/bindings.ts`)
 
 ## File Structure
 
 ```
 src-tauri/src/
-├── lib.rs              # Commands with #[specta::specta]
-├── bindings.rs         # Command registration + export test
-└── Cargo.toml          # specta, tauri-specta dependencies
+├── features/<feature>/commands/mod.rs  # Commands with #[specta::specta]
+├── features/mod.rs                     # Re-exports each feature's command module
+├── bindings.rs                         # generate_bindings() + export_ts_bindings()
+└── lib.rs                              # App setup (no commands)
+
+src-tauri/Cargo.toml    # specta, tauri-specta dependencies
 
 src/lib/
 ├── bindings.ts         # Generated (DO NOT EDIT)
@@ -221,15 +230,22 @@ vi.mock('@/lib/tauri-bindings', () => ({
 
 ## Available Commands
 
-| Command                   | Parameters                            | Returns                          | Description         |
-| ------------------------- | ------------------------------------- | -------------------------------- | ------------------- |
-| `greet`                   | `name: string`                        | `string`                         | Simple greeting     |
-| `loadPreferences`         | none                                  | `Result<AppPreferences, string>` | Load preferences    |
-| `savePreferences`         | `preferences: AppPreferences`         | `Result<null, string>`           | Save preferences    |
-| `sendNativeNotification`  | `title: string, body: string \| null` | `Result<null, string>`           | System notification |
-| `saveEmergencyData`       | `filename: string, data: JsonValue`   | `Result<null, string>`           | Save recovery data  |
-| `loadEmergencyData`       | `filename: string`                    | `Result<JsonValue, string>`      | Load recovery data  |
-| `cleanupOldRecoveryFiles` | none                                  | `Result<number, string>`         | Cleanup old files   |
+| Command                       | Parameters                            | Returns                             | Description               |
+| ----------------------------- | ------------------------------------- | ----------------------------------- | ------------------------- |
+| `greet`                       | `name: string`                        | `Result<string, string>`            | Simple greeting           |
+| `loadPreferences`             | none                                  | `Result<AppPreferences, string>`    | Load preferences          |
+| `savePreferences`             | `preferences: AppPreferences`         | `Result<null, string>`              | Save preferences          |
+| `sendNativeNotification`      | `title: string, body: string \| null` | `Result<null, string>`              | System notification       |
+| `saveEmergencyData`           | `filename: string, data: JsonValue`   | `Result<null, RecoveryError>`       | Save recovery data        |
+| `loadEmergencyData`           | `filename: string`                    | `Result<JsonValue, RecoveryError>`  | Load recovery data        |
+| `cleanupOldRecoveryFiles`     | none                                  | `Result<number, RecoveryError>`     | Cleanup old files         |
+| `showQuickPane`               | none                                  | `Result<null, string>`              | Show quick pane window    |
+| `dismissQuickPane`            | none                                  | `Result<null, string>`              | Hide quick pane window    |
+| `toggleQuickPane`             | none                                  | `Result<null, string>`              | Toggle quick pane window  |
+| `getDefaultQuickPaneShortcut` | none                                  | `string`                            | Default shortcut constant |
+| `updateQuickPaneShortcut`     | `shortcut: string \| null`            | `Result<null, string>`              | Update quick pane shortcut |
+| `loadExampleData`             | `dataId: string`                      | `Result<ExampleData, ExampleError>` | Load example data         |
+| `saveExampleData`             | `data: ExampleData`                   | `Result<null, ExampleError>`        | Save example data         |
 
 ## Dependencies
 

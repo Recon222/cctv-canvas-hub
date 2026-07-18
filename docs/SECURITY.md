@@ -34,7 +34,7 @@ This app uses Tauri's security model:
 - **Permissions**: Minimal system permissions via `capabilities/`
 - **IPC**: Type-safe commands via tauri-specta
 - **File Access**: Scoped to app directories by default
-- **CSP**: Configured in `index.html`
+- **CSP**: Configured via the `app.security.csp` key in `src-tauri/tauri.conf.json`
 
 ## For Developers
 

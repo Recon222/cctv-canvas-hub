@@ -40,7 +40,7 @@ Add these secrets (Settings → Secrets and variables → Actions):
       "endpoints": [
         "https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest/download/latest.json"
       ],
-      "dialog": false,
+      "dialog": true,
       "pubkey": "YOUR_PUBLIC_KEY_FROM_STEP_1"
     }
   }

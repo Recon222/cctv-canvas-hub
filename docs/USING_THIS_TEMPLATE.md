@@ -6,7 +6,7 @@ This document is specific to the template and should be deleted once you're comf
 
 Before you begin, install:
 
-- **Node.js** (v18+) - [nodejs.org](https://nodejs.org/)
+- **Node.js** (v20+) - [nodejs.org](https://nodejs.org/)
 - **Rust** (latest stable) - [rustup.rs](https://rustup.rs/)
 - **Platform dependencies**:
   - **macOS**: `xcode-select --install`
@@ -43,8 +43,8 @@ If you're not using Claude Code, update these files manually:
 
 | File                            | Fields to Update                                                               |
 | ------------------------------- | ------------------------------------------------------------------------------ |
-| `package.json`                  | `name`, `description`                                                          |
-| `src/index.html`                | `<title>` tag                                                                  |
+| `package.json`                  | `name`, `author`, `copyright`                                                  |
+| `index.html`                    | `<title>` tag                                                                  |
 | `src-tauri/tauri.conf.json`     | `productName`, `identifier`, `windows[0].title`, bundle info, updater endpoint |
 | `src-tauri/Cargo.toml`          | `name`, `description`, `authors`                                               |
 | `.github/workflows/release.yml` | Workflow name, release name                                                    |

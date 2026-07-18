@@ -87,48 +87,27 @@ test('loads preferences', async () => {
 })
 ```
 
-### Test Wrapper for Providers
+### Test Wrappers for Providers
 
-Components using TanStack Query need a provider wrapper:
+Components and hooks need QueryClient, i18n, and theme context. Two ready-made
+helpers provide them — don't hand-roll a wrapper:
 
-```typescript
-// src/test/utils.ts
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactNode } from 'react'
-
-export function createTestQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  })
-}
-
-export function TestProviders({ children }: { children: ReactNode }) {
-  const queryClient = createTestQueryClient()
-  return (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
-  )
-}
-```
-
-Usage:
+| Helper                                   | From                       | Use for                          |
+| ---------------------------------------- | -------------------------- | -------------------------------- |
+| `render` (custom)                        | `@/test/test-utils`        | Full-provider component tests    |
+| `FeatureTestWrapper` / `renderWithFeatureProviders` | `@/test/feature-test-utils` | Feature hook tests (`renderHook`) |
 
 ```typescript
-import { render } from '@testing-library/react'
-import { TestProviders } from '@/test/utils'
+// Component test — custom render wraps in all providers
+import { render } from '@/test/test-utils'
 
 test('component with query', () => {
-  render(
-    <TestProviders>
-      <MyComponent />
-    </TestProviders>
-  )
+  render(<MyComponent />)
 })
 ```
+
+For feature hooks, pass `FeatureTestWrapper` to `renderHook` (see
+[Testing Feature Hooks](#testing-feature-hooks-vimock-on-service-functions) below).
 
 ### Testing Zustand Stores
 

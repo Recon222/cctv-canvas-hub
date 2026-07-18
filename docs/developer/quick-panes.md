@@ -108,7 +108,7 @@ On macOS, the quick pane uses `tauri-nspanel` for native panel behavior:
 
 ```rust
 // These settings are required for proper fullscreen behavior.
-// See src-tauri/src/commands/quick_pane.rs for the complete builder chain
+// See src-tauri/src/features/quick_pane/commands/mod.rs for the complete builder chain
 // which also includes .url(), .title(), .size(), .transparent(), .has_shadow(),
 // .with_window() configuration, and .build().
 
@@ -209,14 +209,14 @@ listen('quick-pane-submit', async ({ payload }) => {
 
 ### Changing Window Size
 
-Update the constants in `src-tauri/src/lib.rs`:
+Update the constants in `src-tauri/src/features/quick_pane/commands/mod.rs`:
 
 ```rust
 const QUICK_PANE_WIDTH: f64 = 500.0;
 const QUICK_PANE_HEIGHT: f64 = 72.0;
 ```
 
-Also update the window creation in `init_quick_pane_macos` and `init_quick_pane_standard`.
+The `init_quick_pane_macos` and `init_quick_pane_standard` functions in the same file consume these constants for window creation.
 
 ## Implementation Notes
 

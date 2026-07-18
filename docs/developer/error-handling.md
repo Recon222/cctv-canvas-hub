@@ -164,10 +164,10 @@ Default retry settings in `query-client.ts`:
 
 ## Global Error Toasts
 
-Avoid per-query error toasts (causes duplicates). Use global handling:
+Per-query error toasts cause duplicates. If you want a single centralized toast for query failures, add a `QueryCache` handler when constructing the client in `src/lib/query-client.ts` (the template ships without one — the default client only sets `retry`):
 
 ```typescript
-// ✅ GOOD: Centralized in query-client.ts
+// Optional: centralize error toasts in query-client.ts
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {

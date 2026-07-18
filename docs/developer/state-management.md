@@ -165,11 +165,16 @@ This app uses React Compiler which automatically handles memoization. You do **n
 
 1. Create store file in `src/store/`
 2. Follow the pattern with `devtools` middleware
-3. Add no-destructure rule to `.ast-grep/rules/zustand/no-destructure.yml`
+3. Extend the no-destructure rule in `.ast-grep/rules/zustand/no-destructure.yml` so the new store is covered — the rule currently matches only `useUIStore` by name:
 
 ```yaml
+# Current rule — single pattern, matches useUIStore by name:
+rule:
+  pattern: const { $$$PROPS } = useUIStore($$$ARGS)
+
+# To also catch a new store, switch to an `any:` list:
 rule:
   any:
     - pattern: const { $$$PROPS } = useUIStore($$$ARGS)
-    - pattern: const { $$$PROPS } = useNewStore($$$ARGS) # Add new store
+    - pattern: const { $$$PROPS } = useNewStore($$$ARGS)
 ```

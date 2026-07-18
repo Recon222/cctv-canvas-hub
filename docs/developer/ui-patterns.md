@@ -232,18 +232,17 @@ src/components/
 │   ├── button.tsx
 │   ├── dialog.tsx
 │   └── ...
-├── command-palette/  # Command palette feature
-├── preferences/      # Preferences dialog
 ├── ThemeProvider.tsx
 └── ErrorBoundary.tsx
 ```
+
+`src/components/` holds only app-wide, cross-feature UI. **Feature UI lives in `src/features/<feature>/components/`** (e.g. command palette, preferences) — see the feature-based architecture in AGENTS.md.
 
 ### Conventions
 
 - **layout/** - Structural components that define app regions
 - **titlebar/** - Platform-specific window controls
 - **ui/** - shadcn/ui primitives (don't modify directly)
-- **Feature folders** - Group related components together
 
 ## shadcn/ui Usage
 

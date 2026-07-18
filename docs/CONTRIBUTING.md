@@ -6,7 +6,7 @@ Thank you for your interest in contributing!
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) (v20+)
 - [Rust](https://rustup.rs/) (latest stable)
 - Familiarity with React, TypeScript, and Rust
 
@@ -16,7 +16,7 @@ Thank you for your interest in contributing!
 git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
 cd YOUR_REPO
 npm install
-npm run dev
+npm run tauri:dev
 npm run check:all
 ```
 
@@ -24,8 +24,8 @@ npm run check:all
 
 ### Issues
 
-- **Bug Reports**: Use the bug report template
-- **Feature Requests**: Use the feature request template
+- **Bug Reports**: Open an issue describing the problem and steps to reproduce
+- **Feature Requests**: Open an issue describing the proposed feature
 - **Security Issues**: See [SECURITY.md](SECURITY.md)
 
 ### Pull Requests

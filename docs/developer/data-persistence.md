@@ -24,7 +24,7 @@ All data goes through Rust for type safety and security. Use TanStack Query on t
 ## File Locations
 
 ```
-~/Library/Application Support/com.myapp.app/  (macOS)
+~/Library/Application Support/com.tauri-app.app/  (macOS)
 ├── preferences.json                          # App preferences
 └── recovery/                                 # Emergency data
     └── *.json
@@ -66,22 +66,26 @@ impl Default for AppPreferences {
 ### React Side
 
 ```typescript
-// src/services/preferences.ts
+// src/features/preferences/services/preferencesService.ts — service owns the IPC
+export async function loadPreferences(): Promise<AppPreferences> {
+  return unwrapResult(await commands.loadPreferences())
+}
+
+// src/features/preferences/hooks/usePreferences.ts — hooks orchestrate with TanStack Query
 export function usePreferences() {
   return useQuery({
     queryKey: ['preferences'],
-    queryFn: async () => unwrapResult(await commands.loadPreferences()),
+    queryFn: loadPreferences,
   })
 }
 
-export function useUpdatePreferences() {
+export function useSavePreferences() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (preferences: AppPreferences) =>
-      commands.savePreferences(preferences),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['preferences'] })
+    mutationFn: savePreferences,
+    onSuccess: (_data, preferences) => {
+      queryClient.setQueryData(['preferences'], preferences)
     },
   })
 }
@@ -92,16 +96,14 @@ export function useUpdatePreferences() {
 For saving data before crashes or risky operations:
 
 ```typescript
-// Save emergency data
-await commands.saveEmergencyData({
-  filename: 'unsaved-work',
-  data: { content: userContent, timestamp: Date.now() },
+// Save emergency data (positional args, not an object)
+await commands.saveEmergencyData('unsaved-work', {
+  content: userContent,
+  timestamp: Date.now(),
 })
 
 // Load on startup
-const recoveryData = await commands.loadEmergencyData({
-  filename: 'unsaved-work',
-})
+const recoveryData = await commands.loadEmergencyData('unsaved-work')
 if (recoveryData.status === 'ok' && recoveryData.data) {
   // Show recovery dialog
 }
@@ -128,7 +130,7 @@ impl Default for MyData {
 
 ### 2. Add Tauri commands
 
-Follow the pattern in `src-tauri/src/commands/preferences.rs`:
+Follow the pattern in `src-tauri/src/features/preferences/commands/mod.rs`:
 
 - `load_*` command with Default fallback
 - `save_*` command with atomic write

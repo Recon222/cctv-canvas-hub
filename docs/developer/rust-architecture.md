@@ -160,13 +160,13 @@ npm run rust:bindings
 For features with sub-domains, use nested sub-features:
 
 ```rust
-// features/documentation/mod.rs
-pub mod case_notes;
-pub mod notes;
-pub mod shared;
+// features/<feature>/mod.rs — a feature with sub-domains
+pub mod sub_a;
+pub mod sub_b;
+pub mod shared;              // code shared across the sub-features
 
-pub use case_notes::commands as case_notes_commands;
-pub use notes::commands as notes_commands;
+pub use sub_a::commands as sub_a_commands;
+pub use sub_b::commands as sub_b_commands;
 ```
 
 Each sub-feature follows the same structure as a top-level feature.

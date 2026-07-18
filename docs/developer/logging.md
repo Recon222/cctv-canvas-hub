@@ -29,8 +29,8 @@ logger.error('Request failed', { error: response.error })
 ### Rust Backend
 
 - Uses `tauri-plugin-log` with standard Rust `log` crate
-- **Development**: Debug level, logs to stdout + webview console
-- **Production**: Info level, logs to stdout + app log directory
+- **Development**: Debug level; **Production**: Info level
+- **Targets**: stdout + webview console on all platforms. A log-file target (`LogDir`) is wired for **macOS only** (`#[cfg(target_os = "macos")]` in `lib.rs`). Windows/Linux get stdout + webview only — no file. Add a non-gated `LogDir` target if you need file logs on those platforms.
 - Configuration in `src-tauri/src/lib.rs`
 
 ### TypeScript Frontend
@@ -58,10 +58,8 @@ logger.error('Request failed', { error: response.error })
 
 ### Production
 
-- **Rust**: Terminal (stdout) + log file in app log directory
+- **Rust**: Terminal (stdout) everywhere; **on macOS also** a log file in the app log directory (`~/Library/Logs/`). Windows/Linux have no file target by default.
 - **TypeScript**: Browser DevTools console
-
-Log directory locations vary by platform (e.g., `~/Library/Logs/` on macOS).
 
 ## Examples
 
@@ -118,7 +116,7 @@ See [error-handling.md](./error-handling.md) for patterns on when to log vs show
 
 ## Production Considerations
 
-- Rust logs go to the app's log directory (platform-specific location)
+- On macOS, Rust logs also go to the app's log directory; on Windows/Linux they go to stdout only (no file target wired by default)
 - No sensitive data should be logged (passwords, tokens, etc.)
-- The plugin supports log rotation when files reach size limits
+- The plugin supports log rotation when a file target is configured
 - Frontend logs stay in browser - not sent to backend by default
