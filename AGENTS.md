@@ -214,22 +214,11 @@ pub async fn open_window(app: AppHandle) -> Result<(), String> { /* ... */ }
 
 `async` vs sync doesn't change the generated bindings (both return a `Promise`). **macOS NSPanel is the inverse** — it must be created on the main thread (`setup()`/sync). Full rationale + the secondary-window checklist (background color, entry CSS reset, native-✕ → `destroy()`): `docs/developer/tauri-commands.md`.
 
-### Testing Pure Rust Logic (Windows WebView2 workaround)
+### Testing Pure Rust Logic (workspace crates · Windows WebView2)
 
-On Windows, the **lib unit-test harness** aborts at **load time** with `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139): it links the `tauri_app_lib` cdylib and runs from `target/debug/deps/`, which lacks the staged WebView2 loader DLL. The crash happens _before any test runs_, so `#[ignore]` does **not** help — the whole harness fails to load.
+On Windows a test harness that links the app crate (`tauri_app_lib`) aborts at **load** with `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139): it runs from `target/debug/deps/` without the staged WebView2 loader DLL, _before any test runs_. So `Cargo.toml` keeps `[lib] test = false` (disables the app crate's unit-test harness — still required, verified), and **you do not put unit tests inside the app crate** (`src-tauri/src/`) — inline `#[cfg(test)]` there won't run.
 
-The fix: `Cargo.toml` sets `[lib] test = false`, which disables that lib unit-test harness. Bare `cargo test` (what `rust:test` runs) then auto-discovers and runs every `tests/*.rs` integration binary with no crash — and new integration-test files are picked up automatically, no script change needed. Put pure-logic tests in **integration-test binaries under `src-tauri/tests/`**; a `tests/*.rs` binary that doesn't reference `tauri_app_lib` doesn't link tauri, so it loads cleanly.
-
-Because this is a single crate, a `tests/` binary can't `use` the pure functions without linking tauri, so **mirror** them into the test file with a sync-contract header — the deliberate, traceable form of duplication. `src-tauri/tests/platform_tests.rs` is the shipped example:
-
-```rust
-//! Standalone tests for `utils::platform` pure functions.
-//! These functions are DUPLICATED from `src/utils/platform.rs` so this binary
-//! does NOT link tauri (WebView2 DLL requirement on Windows). Keep in sync —
-//! no automated enforcement.
-```
-
-Keep tested logic pure (input → output, no `AppHandle` / `tauri::State` / runtime). If a pure-logic core grows large enough that duplication hurts, extract it into a separate **non-tauri workspace crate** and have the tests/ binary depend on that directly — no mirroring needed. For small helpers, mirroring is lighter.
+**Pure logic that needs unit tests goes in a Tauri-free workspace crate** under `src-tauri/crates/<name>/` (no `tauri` dependency), with ordinary inline `#[cfg(test)]` tests — it never links WebView2, so `cargo test` runs it cleanly with no duplication. `src-tauri` is a Cargo workspace; `[workspace] default-members` lists the crates so bare `cargo test` (what `rust:test` runs) includes them. `crates/platform-utils/` is the shipped example — copy it. If a crate's public types need TypeScript bindings, gate the `specta::Type` derive behind an **optional `specta` feature** (off by default → `cargo test -p <crate>` stays WebView2-free; the app enables it via its path dependency). Full guide: `docs/developer/testing.md`.
 
 ### Internationalization (i18n)
 

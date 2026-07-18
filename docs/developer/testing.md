@@ -168,49 +168,68 @@ Use `FeatureTestWrapper` from `src/test/feature-test-utils.tsx` for all feature 
 
 ## Rust Testing
 
-### Unit Tests
+**Where Rust tests go — read this first.** On Windows, a test harness that links the app crate (`tauri_app_lib`) aborts at _load_ with `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139) before any test runs — the test binary runs from `target/debug/deps/` without the staged WebView2 loader DLL. So `src-tauri/Cargo.toml` sets `[lib] test = false` to disable the app crate's unit-test harness, and **you do not put unit tests inside the app crate** (`src-tauri/src/`). Inline `#[cfg(test)]` there will not run.
+
+**Pure logic that needs unit tests lives in a Tauri-free workspace crate.** `src-tauri` is a Cargo workspace; put input→output logic in `src-tauri/crates/<name>/` with no `tauri` dependency. Because such a crate never links WebView2, its ordinary `#[cfg(test)]` tests run cleanly with `cargo test` on every platform — no duplication, no mirroring. `[workspace] default-members` lists the crates so bare `cargo test` (what `npm run rust:test` runs) includes them; the app crate's own harness stays skipped via `test = false`.
+
+`src-tauri/crates/platform-utils/` is the worked example — copy it for new pure-logic crates.
+
+### Creating a pure-logic crate
+
+1. Scaffold `src-tauri/crates/<name>/` (`Cargo.toml` + `src/lib.rs`). Keep it Tauri-free — depend only on `std`, `serde`, and other pure crates.
+2. Register it in `src-tauri/Cargo.toml`: append the path to **both** `[workspace] members` and `[workspace] default-members`.
+3. If the app consumes it, add a path dependency: `<name> = { path = "crates/<name>" }`.
+4. Write tests inline in a `#[cfg(test)] mod tests` next to the code.
+
+### Unit tests (inside a pure crate)
 
 ```rust
+// src-tauri/crates/<name>/src/lib.rs
+pub const fn current_platform() -> &'static str { /* ... */ }
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_preferences_default() {
-        let prefs = AppPreferences::default();
-        assert_eq!(prefs.theme, "system");
+    fn platform_is_valid() {
+        let p = current_platform();
+        assert!(p == "macos" || p == "windows" || p == "linux");
     }
 }
 ```
 
-### Async Tests
+### Types that need TypeScript bindings (optional `specta` feature)
+
+If a crate's public types must appear in `bindings.ts`, gate the `specta::Type` derive behind an **optional `specta` feature** so the crate still tests WebView2-free:
+
+```toml
+# crates/<name>/Cargo.toml
+[dependencies]
+specta = { version = "=2.0.0-rc.22", features = ["derive"], optional = true }
+
+[features]
+specta = ["dep:specta"]
+```
+
+Default build has no specta (`cargo test -p <name>` is Tauri- and WebView2-free); the app turns the feature on via its path dependency — `<name> = { path = "crates/<name>", features = ["specta"] }` — so tauri-specta emits the types.
+
+### Async and file tests
+
+Same rule — write them inside the pure crate. Use `#[tokio::test]` for async and `tempfile` (a dev-dependency) for filesystem tests:
 
 ```rust
 #[tokio::test]
-async fn test_async_operation() {
-    let result = some_async_fn().await;
-    assert!(result.is_ok());
+async fn does_the_thing() {
+    assert!(some_async_fn().await.is_ok());
 }
-```
-
-### File Operation Tests
-
-Use `tempfile` for tests that need file system access:
-
-```rust
-use tempfile::TempDir;
 
 #[test]
-fn test_file_operations() {
-    let temp_dir = TempDir::new().unwrap();
-    let file_path = temp_dir.path().join("test.json");
-
-    // Test write
-    std::fs::write(&file_path, "{}").unwrap();
-
-    // Test read
-    let content = std::fs::read_to_string(&file_path).unwrap();
-    assert_eq!(content, "{}");
+fn round_trips_a_file() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("test.json");
+    std::fs::write(&path, "{}").unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "{}");
 }
 ```
 

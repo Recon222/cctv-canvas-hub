@@ -1,3 +1,12 @@
+[workspace]
+members = [".", "crates/platform-utils"]
+# default-members drives bare `cargo test` (what `npm run rust:test` runs) to
+# include the pure-logic crates, not just the root package. The root tauri-app's
+# own lib harness is disabled below (`[lib] test = false`) so it never hits the
+# Windows WebView2 crash, while the crates run their `#[cfg(test)]` tests.
+default-members = [".", "crates/platform-utils"]
+resolver = "2"
+
 [package]
 name = "tauri-app"
 version = "0.1.0"
@@ -20,10 +29,11 @@ default-run = "tauri-app"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "tauri_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
-# Disable the lib unit-test harness: on Windows it links tauri/WebView2 and fails
-# to load from target/debug/deps/ (STATUS_ENTRYPOINT_NOT_FOUND) before any test
-# runs. Pure-logic tests live in tests/*.rs integration binaries instead (see
-# AGENTS.md "Testing Pure Rust Logic"), so bare `cargo test` runs them all.
+# Disable the app crate's unit-test harness: on Windows it links tauri/WebView2
+# and fails to load from target/debug/deps/ (STATUS_ENTRYPOINT_NOT_FOUND) before
+# any test runs. Pure-logic tests live in the Tauri-free workspace crates under
+# crates/ instead (see AGENTS.md "Testing Pure Rust Logic" + docs/developer/
+# testing.md); [workspace] default-members makes bare `cargo test` run them.
 test = false
 
 [build-dependencies]
@@ -45,6 +55,10 @@ tauri-plugin-os = "2"
 tauri-plugin-global-shortcut = "2"
 log = "0.4"
 regex = "1"
+
+# Pure-logic workspace crate — the template's example of unit-testable Rust that
+# lives outside the Tauri crate (see crates/platform-utils + docs/developer/testing.md).
+platform-utils = { path = "crates/platform-utils" }
 
 # Type-safe Tauri command bindings
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }

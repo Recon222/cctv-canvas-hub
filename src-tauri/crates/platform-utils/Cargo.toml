@@ -1,0 +1,10 @@
+[package]
+name = "platform-utils"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform path/OS helpers. Pure Rust, no Tauri dependency — unit-testable with `cargo test` on Windows (a harness that links tauri/WebView2 aborts at load; see docs/developer/testing.md)."
+
+# Pure std — no dependencies. This is the template's example pure-logic crate:
+# domain logic that needs unit tests lives in a Tauri-free workspace crate like
+# this so `cargo test` runs its `#[cfg(test)]` tests without the WebView2 crash.
+[dependencies]
