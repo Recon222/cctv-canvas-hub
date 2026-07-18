@@ -25,7 +25,7 @@ This repository is a template with sensible defaults for building Tauri v2 + Rea
 5. **Match Code Style**: Follow existing formatting and patterns
 6. **Test Coverage**: Write comprehensive tests for business logic
 7. **Quality Gates**: Run `npm run check:all` after significant changes
-8. **No Dev Server**: Ask user to run and report back
+8. **No Dev Server**: Ask the user to run and report back — _exception:_ an agent may launch and drive the app itself for end-to-end verification via the `driving-agent-shell` skill (which also handles teardown)
 9. **No Unsolicited Commits**: Only when explicitly requested
 10. **Documentation**: Update relevant `docs/developer/` files for new patterns
 11. **Removing files**: Always use `rm -f`
@@ -168,6 +168,8 @@ pub struct ExampleData { /* ... */ }
 
 **Adding Rust features**: Copy `src-tauri/src/features/example_feature/` and follow the pattern. Register commands in `features/mod.rs` and `bindings.rs`.
 
+> **No flat command/service dirs.** There is no `src-tauri/src/commands/` or `src/services/` — every command and service lives under its `features/<feature>/`, and `lib.rs` is app setup only (zero commands). Some external guides assume the flat layout; this template doesn't use it.
+
 ### Tauri Command Pattern (tauri-specta)
 
 ```typescript
@@ -182,6 +184,8 @@ if (result.status === 'ok') {
 // ❌ BAD: String-based invoke (no type safety)
 const prefs = await invoke('load_preferences')
 ```
+
+Multi-parameter commands take **positional** args on the JS side (`commands.saveFoo(a, b)`), never an options object (`commands.saveFoo({ a, b })`) — tauri-specta maps them by position.
 
 **Adding commands**: See `docs/developer/tauri-commands.md`
 
@@ -265,14 +269,12 @@ i18n.t('key')                 // Or call directly for occasional use
 
 ## Developer Documentation
 
-For complete patterns and detailed guidance, see `docs/developer/README.md`.
+`docs/developer/` holds the full patterns — **read the relevant doc before working in that area.** Index (fuller descriptions in `docs/developer/README.md`):
 
-Key documents:
-
-- `architecture-guide.md` - Mental models, security, anti-patterns
-- `state-management.md` - State onion, getState() pattern details
-- `tauri-commands.md` - Adding new Rust commands
-- `static-analysis.md` - All linting tools and quality gates
+- **Architecture** — `architecture-guide.md` (mental models, anti-patterns) · `rust-architecture.md` (feature module organization) · `state-management.md` (state onion, getState()) · `error-handling.md` (propagation, retry, user feedback)
+- **Core systems** — `command-system.md` (action dispatch) · `keyboard-shortcuts.md` (global shortcuts) · `menus.md` (native menus + i18n) · `quick-panes.md` (multi-window entry) · `tauri-commands.md` (tauri-specta bridge) · `tauri-plugins.md` (plugin config)
+- **UI & data** — `ui-patterns.md` (CSS, shadcn/ui) · `i18n-patterns.md` (translations, RTL) · `notifications.md` (toast + native) · `cross-platform.md` (OS adaptations) · `data-persistence.md` (files, atomic writes, SQLite) · `external-apis.md` (HTTP, auth, caching)
+- **Quality & release** — `static-analysis.md` (ESLint/Prettier/ast-grep/knip/jscpd) · `writing-ast-grep-rules.md` (custom rules) · `testing.md` (patterns, Tauri mocking) · `logging.md` (Rust + TS) · `bundle-optimization.md` (bundle size) · `releases.md` (signing, auto-update) · `writing-docs.md` (maintaining these docs)
 
 ## Claude Code Commands & Agents
 
