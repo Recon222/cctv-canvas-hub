@@ -53,6 +53,7 @@ export function ThemeProvider({
     }
 
     applyTheme(theme === 'dark')
+    return undefined
   }, [theme])
 
   const value = {
