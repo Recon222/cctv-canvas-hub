@@ -21,3 +21,7 @@ src/lib/bindings.ts
 
 # Logs
 *.log
+# Markdown / prose is authored by hand — prettier rewrites emphasis style and
+# reflows hand-built tables, and chokes on the space in docs/plans/initial plan/.
+# The format gate enforces CODE formatting; prose is left to its authors.
+*.md
