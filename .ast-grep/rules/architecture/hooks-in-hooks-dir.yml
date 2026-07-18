@@ -13,19 +13,32 @@ files:
   - 'src/lib/**/*.tsx'
 rule:
   any:
-    # Named function export: export function useFoo() {}
-    - pattern: export function $HOOK($$$PARAMS) { $$$BODY }
-    # Arrow function export: export const useFoo = () => {}
-    - pattern: export const $HOOK = ($$$PARAMS) => $BODY
-    # Async arrow function: export const useFoo = async () => {}
-    - pattern: export const $HOOK = async ($$$PARAMS) => $BODY
-constraints:
-  HOOK:
-    regex: '^use[A-Z]'
+    # export function useX(...) [: T] { ... }  — return type / generics tolerated
+    - kind: function_declaration
+      inside:
+        kind: export_statement
+        stopBy: end
+      has:
+        field: name
+        regex: '^use[A-Z]'
+    # export const useX = (...) [: T] => ...   (sync or async arrow)
+    - kind: variable_declarator
+      inside:
+        kind: export_statement
+        stopBy: end
+      all:
+        - has:
+            field: name
+            regex: '^use[A-Z]'
+        - has:
+            field: value
+            any:
+              - kind: arrow_function
+              - kind: function_expression
 note: |
   Enforces directory boundaries:
-  - lib/: Pure business logic, utilities (no React hooks)
+  - lib/: pure business logic, utilities (no React hooks)
   - hooks/: React hooks
   - services/: TanStack Query hooks for data fetching
 
-  Exception: Theme context provider can live in lib/.
+  Exception: the theme context provider may live in lib/.

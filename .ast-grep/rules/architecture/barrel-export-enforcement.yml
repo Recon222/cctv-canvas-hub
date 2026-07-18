@@ -1,15 +1,18 @@
 id: barrel-export-enforcement
 message: |
   Import from the feature barrel, not internal paths.
+
   BAD:  import { X } from '@/features/my-feature/components/X'
   GOOD: import { X } from '@/features/my-feature'
-severity: warning
-language: tsx
+severity: error
+language: Tsx
 rule:
-  any:
-    - pattern: import { $$$_ } from '@/features/$_/components/$_'
-    - pattern: import { $$$_ } from '@/features/$_/services/$_'
-    - pattern: import { $$$_ } from '@/features/$_/hooks/$_'
-    - pattern: import { $$$_ } from '@/features/$_/store/$_'
-    - pattern: import { $$$_ } from '@/features/$_/types/$_'
-    - pattern: import { $$$_ } from '@/features/$_/utils/$_'
+  kind: import_statement
+  has:
+    kind: string
+    regex: '@/features/[^/]+/(components|services|hooks|store|types|utils)/'
+note: |
+  Feature internals are private; the barrel (index.ts) is the public API.
+  Deep imports couple callers to a feature's file layout and break encapsulation.
+
+  See: AGENTS.md (Feature-Based Architecture)
