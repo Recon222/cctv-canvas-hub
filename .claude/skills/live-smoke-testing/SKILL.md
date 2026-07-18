@@ -87,8 +87,8 @@ Rank what you're about to believe. Prefer the top.
 | 4 | **On-screen state, screenshotted** | Render the harness's own log into the UI, then screenshot. The screenshot is the artifact, and it doubles as footage if the user is recording. |
 | 5 | Source reading | Weakest. When it's all you have, **say so** rather than dressing inference up as verification. |
 
-A number from a build cache, a config file, or a comment is not evidence about the binary. Go
-find the thing the toolchain actually executed. See `references/native-build-perf.md`.
+A number from a build cache, a config file, or a comment is not evidence about the running
+binary. Go find the thing the toolchain actually produced and observe it directly.
 
 ## Designing the probe
 
@@ -153,7 +153,7 @@ If someone else has uncommitted work in the same checkout, their evening is in y
    path. **On this Tauri app that does not hold** — `WM_CLOSE` gets swallowed and the app keeps
    running, and there are no sidecars to shut down gracefully anyway. Force-kill the dev tree from
    the top instead (`taskkill //PID <npx/cli-pid> //T //F`); see `driving-agent-shell` → Teardown.
-2. Process census: app, sidecars, dev server, orphaned bundlers. All zero.
+2. Process census: app, dev server, orphaned bundlers (vite). All zero.
 3. Restore tracked files from byte backups; delete the temp harness.
 4. `git status --porcelain` → no tracked changes. `git diff <reviewed-tip>` → empty.
 5. Re-run the suites. Green.
@@ -168,14 +168,11 @@ Read these when the situation calls for them — they are detail, not prerequisi
 - **`references/environment-traps.md`** — shell and tooling traps that return *wrong answers
   silently* rather than erroring. Read this **before** your first `tasklist`, `sleep`,
   `Get-Process`, or long-running pipe. It will save you an hour.
-- **`references/native-build-perf.md`** — measuring the artifact that ships, on the profile that
-  ships. Why `CMakeCache.txt` is not ground truth, why a release build can be slower than debug,
-  and how to find the command line the compiler actually ran.
 - **`references/desktop-capture.md`** — capturing and restoring window layout before driving a
   GUI, for when the user is recording or simply wants their screen back.
-- **`references/worked-examples.md`** — two real cases end to end: a race whose obvious repro
-  could not fail, and a 10× performance inversion between build profiles. Read these if you want
-  to see the method applied rather than described.
+- **`references/worked-examples.md`** — two real cases from this app, end to end: a graceful quit
+  that reported success but never happened, and a `git status` flag that looked like an edit but
+  was the build's own footprint. Read these to see the method applied rather than described.
 
 ## The honest-reporting rule
 

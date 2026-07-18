@@ -1,151 +1,89 @@
 # Two worked examples
 
-Both are real. Both are cases where the obvious approach would have produced a confident, wrong
-answer.
+Both are real, from driving this app. Both are cases where the loud, obvious signal — a tool's
+`SUCCESS` line, a `git status` flag — would have produced a confident, wrong conclusion, and the
+quiet ground truth said otherwise. The subsystems are this app's; the lessons are the same ones the
+sibling-app cases taught.
 
 ---
 
-## Example 1 — a race whose obvious repro could not fail
+## Example 1 — a graceful quit that reported success but never happened
 
-**The claim under review.** A desktop app spawned a sidecar process. Each spawn started a reader
-task that watched the sidecar's stdout and, on process termination, cleared the app's "current
-engine" slot and emitted an `engine_down` event. The reader captured no identity for the engine
-it supervised.
+**The assumption under review.** Teardown lore says: post `WM_CLOSE` (`taskkill //PID <app>` without
+`/F`) to quit the app, and let that double as a free test of the exit path. The app was PID 43152.
 
-**The bug, as read from the source.** Stop engine A, immediately start engine B. Reader A's
-`Terminated` arrives late, finds engine **B** in the slot, and clears it — dropping B's Job
-Object, which on Windows kills B's process tree. The user presses "start" and gets a dead engine.
-
-**The obvious repro.** Call `stop()` then `start()` back-to-back from one handler, so no human
-click latency separates them. Automate it, watch the process count.
-
-**It passed. On the buggy code.**
-
-The application's own log said why:
+**The obvious signal.** `taskkill //PID 43152` printed:
 
 ```
-Stopping voice engine (generation 1)
-Voice engine terminated ... (reader gen=1)      <- Terminated arrives HERE
-voice: stale Terminated (gen=1) — slot untouched
-Voice slot claimed (generation=2, placeholder)  <- ...before B is installed
+SUCCESS: Sent termination signal to the process with PID 43152.
 ```
 
-`Terminated` was delivered **between** the two calls, while the slot was empty. The dangerous
-window never opened. A green run there proved nothing at all — and the "fully deterministic"
-description in the review was wrong.
+Done, apparently. On to the census.
 
-**What actually established the bug.** Force the interleaving and vary one thing:
+**What the evidence showed.** The process census three seconds later:
 
-```rust
-CommandEvent::Terminated(status) => {
-    log::info!("terminated (reader gen={generation})");
-    std::thread::sleep(Duration::from_millis(400));  // simulate a slow-to-die sidecar
-    ...
-}
+```
+   Id StartTime
+   -- ---------
+43152 2026-07-18 11:17:09 AM
 ```
 
-Then run twice, changing only the guard:
+Count still 1, and the **StartTime unchanged** — the *same* instance, not a closed-and-relaunched
+one. `WM_CLOSE` had been swallowed (a modal was open, and this template has no exit path that
+force-closes on request). The taskkill `SUCCESS` was true and irrelevant: it reported that the
+*signal was sent*, not that the *window closed*. Two different claims.
 
-| Variant | Guard | `engine_down` | live engines |
-|---|---|---|---|
-| (a) | `slot_generation.is_some()` — the bug | fired at +4.44 s | **0** |
-| (b) | `slot_generation == Some(event_generation)` — the fix | silent | **1** |
-
-Same 400 ms delay in both. One variable. The bug is real, the guard is what closes it, and the
-400 ms is not arbitrary — it is the delivery delay you get for free the moment the sidecar owns
-an audio device and takes time to die.
+**What settled it.** The external process census — count *plus* StartTime — over the tool's own
+message. The real teardown was force-killing the dev tree from the npx root
+(`taskkill //PID <root> //T //F`), whose `/T` cascades to vite, the app, its WebView2 children, and
+the quick-pane window. Census then read 0 across the board.
 
 **Transferable lessons.**
 
-- The repro you derive from reading the code is usually the one that cannot fail.
-- Read the target's runtime log to learn the *actual* ordering before designing the experiment.
-- When both variants pass, suspect the harness. Here a *second* guard (`stop` emptying the slot)
-  was independently closing the window — which was worth knowing, and was defense in depth.
-- Exit codes settled a related question in one digit: a killed sidecar logged `code: 1`; a
-  sidecar that read `{"type":"shutdown"}` and left its own loop logged `code: 0`. That single
-  number proved the graceful-shutdown fix executed, where no assertion could.
+- A tool's success line describes the *tool's action*, not the *world's state*. `taskkill` sending
+  a signal is not the app closing, just as `git add` succeeding is not the file being what you
+  assume. Go check the thing itself.
+- `StartTime` is the cheap disambiguator between "still the original process" and "it restarted" —
+  a refusal-to-close and a relaunch look identical in a bare count.
+- Don't inherit an exit-path assumption from a richer app. This template has no sidecars and no
+  graceful-close handler to lean on, so the "quit is a free exit test" framing simply doesn't apply.
 
 ---
 
-## Example 2 — a 10× performance inversion between build profiles
+## Example 2 — a git flag that looked like an edit but was the build's own footprint
 
-**The claim under review.** "Real-speech latency is 6.66 s; we'll need a GPU."
-
-**The measurement that mattered.** Run the *same* benchmark on both cargo profiles:
+**The observation under review.** After a dev run, `git status --porcelain` showed:
 
 ```
-debug   profile:  cold 2.81 s   warm 0.68 s
-release profile:  cold 24.1 s   warm 6.83 s     <- this is what ships
+ M src/lib/bindings.ts
 ```
 
-A release build slower than debug is never normal. Every latency number produced by anyone —
-the author's, and every mic measurement the reviewer had taken — came from the crippled binary.
-The apparent conclusion ("Whisper is too slow on CPU, we need hardware") was an artifact of the
-build.
+A tracked source file, apparently modified by the run. The obvious read: the launch changed
+committed source — revert it, or worse, go hunting for what mutated it.
 
-**Two theories died before publication.**
+**What the evidence showed.** `git diff src/lib/bindings.ts` was **empty**. `--stat` empty. Zero
+lines carrying a CR. And `git add --renormalize src/lib/bindings.ts` staged **nothing**. The file
+was byte-identical to the index. What actually happened: the debug build re-exports `bindings.ts`
+(tauri-specta) on every launch, rewriting it with a fresh mtime. Git's stat cache saw the newer
+timestamp and flagged the path as *maybe*-dirty; the content check found no change. It was the
+build's footprint, not an edit.
 
-1. *"The AVX2 compiler flag is set but the library's kernels are disabled."* The cache showed
-   `GGML_AVX2:BOOL=OFF` next to `/arch:AVX2` in `CMAKE_C_FLAGS`. Plausible, tidy, wrong: those
-   options only fed a backend-scoring file; the SIMD kernels gate on `__AVX2__`, which MSVC
-   *does* define under `/arch:AVX2`. Caught by `grep -rn "defined(__AVX2__)"` before it reached
-   the author.
-
-2. *"Release lacks `/O2`; injecting `CFLAGS=-O2` will fix it."* Warm stayed 6.93 s and only
-   `-DNDEBUG` reached the cache. `CFLAGS` merges into `CMAKE_C_FLAGS` (the base), never into
-   `CMAKE_C_FLAGS_RELEASE` (the per-config variable) — which is what the `cmake` crate had
-   clobbered.
-
-**What settled it: one command.**
-
-```
-debug   tree, ggml-cpu.c:  ... /MD /O2 /Ob2 ... /arch:AVX2
-release tree, ggml-cpu.c:  ... /MD      ...    /arch:AVX2      <- no /O flag at all -> /Od
-```
-
-The `CL.command.1.tlog` — the command line MSBuild actually ran. The cache had been lying the
-whole time.
-
-**The fix and the result.** Pin `CMAKE_C_FLAGS_RELEASE` / `CMAKE_CXX_FLAGS_RELEASE` directly
-(guarded to the platform); `cmake-rs` skips its own injection when the variable is user-defined.
-
-```
-before:  warm 6.83 s   cold 23.2 s
-after:   warm 0.78 s   cold  3.04 s
-```
-
-8.8×. From a build flag. The GPU was never needed.
+**What settled it.** The content-level checks (`git diff` empty, `--renormalize` stages nothing)
+over the `git status` flag, which keys on cheap signals — mtime, size — before it does the
+expensive content compare. A `.gitattributes` `eol=lf` was added so the regenerated file can't even
+diverge by line ending; the residual flag is pure stat-cache noise that clears on any refresh.
 
 **Transferable lessons.**
 
-- Measure the artifact that ships, on the profile that ships.
-- The cache is what CMake was told. The tlog is what the compiler ran. Go to the tlog.
-- When you have a confident root cause, try to kill it before you publish it. Two died here.
-- Handing someone a clean **reproduction** plus "I don't know the cause" is worth more than a
-  tidy theory that's wrong. The author root-caused it in one command once the reproduction was
-  unambiguous.
+- `git status` flagging a file is not evidence of a content change; `git diff` (or a renormalize
+  that stages nothing) is. Status reports a suspicion; the diff reports the fact.
+- A file regenerated on every launch is *your own footprint*. Before concluding "the run changed
+  X," ask what the run regenerates. (The sibling app's version of this: mistaking your own
+  probe-induced process restarts for a lifecycle bug — same trap, different subsystem.)
+- Absence of a real diff, confirmed two ways, beats the presence of a scary-looking flag.
 
 ---
 
-## Example 3 (small, but the one people repeat) — a test that could not fail
-
-A resampler test was named `resample_compensates_startup_delay`, and its comment said *"without
-the `skip(delay)` compensation the leading samples are the filter ramp-up (~0)."*
-
-Deleting the compensation left the suite **green**. The measured values:
-
-| | `resampled[0]` |
-|---|---|
-| with compensation | `0.99999624` |
-| without | `1.0689032` |
-
-Both pass `> 0.9`. The probe was a **constant DC signal**, and a time-invariant signal cannot
-reveal a time shift. (The comment's premise was false too — the filter overshoots, it doesn't
-ramp from zero.)
-
-Replacing the probe with a **step** (2400 zeros, then 2400 ones) and asserting the *index* of the
-transition went red immediately — at 779 instead of 800 — and exposed a real 21-frame
-over-compensation that the DC probe had been concealing for two review rounds.
-
-**Transferable lesson.** Probe along the axis you are testing. And a test that names the mutation
-it catches, while not catching it, is worse than no test: it advertises coverage that isn't there.
+These are lighter than a threaded race or a build-profile inversion, but they carry the same spine:
+the loud signal (a `SUCCESS` line, an ` M`) is about a *proxy*; the quiet ground truth (a census, a
+diff) is about the *thing itself*. When they disagree, believe the quiet one.
