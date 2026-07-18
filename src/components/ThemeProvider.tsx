@@ -62,9 +62,11 @@ export function ThemeProvider({
       localStorage.setItem(storageKey, newTheme)
       setTheme(newTheme)
       // Notify other windows (e.g., quick pane) of theme change
-      void emit('theme-changed', { theme: newTheme }).catch((error: unknown) => {
-        logger.error('Failed to emit theme-changed event', { error })
-      })
+      void emit('theme-changed', { theme: newTheme }).catch(
+        (error: unknown) => {
+          logger.error('Failed to emit theme-changed event', { error })
+        }
+      )
     },
   }
 

@@ -150,7 +150,10 @@ async function handleCheckForUpdates(): Promise<void> {
     }
   } catch (error) {
     logger.error('Update check failed', { error })
-    void notifications.error('Update Check Failed', 'Could not check for updates')
+    void notifications.error(
+      'Update Check Failed',
+      'Could not check for updates'
+    )
   }
 }
 
