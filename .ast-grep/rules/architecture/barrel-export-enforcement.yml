@@ -1,0 +1,15 @@
+id: barrel-export-enforcement
+message: |
+  Import from the feature barrel, not internal paths.
+  BAD:  import { X } from '@/features/my-feature/components/X'
+  GOOD: import { X } from '@/features/my-feature'
+severity: warning
+language: tsx
+rule:
+  any:
+    - pattern: import { $$$_ } from '@/features/$_/components/$_'
+    - pattern: import { $$$_ } from '@/features/$_/services/$_'
+    - pattern: import { $$$_ } from '@/features/$_/hooks/$_'
+    - pattern: import { $$$_ } from '@/features/$_/store/$_'
+    - pattern: import { $$$_ } from '@/features/$_/types/$_'
+    - pattern: import { $$$_ } from '@/features/$_/utils/$_'

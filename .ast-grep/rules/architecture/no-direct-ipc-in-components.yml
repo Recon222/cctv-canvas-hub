@@ -1,0 +1,20 @@
+id: no-direct-ipc-in-components
+message: |
+  Tauri commands must be called from services/ using commands.*, not components/.
+
+  BAD: components/MyComponent.tsx calling invoke()
+  GOOD: services/myService.ts using commands.* from @/lib/tauri-bindings
+
+  Components should use hooks that wrap services.
+severity: error
+language: tsx
+files:
+  - 'src/features/**/components/**/*.tsx'
+  - 'src/components/**/*.tsx'
+rule:
+  pattern: invoke($$$)
+note: |
+  This enforces the service layer pattern:
+  - services/: Own all Tauri IPC calls
+  - hooks/: Orchestrate services + state
+  - components/: Receive callbacks via props
