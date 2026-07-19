@@ -1,0 +1,19 @@
+#!/bin/sh
+# Fast pre-commit gate: the JS/TS half of `check:all` (seconds, not minutes).
+#
+# Rust clippy/tests are deliberately excluded here — they take minutes, and a
+# slow pre-commit is the #1 reason people reach for --no-verify. The full
+# `npm run check:all` (including Rust) remains the definition of done before a
+# change is really finished (see AGENTS.md rule 7).
+#
+# Wired up via git's native core.hooksPath (set by the package.json "prepare"
+# script on `npm install`, and activated in this checkout already). No husky.
+
+echo "pre-commit: running fast checks (typecheck, lint, ast-grep, format)..."
+if ! npm run --silent check:fast; then
+  echo ""
+  echo "✖ pre-commit failed. Fix the issues, or run 'npm run fix:all' for the"
+  echo "  auto-fixable ones. Genuine emergency? 'git commit --no-verify' bypasses"
+  echo "  this — but then run the full 'npm run check:all' before you push."
+  exit 1
+fi

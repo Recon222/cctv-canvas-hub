@@ -24,7 +24,7 @@ This repository is a template with sensible defaults for building Tauri v2 + Rea
 4. **Batch Operations**: Use multiple tool calls in single responses
 5. **Match Code Style**: Follow existing formatting and patterns
 6. **Test Coverage**: Write comprehensive tests for business logic
-7. **Quality Gates**: Run `npm run check:all` after significant changes
+7. **Quality Gates (definition of done)**: `npm run check:all` is the enforcement — nothing runs automatically. Run it while working to catch drift early, and it **must pass green before every commit and before marking any task complete**. A red gate is not done. Never bypass a stage (no `--no-verify`, no disabling a rule to make it pass) — fix the code, or raise it with the user if a rule itself is wrong.
 8. **No Dev Server**: Ask the user to run and report back — _exception:_ an agent may launch and drive the app itself for end-to-end verification via the `driving-agent-shell` skill (which also handles teardown)
 9. **No Unsolicited Commits**: Only when explicitly requested
 10. **Documentation**: Update relevant `docs/developer/` files for new patterns
