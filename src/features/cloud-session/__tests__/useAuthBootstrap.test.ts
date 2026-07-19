@@ -84,4 +84,31 @@ describe('useAuthBootstrap', () => {
       expect(useSessionStore.getState().state).toBe('schema-gate')
     })
   })
+
+  // "Never infinite booting" contract, error side: a config-load rejection
+  // (e.g. IPC failure) must land in needs-setup, not a stuck booting shell.
+  it('reaches needs-setup when config load rejects', async () => {
+    mockLoadConfig.mockRejectedValue(new Error('IPC read failed'))
+
+    renderBootstrap()
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().state).toBe('needs-setup')
+    })
+    expect(mockInitSupabase).not.toHaveBeenCalled()
+  })
+
+  // Restore/gate rejection (e.g. network down mid-restore) must land in
+  // signed-out — again never a stuck booting shell.
+  it('reaches signed-out when session restore rejects', async () => {
+    mockLoadConfig.mockResolvedValue(CONFIG)
+    mockRestoreSession.mockRejectedValue(new Error('network unreachable'))
+
+    renderBootstrap()
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().state).toBe('signed-out')
+    })
+    expect(mockCheckSchemaGate).not.toHaveBeenCalled()
+  })
 })
