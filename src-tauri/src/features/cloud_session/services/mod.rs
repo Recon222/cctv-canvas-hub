@@ -6,6 +6,7 @@
 //! must not be copied — it would bypass the vault via the on-disk log).
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::{AppHandle, Manager};
 
@@ -27,10 +28,22 @@ fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// Monotonic discriminator: overlapping writes must never share a temp
+/// file (an auth refresh can race a sign-in write once M6 wires re-auth).
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 /// Atomic write (temp file + rename) — a crash mid-write degrades to a
-/// missing/corrupt file that parses as absent, never a half-file.
+/// missing/corrupt file that parses as absent, never a half-file. The
+/// temp name is unique per write (pid + counter) so concurrent writers
+/// cannot interleave into one temp file; the rename stays atomic.
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let temp = path.with_extension("tmp");
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_default();
+    let pid = std::process::id();
+    let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temp = path.with_file_name(format!("{file_name}.{pid}.{counter}.tmp"));
     std::fs::write(&temp, bytes).map_err(|e| format!("Failed to write file: {e}"))?;
     if let Err(rename_err) = std::fs::rename(&temp, path) {
         // Clean up the temp file to avoid leaving orphans on disk.
