@@ -97,7 +97,9 @@ export async function probeProject(url: string, key: string): Promise<void> {
     error = response.error
     status = response.status
   } catch (cause) {
-    // postgrest-js only throws when fetch itself fails outright.
+    // Rare secondary path: installed postgrest-js RESOLVES fetch failures
+    // as { error, status: 0 } (handled below) rather than rejecting — this
+    // catch only fires if the query machinery itself throws.
     throw new ProbeUnreachableError(
       cause instanceof Error ? cause.message : 'Network request failed'
     )
@@ -105,7 +107,8 @@ export async function probeProject(url: string, key: string): Promise<void> {
   if (!error) {
     return
   }
-  // postgrest-js also maps some fetch failures into { status: 0, error }.
+  // The primary network-failure path: postgrest-js resolves an unreachable
+  // host as { error, status: 0 } instead of rejecting.
   if (!status) {
     throw new ProbeUnreachableError(error.message)
   }

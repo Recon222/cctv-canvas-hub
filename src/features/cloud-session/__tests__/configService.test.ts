@@ -132,7 +132,22 @@ describe('configService', () => {
       'bad-key'
     )
 
-    // Network throw (nothing reachable) ⇒ unreachable
+    // Resolved { error, status: 0 } ⇒ unreachable — the shape installed
+    // postgrest-js actually produces on network failure (it resolves fetch
+    // failures rather than rejecting), so this is the path real users hit.
+    mockCreateProbeClient.mockReturnValue(
+      fakeProbeClient({
+        resolves: {
+          error: { message: 'TypeError: Failed to fetch', code: '' },
+          status: 0,
+        },
+      })
+    )
+    await expect(
+      probeProject('https://down.supabase.co', 'key')
+    ).rejects.toBeInstanceOf(ProbeUnreachableError)
+
+    // Network throw (query machinery itself rejects) ⇒ unreachable too
     mockCreateProbeClient.mockReturnValue(
       fakeProbeClient({ rejects: new TypeError('fetch failed') })
     )
