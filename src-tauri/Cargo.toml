@@ -1,10 +1,10 @@
 [workspace]
-members = [".", "crates/platform-utils"]
+members = [".", "crates/platform-utils", "crates/secure-vault"]
 # default-members drives bare `cargo test` (what `npm run rust:test` runs) to
 # include the pure-logic crates, not just the root package. The root tauri-app's
 # own lib harness is disabled below (`[lib] test = false`) so it never hits the
 # Windows WebView2 crash, while the crates run their `#[cfg(test)]` tests.
-default-members = [".", "crates/platform-utils"]
+default-members = [".", "crates/platform-utils", "crates/secure-vault"]
 resolver = "2"
 
 [package]
@@ -59,6 +59,9 @@ regex = "1"
 # Pure-logic workspace crate — the template's example of unit-testable Rust that
 # lives outside the Tauri crate (see crates/platform-utils + docs/developer/testing.md).
 platform-utils = { path = "crates/platform-utils" }
+
+# Pure AES-256-GCM seal/open for the session vault (cloud_session feature).
+secure-vault = { path = "crates/secure-vault" }
 
 # Type-safe Tauri command bindings
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }
