@@ -1,10 +1,12 @@
 #!/bin/sh
-# Fast pre-commit gate: the JS/TS half of `check:all` (seconds, not minutes).
+# Pre-commit gate. The JS/TS half of `check:all` always runs (seconds); the
+# Rust half runs only when src-tauri/ files are staged, so pure-frontend
+# commits stay quick while any Rust change is held to the same bar.
 #
-# Rust clippy/tests are deliberately excluded here — they take minutes, and a
-# slow pre-commit is the #1 reason people reach for --no-verify. The full
-# `npm run check:all` (including Rust) remains the definition of done before a
-# change is really finished (see AGENTS.md rule 7).
+# Rust checks are gated (not unconditional) because clippy+test take minutes on
+# a JS-only commit for no reason, and a slow pre-commit is the #1 reason people
+# reach for --no-verify. The full `npm run check:all` remains the definition of
+# done before a change is really finished (see AGENTS.md rule 7).
 #
 # Wired up via git's native core.hooksPath (set by the package.json "prepare"
 # script on `npm install`, and activated in this checkout already). No husky.
@@ -16,4 +18,15 @@ if ! npm run --silent check:fast; then
   echo "  auto-fixable ones. Genuine emergency? 'git commit --no-verify' bypasses"
   echo "  this — but then run the full 'npm run check:all' before you push."
   exit 1
+fi
+
+# Rust checks only when Rust actually changed (staged src-tauri/ paths).
+if git diff --cached --name-only | grep -q '^src-tauri/'; then
+  echo "pre-commit: src-tauri changed — running Rust checks (fmt, clippy, test)..."
+  if ! npm run --silent check:rust; then
+    echo ""
+    echo "✖ Rust pre-commit checks failed. Fix them, or run 'npm run fix:all' for"
+    echo "  the auto-fixable ones (rustfmt + clippy --fix)."
+    exit 1
+  fi
 fi
