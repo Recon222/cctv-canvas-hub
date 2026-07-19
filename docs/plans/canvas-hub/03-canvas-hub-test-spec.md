@@ -4,7 +4,9 @@
 
 **Basis:** doc 01 §5 (contracts, trap list) and doc 02 phases. **Supersedes:** nothing.
 
-**TDD red line:** every test below is written **before** its phase's implementation and must **fail** until that phase lands. Test numbering (`#`) runs continuously across the whole document. Mock strategy, fixtures, and wiring follow this repo's existing conventions (`docs/developer/testing.md`, `src/test/*` helpers) — this spec pins **what each test proves**, not how it's wired.
+**TDD red line:** every test below is written **before** its phase's implementation and must **fail** until that phase lands. Test numbering (`#`) runs continuously across the whole document (post-review additions are appended — numbers never shift). Mock strategy, fixtures, and wiring follow this repo's existing conventions (`docs/developer/testing.md`, `src/test/*` helpers) — this spec pins **what each test proves**, not how it's wired.
+
+**One new seam the repo's conventions don't yet cover:** tests exercising services that wrap supabase-js directly (#11, #15–19, #41–51, #77–78) mock the client at its single choke point — `vi.mock('@/lib/supabase/client')` with a minimal fake returned by `getSupabase()` covering only the touched surfaces (`auth.signInWithPassword/getSession/refreshSession/signOut`, the `from().select()…` chain, `channel().on().subscribe()`, `storage.from().createSignedUrl`). The fake's shape gets documented in `docs/developer/supabase-integration.md` (Phase 6.3A).
 
 **Run commands:**
 
@@ -72,13 +74,15 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 10  | Should reject malformed enrollment payloads                                 | bad JSON / wrong shape / `v≠1` ⇒ `EnrollmentPayloadError`                |
 | 11  | Should surface probe rejection distinctly from unreachable                  | PostgREST error ⇒ "rejected"; network throw ⇒ "unreachable"              |
 | 12  | Should read the vault through the storage adapter                           | `vaultStorage.getItem` returns the command's decrypted value             |
-| 13  | Should write the vault through the storage adapter                          | `setItem` forwards value to `vaultSet`                                   |
+| 13  | Should write the vault through the storage adapter (single-key invariant)   | `setItem` forwards value to `vaultSet`; a second distinct storage key triggers the loud warning path (key name only — never the value) |
 | 14  | Should treat vault command failure as absent session, not a crash           | command error ⇒ `getItem` resolves `null`                                |
 | 15  | Should sign in and persist the session via the adapter                      | after `signIn`, session lands in vault storage                           |
 | 16  | Should surface bad credentials as a typed sign-in failure                   | auth error message reaches the caller; no session stored                 |
 | 17  | Should pass the schema gate when `schema_version == 1`                      | `checkSchemaGate()` ⇒ `'ok'`                                             |
 | 18  | Should fail the schema gate on any other version                            | version 2 / missing row ⇒ `'mismatch'`                                   |
 | 19  | Should clear vault and client state on sign-out                             | `signOut()` ⇒ vault cleared + subsequent `getSupabase` re-init required  |
+
+**M1 verification obligation (not a numbered test — app-crate Rust is not unit-testable on Windows):** before closing M1, grep-review the vault service/commands for any `{value:?}`/`{result:?}`/argument logging (the 1.2A no-log constraint), and verify Flow B relaunch-restore against the running app — a per-write `generate_key()` regression manifests as forced re-sign-in on every restart. Re-checked in the Phase 6.3B pass.
 
 ## Phase 1.3 — session store + bootstrap
 
@@ -120,7 +124,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 
 | #   | Test Description                                                        | Key Assertion                                            |
 | --- | ----------------------------------------------------------------------- | -------------------------------------------------------- |
-| 41  | Should fetch cases via the service into `['cases']`                     | hook resolves mapped visible cases                       |
+| 41  | Should fetch cases with pinned server-side predicates                   | mapped visible cases; query excludes archived + soft-deleted, ordered by `updated_at desc`, bounded limit |
 | 42  | Should fetch locations keyed by case                                    | `['locations', caseId]` key; only that case's rows       |
 | 43  | Should fetch media keyed by case, mapped at the boundary                | `['media', caseId]`; rows are `CanvassMedia` with soft-deleted excluded |
 | 44  | Should exclude soft-deleted rows end-to-end                             | seeded soft-deleted location absent from hook data       |
@@ -134,7 +138,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 47  | Should decode the broadcast_changes payload shape                             | `{operation, table, record, old_record}` ⇒ typed `ActivityEvent` (shape pinned against a live capture in M2) |
 | 48  | Should dispatch only events matching the subscribed case_id                   | other-case record ⇒ handler not called (G6 partition rule)        |
 | 49  | Should patch an UPDATE into the locations cache by id, **mapped**             | replaced row is a `CanvassLocation` (coord parsed — no raw WKB hex in cache); no refetch issued |
-| 50  | Should insert new rows and drop soft-deleted rows from cache                  | INSERT appends; `deleted_at` set ⇒ removed                        |
+| 50  | Should upsert INSERTs by id and drop soft-deleted rows from cache             | a redelivered INSERT replaces, never duplicates (exactly one row per id); `deleted_at` set ⇒ removed |
 | 51  | Should ignore unknown tables/ops without throwing                             | forward-compat: unhandled payload ⇒ no-op                         |
 
 ## Phase 2.4 — canvass store + cards
@@ -258,9 +262,19 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 
 | #   | Test Description                                                         | Key Assertion                                              |
 | --- | ------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| 104 | Should refresh the session and realtime auth on wake                     | `visible`/`online` ⇒ `refreshSession` then `setAuth` order |
-| 105 | Should invalidate all case-scoped queries on catch-up                    | invalidation covers `['cases']`, `['locations', id]`, `['media', id]` |
+| 104 | Should refresh on wake only when the session is near/after expiry        | fresh session ⇒ no `refreshSession` call (autoRefreshToken owns rotation); near-expiry ⇒ `refreshSession` then `setAuth` order |
+| 105 | Should invalidate case-data queries on catch-up, excluding signed URLs   | invalidation covers `['cases']`, `['locations', id]`, `['media', id]`; `['signed-url', …]` queries are NOT refetched |
 | 106 | Should drop to signed-out when the refresh fails                         | refresh error ⇒ `signed-out` (never silently stale)        |
+
+---
+
+## Revision R1 additions (post plan-review PR #1)
+
+Appended so existing test numbers never shift. Belongs to **Phase 2.2** (counted there in the summary).
+
+| #   | Test Description                                                          | Key Assertion                                                                     |
+| --- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 107 | Should reconcile case-data queries on a slow interval as a broadcast safety net | cases/locations queries carry `refetchInterval: RECONCILE_MS`; a cache made stale by a dropped broadcast converges within one cycle without any realtime event |
 
 ---
 
@@ -273,8 +287,8 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 1.3   | 5     | 3.2   | 2     | 5.2   | 3     |
 | 1.4   | 4     | 3.3   | 5     | 5.3   | 4     |
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 4     |
-| 2.2   | 5     | 4.1   | 5     | 6.2   | 3     |
+| 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
 | 2.3   | 6     | 4.2   | 4     | 6.3   | 0     |
 | 2.4   | 9     |       |       |       |       |
 
-**Total: 106** (Rust 6 · TypeScript 100) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 107** (Rust 6 · TypeScript 101; #107 appended in Revision R1) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.

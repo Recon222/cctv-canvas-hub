@@ -47,8 +47,10 @@ Ranked — when two conflict, the lower number wins.
 │                                    ┌────────────── Agency Supabase (canvas-hub-dev in dev) ─┐
 │                                    │  Auth (password grant, coordinator account)            │
 │                                    │  PostgREST: cloud_cases / cloud_locations /            │
-│                                    │             cloud_media_files / app_meta (RLS:         │
-│                                    │             agency-wide SELECT, owner-only writes)     │
+│                                    │             cloud_media_files (RLS: agency-wide        │
+│                                    │             SELECT, owner-only writes) · app_meta      │
+│                                    │             (authenticated SELECT; anon reads filter   │
+│                                    │             to EMPTY, not error — live-verified)       │
 │                                    │  Storage: images / video / audio (private, signed URL) │
 │                                    │  Realtime: broadcast topic `agency:activity`           │
 │                                    │            (+ postgres_changes publication, unused V1) │
@@ -259,6 +261,7 @@ interface LocationFormData {
 - Topic **`agency:activity`**, private broadcast channel (`realtime.messages` RLS authorizes authenticated members). Client: `supabase.channel('agency:activity', { config: { private: true } })`, subscribe to `broadcast` events; call `supabase.realtime.setAuth()` after sign-in.
 - Payload from `realtime.broadcast_changes` (trigger `broadcast_agency_activity`): event name = `INSERT`|`UPDATE`|`DELETE`; payload carries `{ operation, table ('cloud_cases'|'cloud_locations'), schema, record, old_record }` — full new+old rows. _Payload shape asserted from Supabase docs + trigger source; verified live in M2 before anything builds on it (test spec #47)._
 - **Client partition rule (G6):** the only consumer API is `subscribeToCaseActivity(caseId, handlers)` — events are filtered by `record.case_id` before dispatch. V2 migrates by swapping the topic string to `case:{id}:activity`; the consumer API does not change.
+- **Type ownership:** `ChannelStatus` (mapped from supabase-js subscribe states) and `HealthState` are defined once, in `src/store/health-store.ts`; `realtimeService` imports them — never re-declares.
 
 ```ts
 // features/canvass/services/realtimeService.ts
@@ -335,7 +338,7 @@ interface AppPreferences {
 | `stale`        | no realtime confirm AND no successful fetch for > `STALE_AFTER_MS` | keep retrying; polling continues               | red banner "STALE since HH:MM" (G4)   |
 | `offline`      | `navigator.onLine === false`                                       | pause polling; on `online`: refresh + refetch  | red banner "offline"                  |
 
-**Attention** (`canvass-store`): `ActivityEntry { id, at, caseId, kind: 'location-new' | 'location-status' | 'location-updated' | 'media-new' | 'case-updated', locationId?, summary }` — in-memory ring (cap 200, AD7); `attentionByLocation: Map<locationId, timestamp>` drives marker pulse / card highlight for `ATTENTION_TTL_MS` (~12 s).
+**Attention** (`canvass-store`): `ActivityEntry { id, at, caseId, kind: 'location-new' | 'location-status' | 'location-updated' | 'media-new' | 'case-updated', locationId?, summary }` — in-memory ring (cap 200, AD7); `attentionByLocation: Record<string, number>` (a plain record, not a `Map` — Zustand selectors compare references; in-place `Map` mutation would silently skip re-renders) drives marker pulse / card highlight for `ATTENTION_TTL_MS` (~12 s).
 
 ### 5.5 Derived read rules (the trap list, all unit-tested)
 
@@ -350,7 +353,7 @@ interface AppPreferences {
 **Flow A — first run (enroll → sign in → board).**
 
 1. Boot: `load_cloud_config` → `None` → `needs-setup`.
-2. Coordinator pastes enrollment payload `{v,url,key}` (or url+key manually) → probe = anonymous `app_meta` select must not error (mirrors mobile `enrollDevice`).
+2. Coordinator pastes enrollment payload `{v,url,key}` (or url+key manually) → probe = anonymous `app_meta` select must not **error** (mirrors mobile `enrollDevice`). RLS filters the anonymous read to an empty result — success is "no error", not "rows returned" (live-verified against canvas-hub-dev: HTTP 200, `[]`).
 3. `save_cloud_config` → init supabase client (vault storage adapter) → `signed-out`.
 4. Password sign-in → session persisted to vault (adapter) → `realtime.setAuth()`.
 5. Schema gate: read `app_meta.schema_version`; `≠ 1` → `schema-gate` (blocked); else `active`.
@@ -364,7 +367,7 @@ interface AppPreferences {
 
 1. Investigator's phone updates `cloud_locations` → trigger broadcasts on `agency:activity`.
 2. `subscribeToCaseActivity` filters by active `case_id` → typed `ActivityEvent`.
-3. `useCaseRealtime` maps the payload row through `toCanvassLocation`/`toCanvassCase` (the trap-list choke point — §5.5), then patches the TanStack cache in place (`setQueryData` by row id; INSERT appends; DELETE/soft-delete removes), records `lastEventAt`, appends `ActivityEntry`, stamps `attentionByLocation`.
+3. `useCaseRealtime` maps the payload row through `toCanvassLocation`/`toCanvassCase` (the trap-list choke point — §5.5), then patches the TanStack cache in place (`setQueryData` by row id; INSERT **upserts by id** — broadcast redelivery and races with in-flight refetches must not duplicate a card; DELETE/soft-delete removes), records `lastEventAt`, appends `ActivityEntry`, stamps `attentionByLocation`.
 4. Map marker re-colors + pulses; card highlights; feed prepends — no refetch needed (payload carries the full row).
 
 **Flow D — media arrival (poll, G3).**
@@ -377,7 +380,8 @@ interface AppPreferences {
 
 1. Channel drops → `reconnecting`; supabase-js retries with backoff; polling continues (independent freshness).
 2. Threshold breached with no successful fetch → `stale` (red banner; G4 honesty).
-3. On resubscribe / `online` / `visibilitychange→visible`: `auth.refreshSession()` → `realtime.setAuth()` → invalidate all case-scoped queries (catch-up refetch) → `live`.
+3. On resubscribe / `online` / `visibilitychange→visible`: check session validity (`getSession()`/expiry) and call `auth.refreshSession()` **only when near/after expiry** — `autoRefreshToken` owns routine rotation, and racing it risks submitting a rotated refresh token → `realtime.setAuth()` → invalidate case-data queries (catch-up refetch, signed-URL queries excluded — they refresh on their own interval) → `live`.
+4. Safety net for lost broadcasts: case-data queries also refetch on a slow interval (`RECONCILE_MS`, 5 min). Broadcast is best-effort with no replay — a silently dropped event on a healthy socket must not outlive one reconciliation cycle (spec §6: never present stale as live).
 
 **Flow F — idle lock / unlock.**
 
@@ -427,9 +431,8 @@ Every row must be resolved in the Implementation Plan's Architecture Decisions t
 | `@supabase/supabase-js`          | JS   | ^2      | auth, PostgREST, realtime, storage         |
 | `mapbox-gl`                      | JS   | ^3      | map engine (Mapbox fixed by spec §4)       |
 | `react-map-gl`                   | JS   | ^8      | React binding (`react-map-gl/mapbox`)      |
-| `keyring`                        | Rust | ^3      | OS keychain for the vault key              |
+| `keyring`                        | Rust | ^3      | OS keychain for the vault key — raw bytes via `set_secret`/`get_secret` (never `set_password` with non-UTF-8 key material) |
 | `aes-gcm`, `rand`                | Rust | 0.10 / ^0.8 | secure-vault crate (pure)              |
-| `base64`                         | Rust | ^0.22   | vault file framing                         |
 
 No other new dependencies. Clustering uses Mapbox GL's built-in GeoJSON clustering (no `supercluster` dep).
 
