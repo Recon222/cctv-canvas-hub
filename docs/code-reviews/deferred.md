@@ -1,0 +1,16 @@
+# Deferred Items Ledger
+
+Human-readable register of everything consciously deferred — from code reviews, plan reviews, and implementation. Each entry names its trigger: the milestone/event at which it must be picked up or consciously re-deferred. Remove entries when done (git history keeps the record).
+
+| # | Item | Origin | Trigger / pick up at | Notes |
+| - | ---- | ------ | -------------------- | ----- |
+| D1 | `secure-vault`: `seal`'s encrypt-failure maps to `VaultError::Corrupt` (an open-side name) | PR #2 review, LOW (rust-reviewer) | Only if the seal path ever gains reachable failure modes | Unreachable below ~64 GiB plaintext; cosmetic. Optional `SealFailed` variant. |
+| D2 | Schema gate: transient network error during the gate check drops to `signed-out` instead of a retryable gate state | PR #2 review, INFO (database-reviewer) | M2/M5 connection-health work | Fail-closed and recoverable — acceptable for M1. Revisit once the health store exists to represent "gate check couldn't run". |
+| D3 | `reauthenticate()` collapses wrong-password vs network-unreachable into `false` | PR #2 review, INFO (silent-failure-hunter) | M6 Phase 6.1 (LockOverlay wiring — its first live caller) | Reuse the `ProbeRejectedError`/`ProbeUnreachableError` distinction so the lock screen can say which it was. |
+| D4 | `ConnectedPlaceholder` component (+ its `cloudSession.connected.*` locale keys) is temporary | M1 implementation | M2 Phase 2.4D | Swapped for `CanvassRoot`; delete component + keys, keep sign-out reachable from the board. |
+| D5 | `SupabaseClient` typed as `ReturnType<typeof createClient>` (no `Database` generics) | M1 implementation | M2 (first typed row queries) | Introduce a `Database` generic in `src/lib/supabase/client.ts`; bare `SupabaseClient` type trips `no-unsafe-assignment` under strictTypeChecked. |
+| D6 | Template sidebar files (`LeftSideBar`/`RightSideBar`) + ui-store visibility state + palette/menu toggles are dormant | Plan AD9 | Partially superseded by the left-rail decision: `LeftSideBar` gets repurposed as the Map/Dashboard nav rail (M5-ish, design pending); the rest goes to a `/cleanup` pass post-V1 | See memory `view-switcher-left-rail`; plan amendment lands at M2 kickoff. |
+| D7 | `docs/developer/state-management.md` "Adding a New Store" describes a stale per-store ast-grep list | Plan-review side note | M2 (first new store lands — health-store) | The shipped rule is regex-wide (`use*Store`); one-paragraph doc fix. |
+| D8 | Per-thumbnail signed-URL creation (no batch) | Plan 4.1A known ceiling | Dense cases (~100+ media tiles per case) | `createSignedUrls` (per-case batch) is the pinned upgrade path. |
+| D9 | Left-rail view switcher (Map ↔ Dashboard) + full-dashboard plan amendment | Product decision 2026-07-19 | M2 kickoff (docs amendment) · M3–M5 (design + build) | Rail is nav chrome, not an info panel — doesn't violate spec §4. Include as first-class surface in the Claude-design package. |
+| D10 | In-session supabase MCP connection may point at the old audited project until the session restarts | M1 implementation note | Any new session (auto-resolves) | Stored config already pins canvas-hub-dev (`fniyjetrgqsamqvkcrxg`); verify with `get_project_url` before relying on MCP schema inspection. |
