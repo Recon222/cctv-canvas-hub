@@ -87,6 +87,28 @@ describe('vaultStorage', () => {
     expect(mockCommands.vaultClear).toHaveBeenCalledTimes(1)
   })
 
+  // Hardening (fix-delta): removal must never BIND either. If an auth-js
+  // upgrade ever reordered _removeSession's awaits so a sibling removal
+  // arrived before any session read/write, a remove-side bind would let
+  // it vaultClear() the real session. Binding is read/write-only.
+  it('does not bind on removal — a sibling removed first is a pure no-op', async () => {
+    mockCommands.vaultSet.mockResolvedValue({ status: 'ok', data: null })
+    mockCommands.vaultClear.mockResolvedValue({ status: 'ok', data: null })
+
+    // First storage op of the process is a sibling removal (no bind yet).
+    await expect(
+      vaultStorage.removeItem(`${AUTH_KEY}-user`)
+    ).resolves.toBeUndefined()
+    expect(mockCommands.vaultClear).not.toHaveBeenCalled()
+
+    // The session key then binds and persists normally — proof the
+    // removal did not steal the binding.
+    await vaultStorage.setItem(AUTH_KEY, 'session-blob')
+    expect(mockCommands.vaultSet).toHaveBeenCalledWith('session-blob')
+    await vaultStorage.removeItem(AUTH_KEY)
+    expect(mockCommands.vaultClear).toHaveBeenCalledTimes(1)
+  })
+
   // Test #14
   it('treats vault command failure as absent session, not a crash', async () => {
     mockCommands.vaultGet.mockResolvedValue({

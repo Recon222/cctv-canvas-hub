@@ -104,15 +104,18 @@ export const vaultStorage: {
       transientItems.delete(key)
       return
     }
-    if (boundKey !== null && key !== boundKey) {
-      // auth-js (2.110.7 `_removeSession`) also removes sibling keys it
-      // never stored here — e.g. `sb-{ref}-auth-token-user`, even with no
-      // userStorage configured. Removing an absent key is a no-op
-      // (localStorage semantics): it must neither loud-fail nor clear the
-      // bound session blob. Writes/reads of a second key still fail loudly.
+    // Removal NEVER binds the storage key — only getItem/setItem do.
+    // auth-js (2.110.7 `_removeSession`) removes sibling keys it never
+    // stored here (e.g. `sb-{ref}-auth-token-user`, even with no
+    // userStorage configured), and its internal removal ORDER is an
+    // undocumented implementation detail: if an upgrade ever issued a
+    // sibling removal before any session read/write, binding here would
+    // let it `vaultClear()` the real session. Removing anything but the
+    // bound key is a no-op (localStorage semantics); reads/writes of a
+    // second session-class key still fail loudly via `assertSingleKey`.
+    if (key !== boundKey) {
       return
     }
-    assertSingleKey(key)
     const result = await commands.vaultClear()
     if (result.status === 'error') {
       throw new Error(result.error)
