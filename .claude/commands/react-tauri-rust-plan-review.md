@@ -90,7 +90,9 @@ Decide which optional code-design lanes to add based on what the plan proposes. 
 |---|---|---|
 | `rust-reviewer` (plan mode) | Plan proposes new Rust types, traits, Tauri commands, error enums, file paths under `src-tauri/` | Reviews the **proposed Rust design** against project conventions (tauri-specta, typed error enums, `#[serde(tag = "type")]`, Tauri-free workspace-crate tests under `src-tauri/crates/`, etc.) as if it were already written. Catches design choices that would fail Rust code review *before* the implementer follows the plan and writes them. |
 | `typescript-reviewer` (plan mode) | Plan proposes new TS types, hooks, services, components, Tauri command consumers | Same idea on the TS side: review the **proposed TS design** against project conventions (Zustand selector syntax, services-own-IPC, barrel exports, i18n, no manual memo). Catches design choices that would fail TS code review. |
-These lanes are dispatched in **proposal-review mode** with a focused brief — see Phase 3 below for the exact prompt shape. They do NOT run `cargo test` / `tsc --noEmit` (there's nothing to compile).
+| `database-reviewer` (plan mode) | Plan proposes Supabase/Postgres data-access design — queries, RLS assumptions, RPC usage (`locations_in_view`, …), realtime subscriptions (Postgres Changes / Broadcast), or any schema/policy/migration change | Reviews the **proposed data-layer design** for correctness against the pinned §3 cloud contract: do the queries respect the agency-wide-read RLS model, use the provided indexes/RPCs, avoid N+1, and subscribe to realtime correctly. The hub *consumes* a fixed schema, so focus on query/RLS/realtime correctness, not schema ownership. |
+
+These lanes are dispatched in **proposal-review mode** with a focused brief — see Phase 3 below for the exact prompt shape. They do NOT run `cargo test` / `tsc --noEmit` / live DB queries (there's nothing to compile or connect to).
 
 A plan can trigger zero, one, or both code-design lanes. If neither triggers, you're back to the three plan agents alone.
 
@@ -117,10 +119,11 @@ Send all selected agents in a **single message with multiple `Agent` tool calls*
 |---|---|---|
 | `rust-reviewer` | sonnet | Would the proposed Rust design pass code review at implementation? |
 | `typescript-reviewer` | sonnet | Would the proposed TS design pass code review at implementation? |
+| `database-reviewer` | sonnet | Would the proposed Supabase/Postgres data-access design hold up (RLS correctness, RPC/index use, realtime patterns)? |
 
 ### Proposal-review-mode brief (for the optional lanes)
 
-When dispatching `rust-reviewer` or `typescript-reviewer` against a plan (not code), use this brief shape instead of the default:
+When dispatching `rust-reviewer`, `typescript-reviewer`, or `database-reviewer` against a plan (not code), use this brief shape instead of the default:
 
 ```
 Plan-stage proposal review for PR #<N> — <title>.
@@ -153,6 +156,8 @@ AGENTS.md, CLAUDE.md, docs/developer/
 Follow your persona's discipline (Pre-Report Gate, HIGH/CRITICAL proof,
 zero-findings-is-valid).
 ```
+
+**For the `database-reviewer` lane, add to the brief:** the hub *consumes* a fixed cloud schema (the §3 data contract — pinned by the mobile app; not the hub's to change). Review the proposed **client-side** data access — query shapes, RLS-model assumptions (agency-wide reads, owner-only writes), use of the provided RPCs/indexes, and realtime subscription patterns (Postgres Changes vs Broadcast) — not schema/index ownership. Only raise a schema/migration/policy finding if the plan itself proposes changing the schema. Do not connect to or query a live database.
 
 Each agent returns findings in the standard severity-tagged format (CRITICAL / HIGH / MEDIUM / LOW) with the Pre-Report Gate enforced.
 
@@ -259,7 +264,7 @@ Create the `docs/plan-reviews/` directory if it does not exist.
 **Reviewed**: <YYYY-MM-DD>
 **Branch**: <head> → <base>
 **Docs reviewed**: <count> files (<list>)
-**Lanes dispatched**: <plan-architect | plan-quality | plan-reality | rust-reviewer | typescript-reviewer>
+**Lanes dispatched**: <plan-architect | plan-quality | plan-reality | rust-reviewer | typescript-reviewer | database-reviewer>
 **Decision**: BLOCK | REVISE | APPROVE
 **Conflicts surfaced**: <count>
 **Plan grounding**: <N>/<M> reality-checker claims verified against the codebase
@@ -294,6 +299,7 @@ Create the `docs/plan-reviews/` directory if it does not exist.
 | plan-reality-checker | N | N | N | N |
 | rust-reviewer (proposal mode) | N | N | N | N |
 | typescript-reviewer (proposal mode) | N | N | N | N |
+| database-reviewer (proposal mode) | N | N | N | N |
 | **Total (after dedupe)** | **N** | **N** | **N** | **N** |
 
 Omit rows for lanes that were not dispatched.
@@ -311,6 +317,7 @@ Omit rows for lanes that were not dispatched.
 - plan-reality-checker: <agentId or "not dispatched">
 - rust-reviewer (proposal mode): <agentId or "not dispatched">
 - typescript-reviewer (proposal mode): <agentId or "not dispatched">
+- database-reviewer (proposal mode): <agentId or "not dispatched">
 ```
 
 Each finding entry uses this shape:

@@ -58,6 +58,7 @@ Classify every changed file into a lane. Decide which reviewer agents to dispatc
 | `*.rs` | Rust | `rust-reviewer` |
 | `*.ts`, `*.tsx`, `*.js`, `*.jsx` (production code) | TypeScript | `typescript-reviewer` |
 | `**/__tests__/*.ts`, `**/__tests__/*.tsx`, `src-tauri/tests/*.rs` | Tests | `pr-test-analyzer` |
+| `*.sql`, or a TS file with Supabase data access (`.from(` / `.rpc(` / `.channel(` / realtime / RLS) | Data layer | `database-reviewer` |
 | Auto-generated (e.g. `src/lib/bindings.ts`) | Skip (orchestrator confirms structural correctness only) |
 
 **Always dispatched** (regardless of file types):
@@ -68,6 +69,7 @@ Classify every changed file into a lane. Decide which reviewer agents to dispatc
 - `rust-reviewer` — only if at least one `*.rs` file changed (excluding `src-tauri/tests/**` which is the test lane's responsibility)
 - `typescript-reviewer` — only if at least one production `*.ts` / `*.tsx` file changed (excluding `__tests__/**`)
 - `pr-test-analyzer` — only if any test file changed OR any non-trivial production code landed without tests
+- `database-reviewer` — only if a `.sql` file changed OR a changed TS file contains Supabase data access (`.from(` / `.rpc(` / `.channel(` / realtime subscriptions / RLS-relevant queries). Reviews query / RLS / realtime correctness against the pinned §3 cloud contract; raises a schema/migration finding only if the PR actually changes the schema (the hub consumes a fixed contract)
 
 **Never dispatched by default** (opt-in via future flags):
 - `code-simplifier` — too noisy on feature-work PRs (suggests collapsing intentional slice boundaries)
@@ -296,6 +298,7 @@ Write to `docs/code-reviews/pr-<NUMBER>-review.md`. Create the directory if it d
 - pr-test-analyzer: <agentId or "not dispatched">
 - silent-failure-hunter: <agentId or "not dispatched">
 - type-design-analyzer: <agentId or "not dispatched">
+- database-reviewer: <agentId or "not dispatched">
 
 ## Reviewer pipeline notes (optional)
 <observations about the review process itself — cross-lane dedupes, lane coverage gaps, etc. Skip if uninteresting.>
