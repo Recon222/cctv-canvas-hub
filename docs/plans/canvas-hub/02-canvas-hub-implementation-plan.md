@@ -88,9 +88,9 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 
 | ID   | File                                                | Tag | Signatures                                                                                                                          |
 | ---- | --------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 1.3A | `src/features/cloud-session/store/session-store.ts` | NEW | `SessionState: 'booting' \| 'needs-setup' \| 'signed-out' \| 'schema-gate' \| 'active' \| 'locked'` · `useSessionStore` (devtools; selector-only per ast-grep) · actions `setState`, `setHealth`, `lock`, `unlock` |
+| 1.3A | `src/features/cloud-session/store/session-store.ts` | NEW | `SessionState: 'booting' \| 'needs-setup' \| 'signed-out' \| 'schema-gate' \| 'active' \| 'locked'` · `useSessionStore` (devtools; selector-only per ast-grep) · actions `setState`, `lock`, `unlock` — **no health state or actions here**: health lives solely in the global health-store (AD11, created in 2.5A); M1 compiles and ships with zero health references |
 | 1.3B | `src/features/cloud-session/hooks/useAuthBootstrap.ts` | NEW | `useAuthBootstrap(): void` — Flow A/B ordering (load config → init client → restore → gate)                                        |
-| 1.3C | `src/features/cloud-session/types/index.ts` + `index.ts` barrel | NEW | public API: screens (1.4), `useSessionStore`, `useAuthBootstrap`, health types                                            |
+| 1.3C | `src/features/cloud-session/types/index.ts` + `index.ts` barrel | NEW | public API: screens (1.4), `useSessionStore`, `useAuthBootstrap` — health types are **not** exported here; `HealthState`/`ChannelStatus` live in and export from `src/store/health-store.ts` (AD11) |
 
 **Error handling:** bootstrap failures land in the nearest safe state (`needs-setup` on config errors, `signed-out` on auth errors) with a toast — never an infinite `booting`.
 
@@ -115,7 +115,7 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | ---- | ------------------------------------------ | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2.1A | `src/features/canvass/types/index.ts`      | NEW | `CaseRow` / `LocationRow` / `MediaRow` / `LocationFormData` (doc 01 §5.1) · `CanvassCase` / `CanvassLocation` / `CanvassMedia` view-models · `ActivityEntry` |
 | 2.1B | `src/features/canvass/services/geo.ts`     | NEW | `parseWkbPoint(hex: string): { lat: number; lng: number } \| null` — handles SRID-flagged little-endian POINT; `(0,0)` and malformed ⇒ `null`             |
-| 2.1C | `src/features/canvass/services/mappers.ts` | NEW | `toCanvassCase(row): CanvassCase \| null` (null when soft-deleted) · `toCanvassLocation(row): CanvassLocation \| null` · `latestArrival(fd): string \| null` · `investigatorLabel(row): string` · `visibleRows<T extends { deleted_at: string \| null }>(rows: T[]): T[]` |
+| 2.1C | `src/features/canvass/services/mappers.ts` | NEW | `toCanvassCase(row): CanvassCase \| null` (null when soft-deleted) · `toCanvassLocation(row): CanvassLocation \| null` · `toCanvassMedia(row): CanvassMedia \| null` · `latestArrival(fd): string \| null` · `investigatorLabel(row): string` · `visibleRows<T extends { deleted_at: string \| null }>(rows: T[]): T[]` |
 
 **Error handling:** mappers never throw on malformed `form_data` — absent is absent (trap list §5.5.3).
 
@@ -125,7 +125,7 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 
 | ID   | File                                             | Tag | Signatures                                                                                                                          |
 | ---- | ------------------------------------------------ | --- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 2.2A | `src/features/canvass/services/canvassService.ts` | NEW | `fetchCases(): Promise<CanvassCase[]>` · `fetchLocations(caseId): Promise<CanvassLocation[]>` · `fetchMedia(caseId): Promise<MediaRow[]>` |
+| 2.2A | `src/features/canvass/services/canvassService.ts` | NEW | `fetchCases(): Promise<CanvassCase[]>` · `fetchLocations(caseId): Promise<CanvassLocation[]>` · `fetchMedia(caseId): Promise<CanvassMedia[]>` — **every fetch maps at the boundary** (`visibleRows` + `toCanvass*`); raw rows never enter a query cache |
 | 2.2B | `src/features/canvass/hooks/{useCases,useCaseLocations,useCaseMedia}.ts` | NEW | query keys `['cases']`, `['locations', caseId]`, `['media', caseId]`; `staleTime` tuned per Flow C/D (realtime patches make locations effectively push-updated) |
 
 **Error handling:** query errors flow to the health store (`recordFetchError()`) — fetch failures are health signals, not just toasts (G4, AD11).
@@ -137,7 +137,7 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | ID   | File                                                | Tag | Signatures                                                                                                                            |
 | ---- | --------------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 2.3A | `src/features/canvass/services/realtimeService.ts`  | NEW | doc 01 §5.2 verbatim: `subscribeToCaseActivity(caseId, onEvent, onStatus): () => void`                                                 |
-| 2.3B | `src/features/canvass/hooks/useCaseRealtime.ts`     | NEW | `useCaseRealtime(caseId): void` — applies events to query cache (`setQueryData` patch by id; soft-delete ⇒ remove), appends `ActivityEntry`, stamps attention, invalidates that location's media, feeds the health store (`recordEvent()`, AD11) |
+| 2.3B | `src/features/canvass/hooks/useCaseRealtime.ts`     | NEW | `useCaseRealtime(caseId): void` — maps incoming rows through `toCanvassLocation`/`toCanvassCase` **before** `setQueryData` (the same choke point as the fetch path — a live-patched row must render identically to a fetched one), patches by id (soft-delete ⇒ remove), appends `ActivityEntry`, stamps attention, invalidates that location's media, feeds the health store (`recordEvent()`, AD11) |
 
 **Error handling:** unknown table/op payloads are ignored (logged debug) — forward-compatible with V2 traffic.
 
@@ -216,8 +216,8 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 
 | ID   | File                                              | Tag | Signatures                                                                                                                              |
 | ---- | ------------------------------------------------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 4.1A | `src/features/canvass/services/mediaService.ts`   | NEW | `createSignedUrl(bucket, path): Promise<string>` · `isInlineRenderable(mime): boolean` · `SIGNED_URL_TTL_S = 3600`                        |
-| 4.1B | `src/features/canvass/hooks/useSignedUrl.ts`      | NEW | query key `['signed-url', bucket, path]`, `staleTime 40 min`, `gcTime 55 min` (refresh before expiry), `refetchOnWindowFocus: false`      |
+| 4.1A | `src/features/canvass/services/mediaService.ts`   | NEW | `createSignedUrl(bucket, path): Promise<string>` · `isInlineRenderable(mime): boolean` · `SIGNED_URL_TTL_S = 3600` · `SIGNED_URL_REFRESH_MS = 50 * 60_000` |
+| 4.1B | `src/features/canvass/hooks/useSignedUrl.ts`      | NEW | query key `['signed-url', bucket, path]` · `refetchInterval: SIGNED_URL_REFRESH_MS` (TTL × ~0.83) — **the interval is what re-signs a continuously-mounted wall-board thumbnail**; staleness alone never refetches an active query, and focus/reconnect must not be the only triggers · `staleTime 40 min` · `gcTime 55 min` · `refetchOnWindowFocus: false` |
 | 4.1C | `src/features/canvass/components/MediaThumb.tsx`  | NEW | image thumb / count badge / fallback tile (HEIC etc. → placeholder + open-externally via opener plugin)                                   |
 
 **Error handling:** a failed signed-URL fetch renders the fallback tile with retry — never a broken `<img>`.

@@ -339,7 +339,7 @@ interface AppPreferences {
 
 ### 5.5 Derived read rules (the trap list, all unit-tested)
 
-1. `deleted_at !== null` ⇒ row invisible — applied at the mapper, so no consumer can forget (verified live: RPCs return soft-deleted rows).
+1. `deleted_at !== null` ⇒ row invisible — applied at the mapper, and the mapper runs at **every cache boundary**: initial fetch, the realtime patch (Flow C3), and the media fetch. Raw rows never enter a query cache, so no consumer can forget (verified live: RPCs return soft-deleted rows).
 2. `location` WKB → `{lat,lng}`; parse failure or `(0,0)` ⇒ `coord: null` ⇒ card-only (no marker), counted in a "no fix" chip.
 3. Every `form_data` field optional; latest `arrivalDateTime` across `arrivalDepartures` = "arrived HH:MM"; absent blocks render as absent, never `undefined` text.
 4. Investigator display = `requester_name` per location (fallback: shortened `user_id`); roster derives from location rows — auth admin API is not reachable with the publishable key (AD8).
@@ -364,7 +364,7 @@ interface AppPreferences {
 
 1. Investigator's phone updates `cloud_locations` → trigger broadcasts on `agency:activity`.
 2. `subscribeToCaseActivity` filters by active `case_id` → typed `ActivityEvent`.
-3. `useCaseRealtime` patches the TanStack cache in place (`setQueryData` by row id; INSERT appends; DELETE/soft-delete removes), records `lastEventAt`, appends `ActivityEntry`, stamps `attentionByLocation`.
+3. `useCaseRealtime` maps the payload row through `toCanvassLocation`/`toCanvassCase` (the trap-list choke point — §5.5), then patches the TanStack cache in place (`setQueryData` by row id; INSERT appends; DELETE/soft-delete removes), records `lastEventAt`, appends `ActivityEntry`, stamps `attentionByLocation`.
 4. Map marker re-colors + pulses; card highlights; feed prepends — no refetch needed (payload carries the full row).
 
 **Flow D — media arrival (poll, G3).**

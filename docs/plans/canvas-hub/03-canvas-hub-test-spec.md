@@ -122,7 +122,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | --- | ----------------------------------------------------------------------- | -------------------------------------------------------- |
 | 41  | Should fetch cases via the service into `['cases']`                     | hook resolves mapped visible cases                       |
 | 42  | Should fetch locations keyed by case                                    | `['locations', caseId]` key; only that case's rows       |
-| 43  | Should fetch media keyed by case                                        | `['media', caseId]` key                                  |
+| 43  | Should fetch media keyed by case, mapped at the boundary                | `['media', caseId]`; rows are `CanvassMedia` with soft-deleted excluded |
 | 44  | Should exclude soft-deleted rows end-to-end                             | seeded soft-deleted location absent from hook data       |
 | 45  | Should report query failure to health                                   | service throw ⇒ `recordFetchError` called + hook error   |
 
@@ -133,7 +133,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 46  | Should subscribe to `agency:activity` as a private channel                    | channel name + `{ config: { private: true } }`                    |
 | 47  | Should decode the broadcast_changes payload shape                             | `{operation, table, record, old_record}` ⇒ typed `ActivityEvent` (shape pinned against a live capture in M2) |
 | 48  | Should dispatch only events matching the subscribed case_id                   | other-case record ⇒ handler not called (G6 partition rule)        |
-| 49  | Should patch an UPDATE into the locations cache by id                         | `setQueryData` row replaced; no refetch issued                    |
+| 49  | Should patch an UPDATE into the locations cache by id, **mapped**             | replaced row is a `CanvassLocation` (coord parsed — no raw WKB hex in cache); no refetch issued |
 | 50  | Should insert new rows and drop soft-deleted rows from cache                  | INSERT appends; `deleted_at` set ⇒ removed                        |
 | 51  | Should ignore unknown tables/ops without throwing                             | forward-compat: unhandled payload ⇒ no-op                         |
 
@@ -197,7 +197,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | #   | Test Description                                                        | Key Assertion                                                |
 | --- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
 | 77  | Should create a signed URL for a bucket/path                            | service called with bucket, path, `SIGNED_URL_TTL_S`         |
-| 78  | Should cache signed URLs and refresh before expiry                      | query `staleTime` < TTL; second render hits cache            |
+| 78  | Should proactively re-sign a continuously-mounted thumbnail before TTL  | `refetchInterval` (< TTL) configured — refresh does not depend on focus/reconnect; second render within `staleTime` hits cache |
 | 79  | Should classify renderable vs non-renderable mimes                      | jpeg/png/webp/mp4 true; heic/quicktime false                 |
 | 80  | Should render an image thumb for renderable images                      | `<img>` with signed URL                                      |
 | 81  | Should render the fallback tile for HEIC (never a broken img)           | placeholder + open-externally affordance                     |
