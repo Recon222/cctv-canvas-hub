@@ -175,7 +175,8 @@ quit anyway. Tear down by force-killing the dev tree from the top:
   debug build re-exports `src/lib/bindings.ts` on startup). Do **not** use
   `cargo test export_bindings` — it fails on Windows with `STATUS_ENTRYPOINT_NOT_FOUND`.
 - **`cargo test` against the lib is disabled** (`[lib] test = false`; the WebView2 DLL crashes the lib
-  test harness at load). Pure logic is mirrored into `src-tauri/tests/*.rs` integration binaries.
+  test harness at load). Pure logic lives in Tauri-free workspace crates under `src-tauri/crates/`,
+  whose inline `#[cfg(test)]` tests run with `npm run rust:test` (see `docs/developer/testing.md`).
 - **No `window.__TAURI__`** (`withGlobalTauri` unset) — reach the backend via a mounted harness, above.
 - **Never trigger `alert`/`confirm`/native modals** from injected code — they block the automation
   channel.
