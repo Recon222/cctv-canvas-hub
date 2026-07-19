@@ -115,5 +115,8 @@
   "toast.error.windowMinimizeFailed": "فشل تصغير النافذة: {{message}}",
   "toast.error.windowMaximizeFailed": "فشل تبديل التكبير: {{message}}",
   "toast.error.fullscreenEnterFailed": "فشل الدخول إلى ملء الشاشة: {{message}}",
-  "toast.error.fullscreenExitFailed": "فشل الخروج من ملء الشاشة: {{message}}"
+  "toast.error.fullscreenExitFailed": "فشل الخروج من ملء الشاشة: {{message}}",
+
+  "cloudSession.errors.configLoadFailed": "تعذّر قراءة إعدادات السحابة المحفوظة",
+  "cloudSession.errors.bootstrapFailed": "تعذّر استعادة جلسة السحابة"
 }
