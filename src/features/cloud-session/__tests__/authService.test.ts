@@ -127,7 +127,7 @@ describe('authService', () => {
   })
 
   // Test #19
-  it('clears vault and client state on sign-out', async () => {
+  it('clears the vault on sign-out but keeps the client singleton', async () => {
     const fake = fakeSupabase()
     mockGetSupabase.mockReturnValue(fake)
 
@@ -135,9 +135,9 @@ describe('authService', () => {
 
     expect(fake.auth.signOut).toHaveBeenCalled()
     expect(mockCommands.vaultClear).toHaveBeenCalled()
-    // Client torn down — the real teardown nulls the singleton, so a
-    // subsequent getSupabase() requires re-init.
-    expect(mockTeardownSupabase).toHaveBeenCalled()
+    // The singleton must survive sign-out so the next in-process sign-in
+    // can reach getSupabase() — teardown is reserved for re-enrollment.
+    expect(mockTeardownSupabase).not.toHaveBeenCalled()
   })
 
   it('reports whether a session is restorable', async () => {

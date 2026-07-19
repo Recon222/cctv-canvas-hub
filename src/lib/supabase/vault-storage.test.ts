@@ -67,6 +67,26 @@ describe('vaultStorage', () => {
     expect(mockCommands.vaultSet).toHaveBeenCalledTimes(1)
   })
 
+  // Sign-out reality check: auth-js 2.110.7's _removeSession removes
+  // `${storageKey}-user` on the main storage even when no userStorage is
+  // configured. That removal must be a no-op — not a loud fail, and never
+  // a clear of the bound session blob.
+  it('ignores removal of a sibling key it never stored', async () => {
+    mockCommands.vaultSet.mockResolvedValue({ status: 'ok', data: null })
+    mockCommands.vaultClear.mockResolvedValue({ status: 'ok', data: null })
+
+    await vaultStorage.setItem(AUTH_KEY, 'session-blob')
+
+    await expect(
+      vaultStorage.removeItem(`${AUTH_KEY}-user`)
+    ).resolves.toBeUndefined()
+    expect(mockCommands.vaultClear).not.toHaveBeenCalled()
+
+    // Removing the bound key still clears the vault.
+    await vaultStorage.removeItem(AUTH_KEY)
+    expect(mockCommands.vaultClear).toHaveBeenCalledTimes(1)
+  })
+
   // Test #14
   it('treats vault command failure as absent session, not a crash', async () => {
     mockCommands.vaultGet.mockResolvedValue({

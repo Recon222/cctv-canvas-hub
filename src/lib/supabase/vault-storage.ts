@@ -12,9 +12,11 @@
  * (`sb-{ref}-auth-token-code-verifier`, cleaned up on init — it can
  * arrive FIRST). Verifier keys are backed in-memory and never reach the
  * vault. Among the remaining (session-class) keys, the adapter records
- * the first it sees and fails loudly if a different one ever arrives — a
- * supabase-js upgrade that adds another persistent key must fail
- * visibly, not corrupt the session blob.
+ * the first it sees and fails loudly if a different one is ever read or
+ * written — a supabase-js upgrade that adds another persistent key must
+ * fail visibly, not corrupt the session blob. Removal of an unbound
+ * sibling key (sign-out removes `sb-{ref}-auth-token-user`) is the one
+ * exception: removing what was never stored is a no-op.
  */
 
 import { commands } from '@/lib/tauri-bindings'
@@ -100,6 +102,14 @@ export const vaultStorage: {
   async removeItem(key) {
     if (isTransientKey(key)) {
       transientItems.delete(key)
+      return
+    }
+    if (boundKey !== null && key !== boundKey) {
+      // auth-js (2.110.7 `_removeSession`) also removes sibling keys it
+      // never stored here — e.g. `sb-{ref}-auth-token-user`, even with no
+      // userStorage configured. Removing an absent key is a no-op
+      // (localStorage semantics): it must neither loud-fail nor clear the
+      // bound session blob. Writes/reads of a second key still fail loudly.
       return
     }
     assertSingleKey(key)

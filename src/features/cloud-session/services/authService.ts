@@ -4,7 +4,7 @@
  */
 
 import { commands } from '@/lib/tauri-bindings'
-import { getSupabase, teardownSupabase } from '@/lib/supabase/client'
+import { getSupabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import { loadConfig, saveConfig } from './configService'
 
@@ -49,7 +49,10 @@ export async function signOut(): Promise<void> {
   if (result.status === 'error') {
     throw new Error(result.error)
   }
-  await teardownSupabase()
+  // The client singleton stays alive: the config/project is unchanged and
+  // GoTrue already cleared its session, so the next in-process sign-in
+  // reuses it. Teardown is reserved for re-enrollment (`initSupabase`
+  // replacing the singleton).
 }
 
 /** Flow B: true when supabase-js restored a usable session from the vault. */
