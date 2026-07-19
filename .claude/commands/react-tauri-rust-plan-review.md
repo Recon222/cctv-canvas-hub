@@ -1,6 +1,6 @@
 ---
-description: Multi-agent review of a planning PR or local planning docs (architect + quality + reality-check, optional rust/ts proposal review, strict decision)
-argument-hint: [pr-number | pr-url | path/to/plan.md | blank for current branch PR]
+description: Multi-agent review of a planning PR or local planning docs (architect + quality + reality-check, optional rust/ts proposal review, strict decision). Two modes — initial (fresh agents, parallel fan-out) and fix-delta (resume previous reviewers via stored agent IDs to re-check a revised plan).
+argument-hint: [pr-number | pr-url | path/to/plan.md | blank for current branch PR] [--fix-delta]
 ---
 
 # /react-tauri-rust-plan-review
@@ -27,6 +27,9 @@ Do NOT use this for code PRs — use `/react-tauri-rust-code-review` instead. Th
 | URL (`github.com/.../pull/55`) | **PR mode** — extract number |
 | Path (e.g. `docs/working/plans/foo/`) | **Local mode** — review files in that path |
 | Blank | **Current branch PR mode** — `gh pr list --head $(git branch --show-current)` |
+| Any of the above + `--fix-delta` | **Fix-delta mode** — read `docs/plan-reviews/pr-<n>-plan-review.md` (or the local-mode artifact), extract stored agent IDs, resume each reviewer via `SendMessage`, scope each to their own original findings against the **revised** plan |
+
+**Fix-delta requires the original review artifact to exist.** If `docs/plan-reviews/pr-<n>-plan-review.md` (or the local-mode file) is missing or has no `## Agent IDs` section, abort with an instruction to run the initial review first.
 
 ---
 
@@ -87,7 +90,6 @@ Decide which optional code-design lanes to add based on what the plan proposes. 
 |---|---|---|
 | `rust-reviewer` (plan mode) | Plan proposes new Rust types, traits, Tauri commands, error enums, file paths under `src-tauri/` | Reviews the **proposed Rust design** against project conventions (tauri-specta, typed error enums, `#[serde(tag = "type")]`, Tauri-free workspace-crate tests under `src-tauri/crates/`, etc.) as if it were already written. Catches design choices that would fail Rust code review *before* the implementer follows the plan and writes them. |
 | `typescript-reviewer` (plan mode) | Plan proposes new TS types, hooks, services, components, Tauri command consumers | Same idea on the TS side: review the **proposed TS design** against project conventions (Zustand selector syntax, services-own-IPC, barrel exports, i18n, no manual memo). Catches design choices that would fail TS code review. |
-
 These lanes are dispatched in **proposal-review mode** with a focused brief — see Phase 3 below for the exact prompt shape. They do NOT run `cargo test` / `tsc --noEmit` (there's nothing to compile).
 
 A plan can trigger zero, one, or both code-design lanes. If neither triggers, you're back to the three plan agents alone.
@@ -155,6 +157,65 @@ zero-findings-is-valid).
 Each agent returns findings in the standard severity-tagged format (CRITICAL / HIGH / MEDIUM / LOW) with the Pre-Report Gate enforced.
 
 **Do not run them sequentially.** The whole point of the fan-out is parallel execution. One message, N `Agent` blocks.
+
+### Capturing agent IDs for fix-delta
+
+The `Agent` tool returns an `agentId` in its result (visible as `agentId: <hex>`). **Capture every dispatched agent's ID** and write them into the artifact under `## Agent IDs` (Phase 6) so a later `--fix-delta` run can resume the same reviewers instead of re-deriving context. If the harness doesn't expose `agentId`, omit the section — fix-delta falls back to a fresh pass.
+
+---
+
+## Phase 3-alt — DISPATCH (fix-delta mode)
+
+In fix-delta mode, **skip Phase 3's `Agent` dispatch entirely.** The plan was revised in response to the initial review; resume the original reviewers to re-check *only what changed* against their own findings.
+
+1. Read the original review at `docs/plan-reviews/pr-<n>-plan-review.md` (PR mode) or the local-mode artifact (`docs/plan-reviews/local-<date>-<slug>.md`).
+2. Extract agent IDs from its `## Agent IDs` section. Resume **only the agents that were dispatched initially** (the three plan agents always; the rust/ts proposal lanes only if they ran).
+3. Determine the revision delta:
+   - **PR mode**: `gh pr diff <n> --name-only` for the plan docs changed since the initial review; pull the revised doc content at PR head (same base64 fetch as Phase 1).
+   - **Local mode**: re-read the plan docs in place — they carry the planner's revisions.
+4. For each agent, map their original findings to how the revision addressed them (the revised section, or a rationale the planner added to the plan), and flag any finding deferred/accepted-as-is via a tracking note.
+5. **`SendMessage` each reviewer in parallel** (single message, multiple `SendMessage` blocks) with a focused fix-delta brief:
+
+```
+Fix-delta plan review for PR #<N> — revised plan.
+
+The planner revised the plan in response to your initial <VERDICT>. You
+raised <N> findings (<breakdown>). <M> have direct revisions; <K> were
+deferred/accepted with a stated rationale.
+
+## What changed
+<the revised doc sections / diff summary since your initial pass>
+
+## Your original findings → revision
+| Finding | Severity | Where addressed | Type |
+|---|---|---|---|
+<table mapping each of THIS AGENT'S findings to the revised section, or "DEFERRED/ACCEPTED">
+
+## What to verify
+For each: is the finding genuinely resolved in the revised plan, or
+papered over? Did the revision introduce a NEW architectural /
+executability / grounding problem? (reality-checker: re-run repo searches
+against any new "we'll extend X / this fits Y" claims the revision adds.)
+
+## Deferral assessment (if applicable)
+A deferral is justified only if the plan names the finding, gives a
+specific rationale, AND a concrete condition under which it's revisited.
+Vague deferral → keep the finding at MEDIUM.
+
+## Discipline (unchanged)
+Pre-Report Gate. HIGH/CRITICAL require proof (revised-doc line + concrete
+failure mode). Zero remaining findings is a valid clean re-review.
+
+## Output
+Per-finding status (resolved / still-open / deferral-justified / new).
+Summary table + verdict. Title it "## <Agent> Summary (Fix Delta)".
+
+Begin.
+```
+
+If a single revision resolves findings from multiple agents, each gets it referenced in their own brief — expected; each judges from its own lens. Resumed agents should reference their own original finding wording verbatim.
+
+**If any agent ID is missing** from the original artifact, fall back to a fresh dispatch (Phase 3) for that agent and warn the user its context is re-derived (slower, possibly different verdict).
 
 ---
 
@@ -242,6 +303,14 @@ Omit rows for lanes that were not dispatched.
 
 ## Next Steps
 <contextual suggestions based on decision>
+
+## Agent IDs
+<!-- Used by /react-tauri-rust-plan-review --fix-delta to resume reviewers via SendMessage. -->
+- plan-architect-reviewer: <agentId or "not dispatched">
+- plan-quality-checker: <agentId or "not dispatched">
+- plan-reality-checker: <agentId or "not dispatched">
+- rust-reviewer (proposal mode): <agentId or "not dispatched">
+- typescript-reviewer (proposal mode): <agentId or "not dispatched">
 ```
 
 Each finding entry uses this shape:
@@ -254,11 +323,52 @@ Issue: <concrete failure mode — what implementation will go wrong if this stay
 Fix: <specific change to make>
 ```
 
+### Fix-delta mode
+
+Write to `docs/plan-reviews/pr-<NUMBER>-plan-fixes-review.md` (a **separate** file — does NOT overwrite the initial review). Self-contained so the planner doesn't need to reread the original.
+
+```markdown
+# Plan Fix-Delta Review: PR #<NUMBER> — <TITLE>
+
+**Reviewed**: <YYYY-MM-DD>
+**Scope**: Fix delta only — re-review of the plan revisions made in response to the initial review (`pr-<N>-plan-review.md`).
+**Reviewers (resumed via SendMessage, full transcript context)**: <list>
+**Decision**: BLOCK | REVISE | APPROVE
+
+> **For the planner:** this document is self-contained. You do not need to reread `pr-<N>-plan-review.md`.
+
+## Summary
+<2-3 sentences. Lead with the decision. State how many of the original findings are now resolved (e.g. "5 of 6 addressed; 1 deferral justified").>
+
+## Original finding → revision mapping
+| Original finding | Severity | Where addressed in the revision | Verdict |
+|---|---|---|---|
+<one row per original finding: resolved / still-open / deferral-justified>
+
+## Reviewer verdicts at a glance (fix delta)
+| Agent | resolved | still-open | new | verdict |
+|---|---|---|---|---|
+
+## Resolved findings — verification detail
+<per-finding: what the revision changed and why it closes the finding>
+
+## Deferral justifications — verification detail
+<per-deferral, against the rubric: cited by ID, specific rationale, concrete revisit trigger>
+
+## New problems introduced by the revision (if any)
+<a revision can introduce a fresh architectural / grounding issue — surface it, don't paper over>
+
+## Next Steps
+<typically "ready to implement" if APPROVE, or the remaining plan edits if REVISE>
+```
+
 ---
 
 ## Phase 7 — OUTPUT
 
 Report back to the user (in the terminal turn, not just the artifact):
+
+### Initial mode
 
 ```
 PR #<NUMBER>: <TITLE>
@@ -277,6 +387,21 @@ Top 3 things to address:
   3. <next>
 ```
 
+### Fix-delta mode
+
+```
+PR #<NUMBER>: <TITLE> — Plan Fix Delta
+Decision: <BLOCK|REVISE|APPROVE>
+
+Resolved: <count> / <original-count>
+Deferral-justified: <count>
+New problems: <count>
+
+Artifact: docs/plan-reviews/pr-<NUMBER>-plan-fixes-review.md
+
+<one-line state of the plan — "ready to implement" or "still needs <X>">
+```
+
 Keep the terminal output tight — the full detail is in the artifact.
 
 ---
@@ -289,6 +414,9 @@ Keep the terminal output tight — the full detail is in the artifact.
 - **Agents return errors**: Continue with the agents that succeeded; surface the failure in the report's summary.
 - **Empty plan PR (just a doc rename or move)**: Approve with a note — nothing substantive to review.
 - **Plan proposes only Rust OR only TS code**: Dispatch only the matching code-design lane. The other plan agents still run.
+- **Fix-delta with no `## Agent IDs` in the original review**: Fall back to a fresh dispatch (Phase 3) and warn the user context is re-derived (slower, possibly different verdict).
+- **Fix-delta but the plan wasn't actually revised** (no doc delta since the initial review): Note that nothing changed and carry the prior verdict — don't manufacture a re-review.
+- **Fix-delta finds a NEW problem introduced by the revision**: Verdict goes back to REVISE/BLOCK; the original review was right but the revision regressed. Don't paper over it.
 
 ---
 
