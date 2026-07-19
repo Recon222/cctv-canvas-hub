@@ -274,6 +274,8 @@ These are specific to Claude Code but documented here for context.
 - `/check` - Check work against architecture, run `npm run check:all`, suggest commit message
 - `/cleanup` - Run static analysis (knip, jscpd, check:all), get structured recommendations
 - `/init` - One-time template initialization
+- `/react-tauri-rust-code-review [pr# | blank]` - Multi-agent review of a **code** PR (rust + ts + tests + silent-failure + type-design), strict BLOCK/REVISE/APPROVE. `--fix-delta` re-reviews fix commits via resumed agents.
+- `/react-tauri-rust-plan-review [pr# | path | blank]` - Multi-agent review of **planning docs** before implementation (architect + quality + reality-check; optional rust/ts proposal-review lanes).
 
 ### Agents
 
@@ -283,3 +285,20 @@ Task-focused agents that leverage separate context for focused work:
 - `docs-reviewer` - Review developer docs for accuracy and codebase consistency
 - `userguide-reviewer` - Review user guide against actual system features
 - `cleanup-analyzer` - Analyze static analysis output (used by `/cleanup`)
+
+**Code-review fan-out** (dispatched by `/react-tauri-rust-code-review`):
+
+- `rust-reviewer`, `typescript-reviewer` - language-specialist code reviewers
+- `pr-test-analyzer` - test-quality reviewer (behavioral coverage, false-coverage traps)
+- `silent-failure-hunter` - swallowed / downgraded / hidden errors
+- `type-design-analyzer` - type design across the Rust + TS surface
+
+**Plan-review fan-out** (dispatched by `/react-tauri-rust-plan-review`):
+
+- `plan-architect-reviewer`, `plan-quality-checker`, `plan-reality-checker`
+
+**Standalone reviewers** (manual / opt-in):
+
+- `security-reviewer` - OWASP / secrets / injection (opt-in; many features accept deliberate trust boundaries)
+- `comment-analyzer` - comment accuracy & rot (periodic sweep)
+- `database-reviewer` - PostgreSQL / Supabase schema, RLS, and query review
