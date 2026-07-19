@@ -6,11 +6,15 @@
  * services/ dir because it IS the storage seam of the client singleton
  * (AD11). SECURITY (T3): never log values — only key NAMES.
  *
- * Single-key invariant: the vault holds ONE blob. supabase-js passes
- * exactly one storage key today (password grant, detectSessionInUrl:
- * false). The adapter records the first key it sees and fails loudly if a
- * different key ever arrives — a supabase-js upgrade that adds a second
- * key must fail visibly, not corrupt the session blob.
+ * Single-blob invariant: the vault holds ONE blob — the session. GoTrue
+ * touches two storage keys in practice (live-verified): the session key
+ * (`sb-{ref}-auth-token`) and the transient PKCE code-verifier key
+ * (`sb-{ref}-auth-token-code-verifier`, cleaned up on init — it can
+ * arrive FIRST). Verifier keys are backed in-memory and never reach the
+ * vault. Among the remaining (session-class) keys, the adapter records
+ * the first it sees and fails loudly if a different one ever arrives — a
+ * supabase-js upgrade that adds another persistent key must fail
+ * visibly, not corrupt the session blob.
  */
 
 import { commands } from '@/lib/tauri-bindings'
@@ -19,12 +23,24 @@ import { logger } from '@/lib/logger'
 let boundKey: string | null = null
 
 /**
- * Clear the recorded storage key. Called by `teardownSupabase()` so a
- * re-initialized client (e.g. re-enrollment into a different project,
- * whose storage key embeds the project ref) can bind fresh.
+ * Transient per-launch storage for GoTrue's PKCE code verifier. Only
+ * meaningful within a single in-process auth flow — never persisted.
+ */
+const transientItems = new Map<string, string>()
+
+function isTransientKey(key: string): boolean {
+  return key.endsWith('-code-verifier')
+}
+
+/**
+ * Clear the recorded storage key + transient items. Called by
+ * `teardownSupabase()` so a re-initialized client (e.g. re-enrollment
+ * into a different project, whose storage key embeds the project ref)
+ * can bind fresh.
  */
 export function resetVaultStorageBinding(): void {
   boundKey = null
+  transientItems.clear()
 }
 
 function assertSingleKey(key: string): void {
@@ -50,6 +66,9 @@ export const vaultStorage: {
   removeItem(key: string): Promise<void>
 } = {
   async getItem(key) {
+    if (isTransientKey(key)) {
+      return transientItems.get(key) ?? null
+    }
     assertSingleKey(key)
     const result = await commands.vaultGet()
     if (result.status === 'error') {
@@ -67,6 +86,10 @@ export const vaultStorage: {
   },
 
   async setItem(key, value) {
+    if (isTransientKey(key)) {
+      transientItems.set(key, value)
+      return
+    }
     assertSingleKey(key)
     const result = await commands.vaultSet(value)
     if (result.status === 'error') {
@@ -75,6 +98,10 @@ export const vaultStorage: {
   },
 
   async removeItem(key) {
+    if (isTransientKey(key)) {
+      transientItems.delete(key)
+      return
+    }
     assertSingleKey(key)
     const result = await commands.vaultClear()
     if (result.status === 'error') {

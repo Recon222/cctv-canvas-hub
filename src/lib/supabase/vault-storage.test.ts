@@ -33,6 +33,22 @@ describe('vaultStorage', () => {
     mockCommands.vaultSet.mockResolvedValue({ status: 'ok', data: null })
     const errorSpy = vi.spyOn(logger, 'error')
 
+    // Live-verified GoTrue behavior: the transient PKCE code-verifier key
+    // is touched FIRST (cleanup on init) — it must neither bind the vault
+    // nor ever reach it. In-memory backing only.
+    const VERIFIER_KEY = `${AUTH_KEY}-code-verifier`
+    await expect(vaultStorage.getItem(VERIFIER_KEY)).resolves.toBeNull()
+    await vaultStorage.setItem(VERIFIER_KEY, 'transient-verifier')
+    await expect(vaultStorage.getItem(VERIFIER_KEY)).resolves.toBe(
+      'transient-verifier'
+    )
+    await vaultStorage.removeItem(VERIFIER_KEY)
+    await expect(vaultStorage.getItem(VERIFIER_KEY)).resolves.toBeNull()
+    expect(mockCommands.vaultSet).not.toHaveBeenCalled()
+    expect(mockCommands.vaultGet).not.toHaveBeenCalled()
+    expect(mockCommands.vaultClear).not.toHaveBeenCalled()
+
+    // The session key still binds and persists normally afterwards.
     await vaultStorage.setItem(AUTH_KEY, 'session-blob')
     expect(mockCommands.vaultSet).toHaveBeenCalledWith('session-blob')
 
