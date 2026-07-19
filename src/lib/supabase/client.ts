@@ -59,6 +59,9 @@ export async function teardownSupabase(): Promise<void> {
   const closing = client
   client = null
   resetVaultStorageBinding()
+  // Stop the refresh ticker: an abandoned client's interval could later
+  // re-bind the vault adapter's storage key and trip the single-key fail.
+  await closing.auth.stopAutoRefresh()
   await closing.removeAllChannels()
   await closing.realtime.disconnect()
 }

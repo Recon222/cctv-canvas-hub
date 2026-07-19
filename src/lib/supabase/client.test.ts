@@ -5,7 +5,7 @@
  * everywhere and no network is touched.
  */
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   initSupabase,
   getSupabase,
@@ -44,5 +44,14 @@ describe('supabase client lifecycle', () => {
     await client.auth.signOut()
 
     expect(getSupabase()).toBe(client)
+  })
+
+  it('teardown stops the abandoned client auto-refresh ticker', async () => {
+    const client = initSupabase(CONFIG)
+    const stopSpy = vi.spyOn(client.auth, 'stopAutoRefresh')
+
+    await teardownSupabase()
+
+    expect(stopSpy).toHaveBeenCalled()
   })
 })
