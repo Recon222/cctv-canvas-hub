@@ -146,6 +146,7 @@
   "cloudSession.gate.foundVersionUnknown": "إصدار مخطط السحابة: غير معروف",
   "cloudSession.gate.retry": "إعادة المحاولة",
   "cloudSession.gate.signOut": "تسجيل الخروج",
+  "cloudSession.gate.signOutFailed": "فشل تسجيل الخروج",
 
   "cloudSession.connected.status": "متصل · المخطط الإصدار {{version}}",
   "cloudSession.connected.description": "لوحة المسح الميداني المباشرة تصل في المرحلة القادمة.",

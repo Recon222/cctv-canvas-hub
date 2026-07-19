@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { logger } from '@/lib/logger'
 import { useSessionStore } from '../store/session-store'
@@ -17,7 +18,12 @@ async function checkVersion(setFound: (v: number | null) => void) {
   try {
     const version = await fetchSchemaVersion()
     setFound(version)
-    if (version === APP_REQUIRED_SCHEMA_VERSION) {
+    if (
+      version === APP_REQUIRED_SCHEMA_VERSION &&
+      // A late-resolving check must not override a state the user already
+      // left (e.g. a sign-out that completed while this was in flight).
+      useSessionStore.getState().state === 'schema-gate'
+    ) {
       useSessionStore.getState().setState('active')
     }
   } catch (cause) {
@@ -52,6 +58,7 @@ export function SchemaGateScreen() {
       await signOut()
     } catch (cause) {
       logger.warn('Sign-out from schema gate failed; leaving anyway', { cause })
+      toast.error(t('cloudSession.gate.signOutFailed'))
     }
     useSessionStore.getState().setState('signed-out')
     setBusy(false)

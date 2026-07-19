@@ -146,6 +146,7 @@
   "cloudSession.gate.foundVersionUnknown": "Cloud schema version: unknown",
   "cloudSession.gate.retry": "Retry",
   "cloudSession.gate.signOut": "Sign out",
+  "cloudSession.gate.signOutFailed": "Sign-out failed",
 
   "cloudSession.connected.status": "Connected · schema v{{version}}",
   "cloudSession.connected.description": "The live canvass board arrives in the next milestone.",

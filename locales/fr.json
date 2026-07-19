@@ -146,6 +146,7 @@
   "cloudSession.gate.foundVersionUnknown": "Version de schéma du cloud : inconnue",
   "cloudSession.gate.retry": "Réessayer",
   "cloudSession.gate.signOut": "Se déconnecter",
+  "cloudSession.gate.signOutFailed": "Échec de la déconnexion",
 
   "cloudSession.connected.status": "Connecté · schéma v{{version}}",
   "cloudSession.connected.description": "Le tableau de porte-à-porte en direct arrive au prochain jalon.",

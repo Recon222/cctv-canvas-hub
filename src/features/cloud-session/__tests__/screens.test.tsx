@@ -1,12 +1,14 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { toast } from 'sonner'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { initSupabase } from '@/lib/supabase/client'
 import { MainWindowContent } from '@/components/layout/MainWindowContent'
 import { useSessionStore } from '../store/session-store'
 import { SetupScreen } from '../components/SetupScreen'
 import { SignInScreen } from '../components/SignInScreen'
+import { SchemaGateScreen } from '../components/SchemaGateScreen'
 import {
   saveConfig,
   probeProject,
@@ -14,6 +16,7 @@ import {
 } from '../services/configService'
 import {
   signIn,
+  signOut,
   checkSchemaGate,
   fetchSchemaVersion,
 } from '../services/authService'
@@ -146,5 +149,50 @@ describe('session screens', () => {
     expect(screen.getByText('Required schema version: 1')).toBeInTheDocument()
     // The board (M1 placeholder) must not mount behind the gate.
     expect(screen.queryByText('Connected · schema v1')).not.toBeInTheDocument()
+  })
+
+  // The gate's mount check is an unguarded global write in a race with the
+  // sign-out button: a late-resolving check must not flip a completed
+  // sign-out back to active.
+  it('does not override a completed sign-out with a late version check', async () => {
+    useSessionStore.setState({ state: 'schema-gate' })
+    let resolveVersion!: (version: number | null) => void
+    vi.mocked(fetchSchemaVersion).mockReturnValue(
+      new Promise(resolve => {
+        resolveVersion = resolve
+      })
+    )
+
+    renderWithFeatureProviders(<SchemaGateScreen />)
+
+    // Sign-out completes while the mount check is still in flight...
+    useSessionStore.setState({ state: 'signed-out' })
+    // ...then the check resolves with a matching version.
+    await act(async () => {
+      resolveVersion(1)
+      // Flush the microtask queue so checkVersion runs past its await.
+      await Promise.resolve()
+    })
+
+    expect(useSessionStore.getState().state).toBe('signed-out')
+  })
+
+  // A failed sign-out from the gate must surface a user-visible toast,
+  // then still leave the gate (no dead ends).
+  it('toasts on gate sign-out failure and still reaches signed-out', async () => {
+    useSessionStore.setState({ state: 'schema-gate' })
+    vi.mocked(fetchSchemaVersion).mockResolvedValue(2)
+    vi.mocked(signOut).mockRejectedValue(new Error('vault file locked'))
+    const toastError = vi.spyOn(toast, 'error')
+    const user = userEvent.setup()
+
+    renderWithFeatureProviders(<SchemaGateScreen />)
+
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().state).toBe('signed-out')
+    })
+    expect(toastError).toHaveBeenCalledWith('Sign-out failed')
   })
 })
