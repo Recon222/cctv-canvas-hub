@@ -5,10 +5,14 @@ import App from './App'
 // Tauri bindings are mocked globally in src/test/setup.ts
 
 describe('App', () => {
-  it('renders main window layout', () => {
+  it('renders the session shell and boots to setup with no cloud config', async () => {
     render(<App />)
+    // loadCloudConfig is mocked to null (setup.ts), so the bootstrap lands
+    // in needs-setup and the enrollment screen renders (Flow A step 1).
     expect(
-      screen.getByRole('heading', { name: /hello world/i })
+      await screen.findByRole('heading', {
+        name: /connect to your agency cloud/i,
+      })
     ).toBeInTheDocument()
   })
 

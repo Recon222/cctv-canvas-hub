@@ -1,39 +1,18 @@
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from '@/components/ui/resizable'
 import { TitleBar } from '@/components/titlebar/TitleBar'
-import { LeftSideBar } from './LeftSideBar'
-import { RightSideBar } from './RightSideBar'
 import { MainWindowContent } from './MainWindowContent'
 import { CommandPalette } from '@/features/command-palette'
 import { PreferencesDialog } from '@/features/preferences'
 import { Toaster } from 'sonner'
 import { useTheme } from '@/hooks/use-theme'
-import { useUIStore } from '@/store/ui-store'
 import { useMainWindowEventListeners } from '@/hooks/useMainWindowEventListeners'
-import { cn } from '@/lib/utils'
 
 /**
- * Layout sizing configuration for resizable panels.
- * All values are percentages of total width.
- * Sidebar defaults + main default must equal 100.
+ * Map-maximal shell (spec §4): TitleBar + full-bleed content, no
+ * edge-docked side panels (AD9 — the sidebar files stay dormant for a
+ * later /cleanup). Global overlays (palette, preferences, toasts) remain.
  */
-const LAYOUT = {
-  leftSidebar: { default: 20, min: 15, max: 40 },
-  rightSidebar: { default: 20, min: 15, max: 40 },
-  main: { min: 30 },
-} as const
-
-// Main content default is calculated to ensure totals sum to 100%
-const MAIN_CONTENT_DEFAULT =
-  100 - LAYOUT.leftSidebar.default - LAYOUT.rightSidebar.default
-
 export function MainWindow() {
   const { theme } = useTheme()
-  const leftSidebarVisible = useUIStore(state => state.leftSidebarVisible)
-  const rightSidebarVisible = useUIStore(state => state.rightSidebarVisible)
 
   // Set up global event listeners (keyboard shortcuts, etc.)
   useMainWindowEventListeners()
@@ -43,36 +22,7 @@ export function MainWindow() {
       <TitleBar />
 
       <div className="flex flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel
-            defaultSize={LAYOUT.leftSidebar.default}
-            minSize={LAYOUT.leftSidebar.min}
-            maxSize={LAYOUT.leftSidebar.max}
-            className={cn(!leftSidebarVisible && 'hidden')}
-          >
-            <LeftSideBar />
-          </ResizablePanel>
-
-          <ResizableHandle className={cn(!leftSidebarVisible && 'hidden')} />
-
-          <ResizablePanel
-            defaultSize={MAIN_CONTENT_DEFAULT}
-            minSize={LAYOUT.main.min}
-          >
-            <MainWindowContent />
-          </ResizablePanel>
-
-          <ResizableHandle className={cn(!rightSidebarVisible && 'hidden')} />
-
-          <ResizablePanel
-            defaultSize={LAYOUT.rightSidebar.default}
-            minSize={LAYOUT.rightSidebar.min}
-            maxSize={LAYOUT.rightSidebar.max}
-            className={cn(!rightSidebarVisible && 'hidden')}
-          >
-            <RightSideBar />
-          </ResizablePanel>
-        </ResizablePanelGroup>
+        <MainWindowContent className="flex-1" />
       </div>
 
       {/* Global UI Components (hidden until triggered) */}

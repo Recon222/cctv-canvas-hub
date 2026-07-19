@@ -118,5 +118,37 @@
   "toast.error.fullscreenExitFailed": "Échec de la sortie du plein écran : {{message}}",
 
   "cloudSession.errors.configLoadFailed": "Impossible de lire la configuration cloud enregistrée",
-  "cloudSession.errors.bootstrapFailed": "Impossible de restaurer la session cloud"
+  "cloudSession.errors.bootstrapFailed": "Impossible de restaurer la session cloud",
+
+  "cloudSession.setup.title": "Connexion au cloud de votre agence",
+  "cloudSession.setup.description": "Collez la charge utile d'inscription fournie par l'administrateur de votre agence.",
+  "cloudSession.setup.payloadLabel": "Charge utile d'inscription",
+  "cloudSession.setup.payloadPlaceholder": "{ \"v\": 1, \"url\": \"https://…\", \"key\": \"sb_publishable_…\" }",
+  "cloudSession.setup.submit": "Connecter",
+  "cloudSession.setup.probing": "Vérification…",
+  "cloudSession.setup.invalidPayload": "Cette charge utile n'est pas valide — vérifiez qu'elle correspond exactement au JSON d'inscription",
+  "cloudSession.setup.probeRejected": "Le projet a refusé cette clé — vérifiez la charge utile d'inscription",
+  "cloudSession.setup.probeUnreachable": "Impossible de joindre le projet — vérifiez la connexion réseau",
+  "cloudSession.setup.saveFailed": "Impossible d'enregistrer la configuration cloud",
+
+  "cloudSession.signIn.title": "Connexion",
+  "cloudSession.signIn.description": "Compte coordinateur de ce cloud d'agence",
+  "cloudSession.signIn.emailLabel": "Courriel",
+  "cloudSession.signIn.passwordLabel": "Mot de passe",
+  "cloudSession.signIn.submit": "Se connecter",
+  "cloudSession.signIn.signingIn": "Connexion en cours…",
+  "cloudSession.signIn.failed": "Échec de la connexion. {{message}}",
+
+  "cloudSession.gate.title": "Incompatibilité de schéma cloud",
+  "cloudSession.gate.description": "Cet affichage ne peut pas présenter en toute sécurité les données de cette version du cloud.",
+  "cloudSession.gate.requiredVersion": "Version de schéma requise : {{version}}",
+  "cloudSession.gate.foundVersion": "Version de schéma du cloud : {{version}}",
+  "cloudSession.gate.foundVersionUnknown": "Version de schéma du cloud : inconnue",
+  "cloudSession.gate.retry": "Réessayer",
+  "cloudSession.gate.signOut": "Se déconnecter",
+
+  "cloudSession.connected.status": "Connecté · schéma v{{version}}",
+  "cloudSession.connected.description": "Le tableau de porte-à-porte en direct arrive au prochain jalon.",
+  "cloudSession.connected.signOut": "Se déconnecter",
+  "cloudSession.connected.signOutFailed": "Échec de la déconnexion"
 }
