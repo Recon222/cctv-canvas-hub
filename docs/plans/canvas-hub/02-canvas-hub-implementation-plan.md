@@ -79,8 +79,9 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | 1.2F | `src/features/cloud-session/services/authService.ts`   | NEW    | `signIn(email, pw): Promise<void>` · `signOut(): Promise<void>` (vault + client teardown) · `restoreSession(): Promise<boolean>` · `checkSchemaGate(): Promise<'ok' \| 'mismatch'>` (`APP_REQUIRED_SCHEMA_VERSION = 1`) · `reauthenticate(pw): Promise<boolean>` |
 | 1.2G | `src/test/setup.ts`                                    | MODIFY | mock the six new commands                                                                                                          |
 | 1.2H | `package.json`                                         | MODIFY | add `@supabase/supabase-js` (map deps arrive in 3.2 — M1 must be gate-green standalone)                                            |
+| 1.2I | `src-tauri/Cargo.toml`                                 | MODIFY | add `keyring = "3"` (consumed by 1.2A; the 1.1C touch added only the workspace member)                                             |
 
-**Error handling:** config/vault command failures surface as toasts + `needs-setup`/`signed-out` fallbacks — a corrupt vault must degrade to re-sign-in, never crash the shell. `probeProject` distinguishes unreachable vs rejected (two i18n messages, mobile parity).
+**Error handling:** config/vault command failures surface as toasts + `needs-setup`/`signed-out` fallbacks — a corrupt vault must degrade to re-sign-in, never crash the shell. `probeProject` distinguishes unreachable vs rejected (two i18n messages, mobile parity). `session.vault` writes are atomic (temp file + rename — the same pattern the preferences service ships) so a crash mid-write degrades to `Corrupt`→re-sign-in, never a half-file that parses.
 
 ### Phase 1.3 — Session store + bootstrap hooks
 
@@ -216,7 +217,7 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 
 | ID   | File                                              | Tag | Signatures                                                                                                                              |
 | ---- | ------------------------------------------------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 4.1A | `src/features/canvass/services/mediaService.ts`   | NEW | `createSignedUrl(bucket, path): Promise<string>` · `isInlineRenderable(mime): boolean` · `SIGNED_URL_TTL_S = 3600` · `SIGNED_URL_REFRESH_MS = 50 * 60_000` |
+| 4.1A | `src/features/canvass/services/mediaService.ts`   | NEW | `createSignedUrl(bucket, path): Promise<string>` · `isInlineRenderable(mime): boolean` · `SIGNED_URL_TTL_S = 3600` · `SIGNED_URL_REFRESH_MS = 50 * 60_000`. Known ceiling: one signing call per thumbnail per refresh cycle — fine at ~10 locations/case; `createSignedUrls` (per-case batch) is the pinned upgrade path for dense cases |
 | 4.1B | `src/features/canvass/hooks/useSignedUrl.ts`      | NEW | query key `['signed-url', bucket, path]` · `refetchInterval: SIGNED_URL_REFRESH_MS` (TTL × ~0.83) — **the interval is what re-signs a continuously-mounted wall-board thumbnail**; staleness alone never refetches an active query, and focus/reconnect must not be the only triggers · `staleTime 40 min` · `gcTime 55 min` · `refetchOnWindowFocus: false` |
 | 4.1C | `src/features/canvass/components/MediaThumb.tsx`  | NEW | image thumb / count badge / fallback tile (HEIC etc. → placeholder + open-externally via opener plugin)                                   |
 
@@ -272,12 +273,12 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | ID   | File                                                 | Tag    | Signatures                                                                                              |
 | ---- | ---------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------- |
 | 5.3A | `src/features/canvass/components/DashboardView.tsx`  | NEW    | status counts, roster (investigator → locations/status via AD8), embedded `ActivityFeed`                 |
-| 5.3B | `src/lib/commands/feature-commands.ts`               | MODIFY | `canvass-toggle-view`, `session-lock-now`, `session-sign-out` (lazy imports per template pattern)         |
+| 5.3B | `src/lib/commands/feature-commands.ts`               | MODIFY | `canvass-toggle-view`, `session-sign-out` (lazy imports per template pattern). `session-lock-now` deliberately waits for 6.1 — a lock command with no unlock overlay would strand an M5 build |
 | 5.3C | `locales/{en,fr,ar}.json`                            | MODIFY | dashboard + command-label keys                                                                           |
 
 **Error handling:** n/a (derives from existing queries; empty states per 2.4).
 
-### Phase 6.1 — Idle lock
+### Phase 6.1 — Idle lock ⚠
 
 **Goal:** the kiosk posture — visible-but-locked board with masked credentials and password resume (AD6).
 
@@ -285,6 +286,7 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | ---- | ---------------------------------------------------------- | --- | --------------------------------------------------------------------------------------------------------------- |
 | 6.1A | `src/features/cloud-session/hooks/useIdleLock.ts`          | NEW | activity listeners + timer from `idle_lock_minutes` (default 15) ⇒ `lock()`                                     |
 | 6.1B | `src/features/cloud-session/components/LockOverlay.tsx`    | NEW | input-swallowing overlay + password re-auth (`reauthenticate`); board visible beneath; `locked` masks DVR creds |
+| 6.1C | `src/lib/commands/feature-commands.ts`                     | MODIFY | register `session-lock-now` — ships together with its unlock overlay (moved out of 5.3 so no build ever has a lock without an escape) |
 
 **Error handling:** failed re-auth stays locked with inline error; sign-out remains reachable from the overlay.
 
@@ -315,7 +317,7 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 
 | File                                                | Phases         |
 | --------------------------------------------------- | -------------- |
-| `src-tauri/Cargo.toml`                              | 1.1            |
+| `src-tauri/Cargo.toml`                              | 1.1, 1.2       |
 | `src-tauri/src/features/mod.rs`, `src-tauri/src/bindings.rs` | 1.2   |
 | `src/test/setup.ts`                                 | 1.2            |
 | `src/components/layout/MainWindow.tsx`              | 1.4            |
@@ -325,10 +327,10 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | `src/features/preferences/components/PreferencesDialog.tsx` | 3.1    |
 | `src-tauri/tauri.conf.json`                         | 3.2            |
 | `package.json`                                      | 1.2, 3.2       |
-| `src/lib/commands/feature-commands.ts`              | 5.3            |
+| `src/lib/commands/feature-commands.ts`              | 5.3, 6.1       |
 | `docs/developer/README.md`                          | 6.3            |
 
-**Honesty metric:** 12 existing files hand-modified (plus regenerated `src/lib/bindings.ts` and lockfiles) across ~45 new files — everything substantive is additive behind barrels.
+**Honesty metric:** 12 integration-point rows (≈17 physical files once multi-file rows — locales ×3, mod.rs+bindings.rs, types+service — are expanded; plus regenerated `src/lib/bindings.ts` and lockfiles) across 50 new source files — everything substantive is additive behind barrels.
 
 ## Appendix C — Estimated Test Count per phase
 

@@ -32,7 +32,8 @@
 | `src/features/canvass/__tests__/queries.test.ts`                       | 2.2   | NEW       |
 | `src/features/canvass/__tests__/realtime.test.ts`                      | 2.3   | NEW       |
 | `src/features/canvass/__tests__/canvass-store.test.ts`                 | 2.4   | NEW       |
-| `src/features/canvass/__tests__/LocationCard.test.tsx`                 | 2.4   | NEW       |
+| `src/features/canvass/__tests__/LocationCard.test.tsx`                 | 2.4, 5.1 (pulse additions — #91–92) | NEW |
+| `src/features/canvass/__tests__/useFlyTo.test.ts`                      | 3.3 (#73–74) | NEW |
 | `src/store/health-store.test.ts` (next-to-store, `ui-store.test.ts` precedent) | 2.5, 6.2 | NEW (6.2 additions) |
 | `src/features/preferences/__tests__/preferences-additions.test.tsx`    | 3.1   | NEW (the preferences feature currently has no tests) |
 | `src/features/canvass/__tests__/MapCanvas.test.tsx`                    | 3.2   | NEW       |
@@ -247,7 +248,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 96  | Should show status counts for the selected case                      | started/working/complete counts match seed        |
 | 97  | Should derive the roster from location rows (AD8)                    | investigators grouped with their locations/status |
 | 98  | Should embed the activity feed                                       | feed rendered within dashboard                    |
-| 99  | Should register the three new palette commands                       | ids present in registry after init                |
+| 99  | Should register the two M5 palette commands                          | `canvass-toggle-view` + `session-sign-out` in the registry (`session-lock-now` registers in 6.1, with its unlock overlay) |
 
 ## Phase 6.1 — idle lock
 

@@ -254,7 +254,7 @@ interface LocationFormData {
 }
 ```
 
-**Deliberate subset (no silent gaps):** the cloud shape (spec §3) also carries `scopes[].correctedStart/EndDateTime`, `scopes[].dstAdjusted*`, `extractedScopes`, `cameras[].coordinateSource/coordinateCapturedAt`, `timeOffset.ocrConfidence/captureMethod/*ImageUri`, `notesSections`, and `notesFreeText`. V1 renders none of them, so they are not modeled — they pass through `form_data` untouched and cost nothing. Add keys to the interface only when a surface consumes them.
+**Deliberate subset (no silent gaps):** the cloud shape (spec §3) also carries `scopes[].correctedStart/EndDateTime`, `scopes[].dstAdjusted*`, `extractedScopes`, `cameras[].coordinateSource/coordinateCapturedAt`, `timeOffset.ocrConfidence/captureMethod/*ImageUri`, `notesSections`, and `notesFreeText`. V1 renders none of them, so they are not modeled — they pass through `form_data` untouched and cost nothing **to parse** (they do cross the wire under `select('*')` — accepted; explicit column lists are the payload optimization if it ever matters). Add keys to the interface only when a surface consumes them.
 
 ### 5.2 Realtime channel contract (AD1)
 
@@ -406,7 +406,7 @@ interface AppPreferences {
 | `src-tauri/tauri.conf.json`                     | CSP: `connect-src` supabase (https+wss) + mapbox; `worker-src`/`child-src blob:`; `img-src`/`media-src` supabase + `blob:` | Mapbox GL workers + storage/media fetch        |
 | `src/lib/bindings.ts`                           | regenerated (`npm run rust:bindings`) — never hand-edited       | generated artifact                             |
 
-Honesty: 12 hand-modified existing files (+1 regenerated). Everything else lands as new files behind feature barrels. Counts reconcile with Implementation Plan Appendix B.
+Honesty: 12 integration-point rows, ≈17 physical files once multi-file rows are expanded (+1 regenerated). Everything else lands as new files behind feature barrels. Counts reconcile with Implementation Plan Appendix B.
 
 ## 8. Open Design Decisions
 
