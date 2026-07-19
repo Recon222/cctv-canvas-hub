@@ -6,7 +6,7 @@
 
 **TDD red line:** every test below is written **before** its phase's implementation and must **fail** until that phase lands. Test numbering (`#`) runs continuously across the whole document (post-review additions are appended — numbers never shift). Mock strategy, fixtures, and wiring follow this repo's existing conventions (`docs/developer/testing.md`, `src/test/*` helpers) — this spec pins **what each test proves**, not how it's wired.
 
-**One new seam the repo's conventions don't yet cover:** tests exercising services that wrap supabase-js directly (#11, #15–19, #41–51, #77–78) mock the client at its single choke point — `vi.mock('@/lib/supabase/client')` with a minimal fake returned by `getSupabase()` covering only the touched surfaces (`auth.signInWithPassword/getSession/refreshSession/signOut`, the `from().select()…` chain, `channel().on().subscribe()`, `storage.from().createSignedUrl`). The fake's shape gets documented in `docs/developer/supabase-integration.md` (Phase 6.3A).
+**One new seam the repo's conventions don't yet cover:** tests exercising services that wrap supabase-js directly (#11, #15–19, #41–51, #77–78) mock the client at its single choke point — `vi.mock('@/lib/supabase/client')` with a minimal fake returned by `getSupabase()` covering only the touched surfaces (`auth.signInWithPassword/getSession/refreshSession/signOut`, the `from().select()…` chain, `channel().on().subscribe()`, `storage.from().createSignedUrl`). Test #11 is covered by the same seam via `createProbeClient` — the enrollment probe runs before `initSupabase`, so it uses the transient probe client exported from `client.ts`, not `getSupabase()`. The fake's shape gets documented in `docs/developer/supabase-integration.md` (Phase 6.3A).
 
 **Run commands:**
 
@@ -47,7 +47,7 @@
 | `src/features/canvass/__tests__/ActivityFeed.test.tsx`                 | 5.1   | NEW       |
 | `src/features/cloud-session/__tests__/ConnectionIndicator.test.tsx`    | 5.2   | NEW       |
 | `src/features/canvass/__tests__/DashboardView.test.tsx`                | 5.3   | NEW       |
-| `src/lib/commands/commands.test.ts`                                    | 5.3   | additions |
+| `src/lib/commands/commands.test.ts`                                    | 5.3, 6.1 (#108) | additions |
 | `src/features/cloud-session/__tests__/idleLock.test.tsx`               | 6.1   | NEW       |
 
 No existing test file is deleted or rewritten. One existing file receives **additions** only (`src/lib/commands/commands.test.ts`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
@@ -212,7 +212,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | #   | Test Description                                                       | Key Assertion                                               |
 | --- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
 | 82  | Should detect newly arrived media rows by id                           | `diffMedia(prev, next)` returns only the new visible rows   |
-| 83  | Should ignore soft-deleted media in the diff                           | new row with `deleted_at` ⇒ not reported                    |
+| 83  | Should diff by id, not position — no re-report on reorder/refetch      | inputs are `CanvassMedia[]` (boundary already filtered soft-deleted — see #43); reordered/unchanged rows ⇒ empty diff |
 | 84  | Should emit a media-new activity entry with location attribution       | entry kind `media-new`, `locationId` set, attention stamped |
 | 85  | Should keep polling while locked and stop only when offline/signed-out | `locked` ⇒ interval **enabled**; `offline`/`signed-out` ⇒ disabled (doc 01 §5.4) |
 
@@ -277,6 +277,14 @@ Appended so existing test numbers never shift. Belongs to **Phase 2.2** (counted
 | --- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | 107 | Should reconcile case-data queries on a slow interval as a broadcast safety net | cases/locations queries carry `refetchInterval: RECONCILE_MS`; a cache made stale by a dropped broadcast converges within one cycle without any realtime event |
 
+## Revision R2 additions (post fix-delta review)
+
+Belongs to **Phase 6.1** (counted there in the summary).
+
+| #   | Test Description                                          | Key Assertion                                                              |
+| --- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 108 | Should register `session-lock-now` when 6.1 lands          | command id present in the registry after 6.1C init (it ships with LockOverlay — restores the registration coverage #99 lost when the command moved out of 5.3) |
+
 ---
 
 ## Test Count Summary
@@ -287,9 +295,9 @@ Appended so existing test numbers never shift. Belongs to **Phase 2.2** (counted
 | 1.2   | 13    | 3.1   | 2     | 5.1   | 4     |
 | 1.3   | 5     | 3.2   | 2     | 5.2   | 3     |
 | 1.4   | 4     | 3.3   | 5     | 5.3   | 4     |
-| 2.1   | 12    | 3.4   | 2     | 6.1   | 4     |
+| 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
 | 2.3   | 6     | 4.2   | 4     | 6.3   | 0     |
 | 2.4   | 9     |       |       |       |       |
 
-**Total: 107** (Rust 6 · TypeScript 101; #107 appended in Revision R1) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 108** (Rust 6 · TypeScript 102; #107 appended in Revision R1 → Phase 2.2, #108 in Revision R2 → Phase 6.1) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
