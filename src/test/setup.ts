@@ -52,6 +52,12 @@ vi.mock('@/lib/tauri-bindings', () => ({
     updateQuickPaneShortcut: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: null }),
+    loadCloudConfig: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    saveCloudConfig: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    clearCloudConfig: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    vaultGet: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    vaultSet: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    vaultClear: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data

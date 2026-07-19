@@ -63,6 +63,14 @@ platform-utils = { path = "crates/platform-utils" }
 # Pure AES-256-GCM seal/open for the session vault (cloud_session feature).
 secure-vault = { path = "crates/secure-vault" }
 
+# OS keychain for the session-vault key — raw bytes via set_secret/get_secret
+# (never set_password: non-UTF-8 key material fails at runtime).
+keyring = { version = "3", features = [
+    "windows-native",
+    "apple-native",
+    "sync-secret-service",
+] }
+
 # Type-safe Tauri command bindings
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }
 tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript"] }
