@@ -356,7 +356,7 @@ interface AppPreferences {
 2. Coordinator pastes enrollment payload `{v,url,key}` (or url+key manually) → probe = anonymous `app_meta` select must not **error** (mirrors mobile `enrollDevice`). RLS filters the anonymous read to an empty result — success is "no error", not "rows returned" (live-verified against canvas-hub-dev: HTTP 200, `[]`).
 3. `save_cloud_config` → init supabase client (vault storage adapter) → `signed-out`.
 4. Password sign-in → session persisted to vault (adapter) → `realtime.setAuth()`.
-5. Schema gate: read `app_meta.schema_version`; `≠ 1` → `schema-gate` (blocked); else `active`.
+5. Schema gate: read the `schema_version` **row** from `app_meta` (key/value table — `{ key: 'schema_version', value: { version: N } }`, live-verified); `version ≠ 1` → `schema-gate` (blocked); else `active`.
 
 **Flow B — relaunch (always-on machine).**
 
@@ -431,7 +431,7 @@ Every row must be resolved in the Implementation Plan's Architecture Decisions t
 | `@supabase/supabase-js`          | JS   | ^2      | auth, PostgREST, realtime, storage         |
 | `mapbox-gl`                      | JS   | ^3      | map engine (Mapbox fixed by spec §4)       |
 | `react-map-gl`                   | JS   | ^8      | React binding (`react-map-gl/mapbox`)      |
-| `keyring`                        | Rust | ^3      | OS keychain for the vault key — raw bytes via `set_secret`/`get_secret` (never `set_password` with non-UTF-8 key material) |
+| `keyring`                        | Rust | ^3      | OS keychain for the vault key — raw bytes via `set_secret`/`get_secret` (never `set_password` with non-UTF-8 key material). Needs explicit platform features (`windows-native`, `apple-native`, `sync-secret-service`) — bare `keyring = "3"` compiles to a no-op store |
 | `aes-gcm`, `rand`                | Rust | 0.10 / ^0.8 | secure-vault crate (pure)              |
 
 No other new dependencies. Clustering uses Mapbox GL's built-in GeoJSON clustering (no `supercluster` dep).
