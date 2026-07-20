@@ -402,8 +402,12 @@ describe('useCaseRealtime', () => {
     )
 
     // The coordinator switches cases while CanvassRoot stays mounted;
-    // any pending leave ack then lands.
-    rerender({ caseId: caseB })
+    // any pending leave ack then lands. rerender wrapped in act so the
+    // ref-update effect is flushed before the first fire (fix-delta
+    // review LOW: observed a rare flake without it).
+    act(() => {
+      rerender({ caseId: caseB })
+    })
     act(() => {
       rt.ackLeave()
     })
@@ -435,7 +439,9 @@ describe('useCaseRealtime', () => {
     expect(rt.supabase.removeChannel).not.toHaveBeenCalled()
 
     // Back to the first case: still flowing.
-    rerender({ caseId: SEED_CASE_ID })
+    act(() => {
+      rerender({ caseId: SEED_CASE_ID })
+    })
     act(() => {
       rt.fire(
         'UPDATE',
@@ -461,12 +467,13 @@ describe('useCaseRealtime', () => {
     expect(rt.supabase.removeChannel).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps the landing counts live while NO case is selected', () => {
+  it('keeps the landing counts AND case list live while NO case is selected', () => {
     const rt = fakeRealtime()
     const queryClient = makeQueryClient()
     queryClient.setQueryData(['location-counts', [SEED_CASE_ID]], {
       [SEED_CASE_ID]: { started: 1, working: 0, complete: 0 },
     })
+    queryClient.setQueryData(['cases'], [mappedCase(caseRow())])
 
     renderHook(() => useCaseRealtime(null), {
       wrapper: wrapperFor(queryClient),
@@ -500,6 +507,31 @@ describe('useCaseRealtime', () => {
     ).toBeUndefined()
     // Delivery confirmed health despite the filter.
     expect(useHealthStore.getState().marks.lastEventAt).not.toBeNull()
+
+    // A cloud_cases envelope — with NO selection, so the id filter drops
+    // it — still refreshes the case LIST: a new canvass or rename must
+    // not sit stale above live counts until the reconcile (fix-delta
+    // review LOW: mixed freshness on one card).
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          caseRow({ display_name: 'Renamed elsewhere' }) as unknown as Record<
+            string,
+            unknown
+          >,
+          null,
+          'cloud_cases'
+        )
+      )
+    })
+    expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(true)
+    // Dropped by the filter: no patch, no activity — invalidation only.
+    expect(
+      queryClient.getQueryData<CanvassCase[]>(['cases'])?.[0]?.displayName
+    ).toBe('QuickMart Robbery — Yonge St Canvass')
+    expect(useCanvassStore.getState().activity).toHaveLength(0)
   })
 
   // Test #49

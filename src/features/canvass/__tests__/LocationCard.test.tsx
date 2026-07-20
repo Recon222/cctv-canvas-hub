@@ -92,10 +92,12 @@ describe('LocationCard', () => {
 
     // The card is a reachable, labelled control — not a mouse-only
     // <article> (review MEDIUM: primary interaction was keyboard-dead).
+    // No aria-pressed: selection is set-only, so the card never
+    // announces a toggle it cannot perform (fix-delta review LOW).
     const card = screen.getByRole('button', {
       name: /QuickMart Convenience/,
     })
-    expect(card).toHaveAttribute('aria-pressed', 'false')
+    expect(card).not.toHaveAttribute('aria-pressed')
 
     await user.tab()
     expect(card).toHaveFocus()
@@ -108,7 +110,6 @@ describe('LocationCard', () => {
     expect(useCanvassStore.getState().selectedLocationId).toBeNull()
     await user.keyboard(' ')
     expect(useCanvassStore.getState().selectedLocationId).toBe(locationRow().id)
-    expect(card).toHaveAttribute('aria-pressed', 'true')
   })
 
   // Test #59
@@ -147,6 +148,33 @@ describe('LocationCard', () => {
         'Locations appear as investigators add them to this case.'
       )
     ).toBeInTheDocument()
+  })
+
+  it('renders an unmodeled status in a visible catch-all group, never dropped', async () => {
+    // Drift posture: the union is closed, but a wire status it doesn't
+    // model must not silently vanish from the fixed group order
+    // (fix-delta review LOW: STATUS_ORDER rendered it nowhere).
+    useCanvassStore.setState({ selectedCaseId: SEED_CASE_ID, view: 'case' })
+    const drifted = {
+      ...mapped(locationRow({ id: 'l-drift', location_name: 'Drifted spot' })),
+      status: 'cancelled' as CanvassLocation['status'],
+    }
+    vi.mocked(fetchLocations).mockResolvedValue([
+      mapped(locationRow()),
+      drifted,
+    ])
+
+    renderWithFeatureProviders(<LocationCardStack />)
+
+    // The known group still renders; the drifted card lands under the
+    // catch-all heading with its raw status, not an i18n key.
+    expect(await screen.findByText(/Other/)).toBeInTheDocument()
+    expect(screen.getByText('Drifted spot')).toBeInTheDocument()
+    expect(screen.getByText('cancelled')).toBeInTheDocument()
+    expect(screen.queryByText(/canvass\.status\./)).not.toBeInTheDocument()
+    expect(screen.getAllByText('QuickMart Convenience').length).toBeGreaterThan(
+      0
+    )
   })
 
   it('keeps rendering cached cards when a background reconcile fails', async () => {

@@ -7,6 +7,7 @@ import {
   investigatorLabel,
   visibleRows,
 } from '../services/mappers'
+import type { CaseRow, LocationRow, MediaRow } from '../types'
 import { caseRow, locationRow, mediaRow } from './fixtures'
 
 describe('mappers', () => {
@@ -29,6 +30,19 @@ describe('mappers', () => {
     expect(toCanvassCase(caseRow({ deleted_at: deletedAt }))).toBeNull()
     expect(toCanvassLocation(locationRow({ deleted_at: deletedAt }))).toBeNull()
     expect(toCanvassMedia(mediaRow({ deleted_at: deletedAt }))).toBeNull()
+  })
+
+  it('treats a partial row MISSING deleted_at as alive, never tombstoned', () => {
+    // The absence of a tombstone marker means the row is alive — strict
+    // `!== null` read `undefined` as deleted, so a partial broadcast row
+    // silently vanished from the board (fix-delta review LOW).
+    const { deleted_at: _c, ...partialCase } = caseRow()
+    const { deleted_at: _l, ...partialLocation } = locationRow()
+    const { deleted_at: _m, ...partialMedia } = mediaRow()
+    expect(toCanvassCase(partialCase as CaseRow)).not.toBeNull()
+    expect(toCanvassLocation(partialLocation as LocationRow)).not.toBeNull()
+    expect(toCanvassMedia(partialMedia as MediaRow)).not.toBeNull()
+    expect(visibleRows([partialLocation as LocationRow])).toHaveLength(1)
   })
 
   // Test #36

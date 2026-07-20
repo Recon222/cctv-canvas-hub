@@ -166,6 +166,7 @@
   "canvass.status.started": "Started",
   "canvass.status.working": "Working",
   "canvass.status.complete": "Complete",
+  "canvass.status.other": "Other",
   "canvass.card.arrived": "Arrived {{time}}",
   "canvass.card.noFix": "No GPS fix",
   "canvass.dvr.title": "DVR",

@@ -50,6 +50,12 @@ export function LocationCardStack() {
     )
   }
 
+  // Drift posture: the status union is closed, but a wire value it
+  // doesn't model must SHOW on the board, not silently vanish from a
+  // fixed group order (review LOW: an unmodeled status rendered nowhere).
+  const unmodeled = locations.filter(
+    location => !STATUS_ORDER.includes(location.status)
+  )
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto flex max-w-3xl flex-col gap-8">
@@ -71,6 +77,18 @@ export function LocationCardStack() {
             </section>
           )
         })}
+        {unmodeled.length > 0 && (
+          <section aria-label={t('canvass.status.other')}>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-zinc-500">
+              {t('canvass.status.other')} · {unmodeled.length}
+            </h2>
+            <div className="flex flex-col gap-3">
+              {unmodeled.map(location => (
+                <LocationCard key={location.id} location={location} />
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )

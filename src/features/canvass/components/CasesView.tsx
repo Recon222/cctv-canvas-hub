@@ -76,11 +76,13 @@ const COUNTED_STATUSES: CanvassLocation['status'][] = [
   'complete',
 ]
 
-const ZERO_COUNTS: LocationStatusCounts = {
+// Frozen: one shared instance is handed to every card — a mutation
+// anywhere would corrupt the fallback for the session (review LOW).
+const ZERO_COUNTS: LocationStatusCounts = Object.freeze({
   started: 0,
   working: 0,
   complete: 0,
-}
+})
 
 function CaseCard({
   canvassCase,

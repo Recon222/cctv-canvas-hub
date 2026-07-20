@@ -47,7 +47,9 @@ export function LocationCard({ location }: LocationCardProps) {
   // Selecting a location is the case view's primary interaction (and the
   // M3 fly-to trigger) — it must work from the keyboard and read as a
   // control to assistive tech. A native <button> can't wrap this block
-  // content, so the article carries the button contract itself.
+  // content, so the article carries the button contract itself. No
+  // aria-pressed: selection is set-only, and a pressed state the card
+  // cannot un-press is a broken promise to AT (review LOW).
   const select = () => {
     useCanvassStore.getState().selectLocation(location.id)
   }
@@ -56,7 +58,6 @@ export function LocationCard({ location }: LocationCardProps) {
       data-status={location.status}
       role="button"
       tabIndex={0}
-      aria-pressed={selected}
       onClick={select}
       onKeyDown={event => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -79,7 +80,11 @@ export function LocationCard({ location }: LocationCardProps) {
             STATUS_STYLES[location.status]
           )}
         >
-          {t(`canvass.status.${location.status}`)}
+          {/* defaultValue: an unmodeled wire status renders itself, not
+              a raw i18n key (drift posture — see LocationCardStack). */}
+          {t(`canvass.status.${location.status}`, {
+            defaultValue: location.status,
+          })}
         </span>
       </div>
       <p className="mt-1 text-base text-zinc-400">{location.address}</p>

@@ -6,10 +6,17 @@ import type { CaseRow, LocationRow } from '../types'
 /**
  * AD1: one private broadcast channel, `agency:activity`, carrying full
  * old+new rows from the `broadcast_agency_activity` trigger. The ONLY
- * consumer API is case-partitioned (G6) — events are filtered by case
- * before dispatch, against the CURRENT case id read through `getCaseId`
- * at delivery time. V2 migrates by swapping the topic string to
- * `case:{id}:activity`; this API does not change.
+ * row-dispatch API is case-partitioned (G6) — events are filtered by
+ * case before dispatch, against the CURRENT case id read through
+ * `getCaseId` at delivery time. But this API also DELIBERATELY consumes
+ * agency-wide traffic BEFORE that filter: every well-formed envelope
+ * confirms liveness (G4), and any location/case traffic keeps the
+ * landing's counts and case list live via the pre-filter callbacks. A
+ * V2 swap to per-case `case:{id}:activity` topics is therefore NOT a
+ * drop-in — narrowing the topic silently kills landing liveness and
+ * quiet-agency health confirmation. V2 must preserve an agency-wide
+ * signal for both (e.g. keep a slim agency topic alongside the per-case
+ * ones) before it narrows anything.
  *
  * The subscription must never be torn down and re-created on a case
  * switch: against installed realtime-js 2.110.7, `removeChannel` waits a
@@ -66,7 +73,14 @@ export function subscribeToCaseActivity(
    * Any well-formed `cloud_locations` envelope, BEFORE the case filter —
    * whoever's case it is, the landing counts may have changed.
    */
-  onLocationTraffic?: () => void
+  onLocationTraffic?: () => void,
+  /**
+   * Any well-formed `cloud_cases` envelope, BEFORE the id filter — a
+   * new canvass, rename, or status change must reach the landing's case
+   * list live, not on the next reconcile (review LOW: counts were live
+   * while the list above them was not — mixed freshness on one card).
+   */
+  onCaseTraffic?: () => void
 ): () => void {
   const supabase = getSupabase()
 
@@ -117,6 +131,7 @@ export function subscribeToCaseActivity(
       return
     }
     if (table === 'cloud_cases') {
+      onCaseTraffic?.()
       const row = raw as CaseRow
       if (row.id !== getCaseId()) {
         return

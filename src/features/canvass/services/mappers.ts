@@ -17,11 +17,14 @@ import { parseWkbPoint } from './geo'
  * degrades to absent, never a throw.
  */
 
-/** §5.5.1 — `deleted_at !== null` ⇒ row invisible, everywhere. */
+/** §5.5.1 — a SET `deleted_at` ⇒ row invisible, everywhere. Loose
+ * `!= null` on purpose: a partial wire row WITHOUT the field carries no
+ * tombstone marker and is alive (review LOW: strict `!== null` read
+ * `undefined` as tombstoned). */
 export function visibleRows<T extends { deleted_at: string | null }>(
   rows: T[]
 ): T[] {
-  return rows.filter(row => row.deleted_at === null)
+  return rows.filter(row => row.deleted_at == null)
 }
 
 /** The wire can carry null despite the contract — treat as absent. */
@@ -78,7 +81,7 @@ function numericCoord(
 }
 
 export function toCanvassCase(row: CaseRow): CanvassCase | null {
-  if (row.deleted_at !== null) {
+  if (row.deleted_at != null) {
     return null
   }
   return {
@@ -90,12 +93,14 @@ export function toCanvassCase(row: CaseRow): CanvassCase | null {
     incidentAddress: row.incident_address,
     incidentCoord: numericCoord(row.incident_latitude, row.incident_longitude),
     createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    // Guarded: the cases-list sort derefs this on every broadcast patch
+    // (review LOW: a null updated_at threw inside the cache updater).
+    updatedAt: wireString(row.updated_at),
   }
 }
 
 export function toCanvassLocation(row: LocationRow): CanvassLocation | null {
-  if (row.deleted_at !== null) {
+  if (row.deleted_at != null) {
     return null
   }
   // The row type is honest about nullability; degrade to empty.
@@ -117,7 +122,7 @@ export function toCanvassLocation(row: LocationRow): CanvassLocation | null {
 }
 
 export function toCanvassMedia(row: MediaRow): CanvassMedia | null {
-  if (row.deleted_at !== null) {
+  if (row.deleted_at != null) {
     return null
   }
   return {

@@ -60,7 +60,23 @@ export function useCaseRealtime(caseId: string | null): void {
       () => {
         // Any location broadcast — whoever's case — may change the
         // landing counts; the Cases view stays live with no selection.
-        void queryClient.invalidateQueries({ queryKey: [LOCATION_COUNTS_KEY] })
+        // cancelRefetch: false — a phone's bulk re-sync fires a burst of
+        // envelopes, and the default cancel-and-restart would keep the
+        // in-flight counts fetch from ever resolving until the burst
+        // ends (review LOW).
+        void queryClient.invalidateQueries(
+          { queryKey: [LOCATION_COUNTS_KEY] },
+          { cancelRefetch: false }
+        )
+      },
+      () => {
+        // Any case broadcast — selected or not — may change the landing
+        // case LIST (new canvass, rename, status flip); it must not be
+        // stale above live counts (review LOW: mixed freshness).
+        void queryClient.invalidateQueries(
+          { queryKey: [CASES_KEY] },
+          { cancelRefetch: false }
+        )
       }
     )
   }, [queryClient])

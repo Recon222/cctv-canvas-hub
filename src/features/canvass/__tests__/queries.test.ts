@@ -12,6 +12,7 @@ import { fetchCases, fetchLocationCounts } from '../services/canvassService'
 import { useCases } from '../hooks/useCases'
 import { useCaseLocations } from '../hooks/useCaseLocations'
 import { useCaseMedia } from '../hooks/useCaseMedia'
+import { useLocationCounts } from '../hooks/useLocationCounts'
 import type { CanvassCase, CanvassLocation, CanvassMedia } from '../types'
 import { caseRow, locationRow, mediaRow, SEED_CASE_ID } from './fixtures'
 
@@ -210,6 +211,41 @@ describe('canvass queries', () => {
     from.mockClear()
     await expect(fetchLocationCounts([])).resolves.toEqual({})
     expect(from).not.toHaveBeenCalled()
+  })
+
+  it('keys the counts query on the SORTED id list, stable across reorders', async () => {
+    // Cases re-sort on every update; an order-sensitive key would churn
+    // into a refetch on each reorder (fix-delta review LOW: the sort was
+    // exercised with a single id, indistinguishable from unsorted).
+    const chain = fakeQuery({
+      data: [{ case_id: 'c1', status: 'started' }],
+      error: null,
+    })
+    installClient(chain)
+    const queryClient = makeQueryClient()
+
+    const first = renderHook(() => useLocationCounts(['c2', 'c1']), {
+      wrapper: wrapperFor(queryClient),
+    })
+    await waitFor(() => {
+      expect(first.result.current.isSuccess).toBe(true)
+    })
+    // Both the fetch and the cache key see the sorted ids.
+    expect(chain.in).toHaveBeenCalledWith('case_id', ['c1', 'c2'])
+    expect(
+      queryClient.getQueryData(['location-counts', ['c1', 'c2']])
+    ).toBeDefined()
+
+    // The same membership in the OTHER order lands on the SAME entry —
+    // data is there synchronously, and the family still holds exactly
+    // one cache entry (no order-churned siblings).
+    const second = renderHook(() => useLocationCounts(['c1', 'c2']), {
+      wrapper: wrapperFor(queryClient),
+    })
+    expect(second.result.current.data).toBeDefined()
+    expect(
+      queryClient.getQueryCache().findAll({ queryKey: ['location-counts'] })
+    ).toHaveLength(1)
   })
 
   // Test #44
