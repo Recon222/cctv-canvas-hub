@@ -1,4 +1,5 @@
 import { render, screen, act } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nextProvider } from 'react-i18next'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -81,6 +82,33 @@ describe('LocationCard', () => {
     expect(screen.getByText('admin')).toBeInTheDocument()
     expect(screen.getByText('QuickM@rt2024')).toBeInTheDocument()
     expect(container.textContent).toBe(unlockedText)
+  })
+
+  it('is selectable from the keyboard and visible to assistive tech', async () => {
+    const user = userEvent.setup()
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // The card is a reachable, labelled control — not a mouse-only
+    // <article> (review MEDIUM: primary interaction was keyboard-dead).
+    const card = screen.getByRole('button', {
+      name: /QuickMart Convenience/,
+    })
+    expect(card).toHaveAttribute('aria-pressed', 'false')
+
+    await user.tab()
+    expect(card).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(useCanvassStore.getState().selectedLocationId).toBe(locationRow().id)
+
+    act(() => {
+      useCanvassStore.getState().selectLocation(null)
+    })
+    expect(useCanvassStore.getState().selectedLocationId).toBeNull()
+    await user.keyboard(' ')
+    expect(useCanvassStore.getState().selectedLocationId).toBe(locationRow().id)
+    expect(card).toHaveAttribute('aria-pressed', 'true')
   })
 
   // Test #59

@@ -44,14 +44,28 @@ export function LocationCard({ location }: LocationCardProps) {
       ].filter(row => row.value !== '')
     : []
 
+  // Selecting a location is the case view's primary interaction (and the
+  // M3 fly-to trigger) — it must work from the keyboard and read as a
+  // control to assistive tech. A native <button> can't wrap this block
+  // content, so the article carries the button contract itself.
+  const select = () => {
+    useCanvassStore.getState().selectLocation(location.id)
+  }
   return (
     <article
       data-status={location.status}
-      onClick={() => {
-        useCanvassStore.getState().selectLocation(location.id)
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      onClick={select}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          select()
+        }
       }}
       className={cn(
-        'cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-start transition-colors',
+        'cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400',
         selected && 'ring-2 ring-sky-400'
       )}
     >
