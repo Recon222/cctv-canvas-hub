@@ -4,7 +4,7 @@
 
 **Authority split:** this doc is authoritative for **data contracts and flows**; the implementation plan for **file-level technical detail and decisions**; the test spec for **coverage**.
 
-**Basis:** `docs/plans/initial plan/canvas-hub-spec.md` (product spec; §3 is the pinned cloud contract) + the mobile repo as contract source of truth (`extraction_case_notes_react_native_expo`: `provisioning-sql.ts`, `sync-mapper.ts`, `enrollment-service.ts`, `supabase-client.ts`) + live verification against the provisioned `canvas-hub-dev` project (2026-07-19; see `CLAUDE.local.md`). **Supersedes:** nothing — first planning set. **Amended A1 (2026-07-19, post-M1, product decisions):** three-view information architecture on a left nav rail (Cases · Case dashboard · Map), multi-window pop-out topology (M7), diagnostics window. See doc 02 AD12–AD14.
+**Basis:** `docs/plans/initial plan/canvas-hub-spec.md` (product spec; §3 is the pinned cloud contract) + the mobile repo as contract source of truth (`extraction_case_notes_react_native_expo`: `provisioning-sql.ts`, `sync-mapper.ts`, `enrollment-service.ts`, `supabase-client.ts`) + live verification against the provisioned `canvas-hub-dev` project (2026-07-19; see `CLAUDE.local.md`). **Supersedes:** nothing — first planning set. **Amended A1 (2026-07-19, post-M1, product decisions):** three-view information architecture on a left nav rail (Cases · Case dashboard · Map), multi-window pop-out topology (M7), diagnostics window. See doc 02 AD12–AD14. **Amended A2 (2026-07-20, post-M2 + locked design):** diagnostics window replaced by a right-side process panel with an ACTIVITY ↔ SYSTEM toggle (AD14 revised); M2 as-built contract corrections (`form_data` nullability, envelope ids, cadence constants, delivery-time liveness, live landing); design-handoff decisions bound (`design_handoff_canvas_hub` — satellite-night map, persistent map div, scale strategy AD15, ImageViewer, timestamp conventions).
 
 ---
 
@@ -118,7 +118,7 @@ src-tauri/
 ├── Cargo.toml                             MODIFIED  workspace member + keyring dep
 └── tauri.conf.json                        MODIFIED  CSP for Supabase + Mapbox + blob workers
 
-DELETED: nothing (A1: LeftSideBar is repurposed into the NavRail; RightSideBar stays unreferenced → later /cleanup; see §11)
+DELETED: nothing (A1: LeftSideBar is repurposed into the NavRail; A2: RightSideBar's slot is repurposed into the ProcessPanel — both template sidebars now live; see §11)
 ```
 
 ## 5. Data Contracts
@@ -172,7 +172,7 @@ interface LocationRow {
   requester_phone: string
   requester_email: string
   duplicated_from: string | null
-  form_data: LocationFormData // every field optional; older rows predate newer keys
+  form_data: LocationFormData | null // A2: the wire admits null despite the mobile writer's intent (live-verified); every field optional; older rows predate newer keys
   content_hash: string | null
   created_at: string
   updated_at: string
@@ -248,7 +248,7 @@ interface LocationFormData {
     exportMedia?: string
     fileType?: string
     sizeGb?: string
-    mediaPlayerIncluded?: string
+    mediaPlayerIncluded?: boolean // A2: live rows carry a boolean (contract doc previously said string)
     mediaProvidedVia?: string
   }
   notes?: string
@@ -262,8 +262,9 @@ interface LocationFormData {
 ### 5.2 Realtime channel contract (AD1)
 
 - Topic **`agency:activity`**, private broadcast channel (`realtime.messages` RLS authorizes authenticated members). Client: `supabase.channel('agency:activity', { config: { private: true } })`, subscribe to `broadcast` events; call `supabase.realtime.setAuth()` after sign-in.
-- Payload from `realtime.broadcast_changes` (trigger `broadcast_agency_activity`): event name = `INSERT`|`UPDATE`|`DELETE`; payload carries `{ operation, table ('cloud_cases'|'cloud_locations'), schema, record, old_record }` — full new+old rows. _Payload shape asserted from Supabase docs + trigger source; verified live in M2 before anything builds on it (test spec #47)._
-- **Client partition rule (G6):** the only consumer API is `subscribeToCaseActivity(caseId, handlers)` — events are filtered by `record.case_id` before dispatch. V2 migrates by swapping the topic string to `case:{id}:activity`; the consumer API does not change.
+- Payload from `realtime.broadcast_changes` (trigger `broadcast_agency_activity`): event name = `INSERT`|`UPDATE`|`DELETE`; payload carries `{ operation, table ('cloud_cases'|'cloud_locations'), schema, record, old_record }` — full new+old rows. **A2, live-captured:** the envelope also carries a payload-level `id` and a top-level `meta.id` (harmless; pinned by #47's fixture).
+- **Client partition rule (G6), as-built (A2):** the channel is **mount-scoped** — one subscription per board mount, the selected case read through a thunk at delivery time: `subscribeToCaseActivity(getCaseId: () => string | null, onEvent, onStatus)`. Re-keying the channel per case is forbidden (realtime-js topic reuse + the `isClosed()` gate silently kill resubscription — the M2 CRITICAL). Filtering stays client-side at delivery; two pre-filter side channels keep the **Cases landing live** (any `cloud_locations` envelope invalidates `['location-counts']`; any `cloud_cases` envelope for a non-selected case invalidates `['cases']`) and any well-formed envelope confirms liveness (§5.4).
+- **V2 caveat (A2):** agency-wide consumption is now load-bearing (landing liveness + delivery-time liveness confirmation). A per-case topic swap is NOT a drop-in — V2 must preserve an agency-wide signal before narrowing the topic.
 - **Type ownership:** `ChannelStatus` (mapped from supabase-js subscribe states) and `HealthState` are defined once, in `src/store/health-store.ts`; `realtimeService` imports them — never re-declares.
 
 ```ts
@@ -273,9 +274,11 @@ type ActivityEvent =
   | { table: 'cloud_locations'; op: Op; row: LocationRow; old: LocationRow | null }
 type Op = 'INSERT' | 'UPDATE' | 'DELETE'
 function subscribeToCaseActivity(
-  caseId: string,
+  getCaseId: () => string | null, // A2: delivery-time read — the channel is mount-scoped, never case-keyed
   onEvent: (e: ActivityEvent) => void,
-  onStatus: (s: ChannelStatus) => void
+  onStatus: (s: ChannelStatus) => void,
+  onLocationTraffic?: () => void, // pre-filter: any location envelope (landing counts)
+  onCaseTraffic?: () => void // pre-filter: non-selected case envelopes (landing list)
 ): () => void
 ```
 
@@ -337,8 +340,10 @@ interface AppPreferences {
 | -------------- | ------------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------- |
 | `connecting`   | initial channel subscribe in flight                                | queries run; no live badge                     | indicator: "connecting…"              |
 | `live`         | channel `SUBSCRIBED` and last confirm < `STALE_AFTER_MS`           | normal                                         | green dot + "updated HH:MM:SS"        |
-| `reconnecting` | channel dropped/errored; supabase-js retrying                      | on resubscribe: refetch all case queries       | amber dot + "reconnecting…"           |
+| `reconnecting` | channel dropped/errored; supabase-js retrying — **or (A2)** a fetch error newer than the last confirm while subscribed | on resubscribe: refetch case-data queries       | amber dot + "reconnecting…"           |
 | `stale`        | no realtime confirm AND no successful fetch for > `STALE_AFTER_MS` | keep retrying; polling continues               | red banner "STALE since HH:MM" (G4)   |
+
+**Liveness semantics (A2, binding for M5's indicator):** `lastEventAt` means "the channel demonstrably delivers" — it is stamped on ANY well-formed envelope, **before** the case filter (a quiet selected case is not a broken transport). M5 must not re-narrow this to selected-case events. Constants as-built: `STALE_AFTER_MS = 90_000`, `RECONCILE_MS = 60_000` (invariant: reconcile < stale, test-pinned).
 | `offline`      | `navigator.onLine === false`                                       | pause polling; on `online`: refresh + refetch  | red banner "offline"                  |
 
 **Attention** (`canvass-store`): `ActivityEntry { id, at, caseId, kind: 'location-new' | 'location-status' | 'location-updated' | 'media-new' | 'case-updated', locationId?, summary }` — in-memory ring (cap 200, AD7); `attentionByLocation: Record<string, number>` (a plain record, not a `Map` — Zustand selectors compare references; in-place `Map` mutation would silently skip re-renders) drives marker pulse / card highlight for `ATTENTION_TTL_MS` (~12 s).
@@ -350,6 +355,7 @@ interface AppPreferences {
 3. Every `form_data` field optional; latest `arrivalDateTime` across `arrivalDepartures` = "arrived HH:MM"; absent blocks render as absent, never `undefined` text.
 4. Investigator display = `requester_name` per location (fallback: shortened `user_id`); roster derives from location rows — auth admin API is not reachable with the publishable key (AD8).
 5. Media: `mime_type` ∈ renderable set (`image/jpeg|png|webp`, `video/mp4`) → inline; else placeholder + open-externally (HEIC/QuickTime, spec §3/§5).
+6. Timestamps (A2, design-bound): every rendered timestamp carries seconds; dates are always explicit `yyyy-mm-dd` — never "today"/relative-only (relative ages may accompany, never replace).
 
 ## 6. Data Flows
 
@@ -384,7 +390,7 @@ interface AppPreferences {
 1. Channel drops → `reconnecting`; supabase-js retries with backoff; polling continues (independent freshness).
 2. Threshold breached with no successful fetch → `stale` (red banner; G4 honesty).
 3. On resubscribe / `online` / `visibilitychange→visible`: check session validity (`getSession()`/expiry) and call `auth.refreshSession()` **only when near/after expiry** — `autoRefreshToken` owns routine rotation, and racing it risks submitting a rotated refresh token → `realtime.setAuth()` → invalidate case-data queries (catch-up refetch, signed-URL queries excluded — they refresh on their own interval) → `live`.
-4. Safety net for lost broadcasts: case-data queries also refetch on a slow interval (`RECONCILE_MS`, 5 min). Broadcast is best-effort with no replay — a silently dropped event on a healthy socket must not outlive one reconciliation cycle (spec §6: never present stale as live).
+4. Safety net for lost broadcasts: case-data queries also refetch on a slow interval (**`RECONCILE_MS`, 60 s — A2**; lowered from 5 min after the PR #4 cadence finding). The reconcile is the **only positive liveness confirmation on a silent agency**, so it must fire inside the stale threshold: `RECONCILE_MS < STALE_AFTER_MS` is an invariant with a test tripwire. Broadcast is best-effort with no replay — a silently dropped event on a healthy socket must not outlive one reconciliation cycle (spec §6: never present stale as live).
 
 **Flow F — idle lock / unlock.**
 
@@ -469,5 +475,10 @@ The **case dashboard and map views can pop out as secondary Tauri windows** (two
 2. **Main window is the sole auth owner** (T9). Secondaries never touch the vault or keyring and never run a refresh ticker: two GoTrueClients on one storage key is a documented concurrency hazard. Token delivery: initial = **handshake** (`secondary-ready` → main replies `session-token` + `view-context {view, caseId}`); ongoing pushes on every `TOKEN_REFRESHED`. Secondaries run clients created with the **`accessToken` callback option** — the mechanism that authenticates PostgREST, storage, AND realtime from the pushed token (their `auth.*` namespace is a throwing proxy by design). **`session-ended` fires on sign-out only**; idle lock emits `session-locked`/`session-unlocked` and secondaries mirror AD6 — seed their own-context session-store `locked`/`active` so interaction locks in step with main while the board keeps flowing unchanged (a wall display is idle by default; lock revokes nothing and alters no content). Secondaries are **refresh-passive**: they never mount the wake-refresh health path (`auth.refreshSession()` throws under the accessToken proxy) — their health display feeds from channel status and query results only. On `session-ended`, secondaries tear down realtime and drop the token before overlaying (the access token outlives sign-out by up to ~1 h).
 3. **Window lifecycle copies quick-pane**: create-once/show-hide, native-✕ handling, and **async Rust commands only** (sync window commands deadlock WebView2 on Windows — AGENTS.md CRITICAL).
 4. **The Claude-design prototype never sees multi-window** — it designs the three views + rail single-window; pop-out is wiring, not design.
+
+### A2 — Process panel (replaces the A1 diagnostics window) + design bindings
+
+- **The diagnostics window is dead.** Its content merges into a **right-side collapsible ProcessPanel** (repurposing the RightSideBar slot) that toggles between **ACTIVITY** (the live activity feed — moved out of the dashboard's right column, freeing it for the roster) and **SYSTEM** (the process monitor: health transitions, source-tagged log tail via `read_log_tail`, vault status, uptime/versions). Collapsed it is a slim SYS tab; **default-open on ACTIVITY** for the wall posture, so the attention surface stays visible (spec §6). Implementation ports Kris's `processTerminal` feature (timeline-agent-sdk repo) behind a canvas-hub source adapter — see AD14 (revised) in doc 02.
+- **Design handoff is binding** for M3–M6 UI: `design-ui-packages/Desktop app for investigators/design_handoff_canvas_hub` (Case File design system: tokens, fonts, status visual language, connection chip + escalation banner, modals). Key engineering bindings: the map div persists across views (never unmount; `map.resize()` on switch); default style satellite-night; the Mapbox marker element must never carry its own `position`/`transform`/`transition` (field-app lesson); scale-to-fit strategy per AD15.
 
 **Upstream notes (for the mobile/cloud team, not this app):** the shipped RPCs (`locations_for_case`, `locations_in_view`) return soft-deleted rows and omit `user_id`/`form_data` — verified live. V1 routes around this (AD2); a v2 RPC revision should add a `deleted_at is null` predicate. Putting `cloud_media_files` on the realtime substrate remains the known V2 cloud-side addition (spec §3).

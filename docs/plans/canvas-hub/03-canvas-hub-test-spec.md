@@ -52,7 +52,8 @@
 | `src/features/canvass/__tests__/casesView.test.tsx` (A1, #110–111)     | 2.4   | NEW       |
 | `src/lib/supabase/secondary-client.test.ts` (A1, #114–116)             | 7.2   | NEW       |
 | `src/features/canvass/__tests__/secondaryWindows.test.tsx` (A1, #112–113, #117–119, #121) | 7.1–7.3 | NEW |
-| `src/features/cloud-session/__tests__/diagnostics.test.tsx` (A1, #120)  | 7.3   | NEW       |
+| `src/features/process-panel/__tests__/processPanel.test.tsx` (A2, #120, #122–125) | 6.3   | NEW       |
+| `src/features/canvass/__tests__/imageViewer.test.tsx` (A2, #126)        | 4.3   | NEW       |
 
 No existing test file is deleted or rewritten. One existing file receives **additions** only (`src/lib/commands/commands.test.ts`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
 
@@ -299,7 +300,7 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 
 ## Revision R4 additions (Amendment A1 — three-view IA + multi-window)
 
-#110–111 belong to **Phase 2.4**; #112–113 to **Phase 7.1**; #114–117 to **Phase 7.2**; #118–121 to **Phase 7.3** (counted there in the summary).
+#110–111 belong to **Phase 2.4**; #112–113 to **Phase 7.1**; #114–117 to **Phase 7.2**; #118–119 and #121 to **Phase 7.3**; **#120 reassigned by A2 to Phase 6.3** (the ProcessPanel owns diagnostics content).
 
 | #   | Test Description                                                          | Key Assertion                                                                 |
 | --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -313,8 +314,20 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | 117 | Should tear down and terminalize on `session-ended` (sign-out only)        | event ⇒ channels removed + realtime disconnected + token discarded BEFORE the ended screen (no broadcast delivered after the event); `session-locked` instead ⇒ this context's session-store goes `locked` (interaction in step with main), board keeps flowing, content unchanged (AD6 parity + owner directive); no credential prompt exists in the secondary context |
 | 118 | Should host the view and consume the case-id round-trip                    | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient; `view-context {view, caseId}` drives `selectCase(caseId)` + `subscribeToCaseActivity(caseId, …)` (the receive side of the H2/H3 contract) |
 | 119 | Should offer pop-out only on case and map rail entries                     | `cases` entry has no pop-out affordance (bound to main)                        |
-| 120 | Should render diagnostics content                                          | health detail, log tail (via `readLogTail`), vault/keyring status, app + schema versions present |
+| 120 | Should render diagnostics content in the SYSTEM lane (A2: panel, not window) | health detail, log tail (via the diagnostics service wrapping `readLogTail`), vault/keyring status, app + schema versions present |
 | 121 | Should keep main-window state untouched when a secondary closes            | close event ⇒ canvass-store selection/view unchanged in main                   |
+
+## Revision R5 additions (Amendment A2 — process panel + design bindings)
+
+#122–125 belong to **Phase 6.3**; #126 to **Phase 4.3** (counted there in the summary).
+
+| #   | Test Description                                                          | Key Assertion                                                                 |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 122 | Should render canvass activity in the ACTIVITY lane                        | activity-ring entries appear newest-first through the ported terminal's source adapter |
+| 123 | Should feed the SYSTEM lane from health transitions + the log tail         | health-store transition rows + polled `readLogTail` lines render source-tagged; a failed tail read renders an inline error row, board unaffected |
+| 124 | Should toggle lanes and collapse to the SYS tab                            | ACTIVITY ↔ SYSTEM toggle swaps content; collapse renders the slim tab; expand restores lane + scroll state |
+| 125 | Should default the panel open on ACTIVITY                                  | fresh mount ⇒ panel expanded, ACTIVITY lane active (wall posture — spec §6 attention surface visible) |
+| 126 | Should wrap through a location's photos in the ImageViewer                 | ‹ from photo 1 lands on photo N, › from N lands on 1; header shows `PHOTO n OF N` |
 
 ---
 
@@ -322,14 +335,14 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 
 | Phase | Tests | Phase | Tests | Phase | Tests |
 | ----- | ----- | ----- | ----- | ----- | ----- |
-| 1.1   | 6     | 2.5   | 5     | 4.3   | 3     |
+| 1.1   | 6     | 2.5   | 5     | 4.3   | 4     |
 | 1.2   | 14    | 3.1   | 2     | 5.1   | 4     |
 | 1.3   | 5     | 3.2   | 2     | 5.2   | 3     |
 | 1.4   | 4     | 3.3   | 5     | 5.3   | 4     |
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
-| 2.3   | 6     | 4.2   | 4     | 6.3   | 0     |
-| 2.4   | 11    | 7.1   | 2     | 7.2   | 4     |
-| 7.3   | 4     |       |       |       |       |
+| 2.3   | 6     | 4.2   | 4     | 6.3   | 5     |
+| 2.4   | 11    | 7.1   | 2     | 6.4   | 0     |
+| 7.2   | 4     | 7.3   | 3     |       |       |
 
-**Total: 121** (Rust 6 · TypeScript 115; #107 → R1/Phase 2.2, #108 → R2/Phase 6.1, #109 → R3/Phase 1.2, #110–121 → R4/A1: Phase 2.4 + M7) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 126** (Rust 6 · TypeScript 120; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–126 → R5/A2) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
