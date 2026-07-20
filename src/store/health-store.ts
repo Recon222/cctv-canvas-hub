@@ -192,7 +192,9 @@ export const useHealthStore = create<HealthStore>()(
   )
 )
 
-/** Test helper: back to a fresh boot state. */
+/** Back to a fresh boot state — the session-exit unmount (CanvassRoot)
+ * and tests both call this. The next operator's `live` must come from
+ * their own session's confirmations, never inherited marks. */
 export function resetHealthStore(): void {
   useHealthStore.setState({ state: 'connecting', marks: initialMarks() })
 }

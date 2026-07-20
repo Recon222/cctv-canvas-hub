@@ -6,6 +6,7 @@ import { I18nextProvider } from 'react-i18next'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import i18n from '@/i18n/config'
 import { getSupabase } from '@/lib/supabase/client'
+import { CASE_DATA_KEY_FAMILIES, useHealthStore } from '@/store/health-store'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { CanvassRoot } from '../components/CanvassRoot'
 import { CasesView } from '../components/CasesView'
@@ -143,7 +144,7 @@ describe('CasesView (A1)', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('resets board state when the session unmounts the board', () => {
+  it('resets board, health, and case-data cache when the session unmounts the board', () => {
     // CanvassRoot mounts realtime, so the auto-mocked client needs a
     // minimal channel surface.
     const channel = { on: vi.fn(), subscribe: vi.fn() }
@@ -153,22 +154,46 @@ describe('CasesView (A1)', () => {
       removeChannel: vi.fn(() => Promise.resolve('ok')),
     } as unknown as ReturnType<typeof getSupabase>)
 
-    const { unmount } = renderWithFeatureProviders(<CanvassRoot />)
+    const { queryClient, unmount } = renderWithClient(<CanvassRoot />)
     act(() => {
       const store = useCanvassStore.getState()
       store.selectCase(SEED_CASE_ID)
       store.setView('case')
+      // Operator A's session artifacts: liveness marks and cached case
+      // data inside staleTime, plus a non-case family as control.
+      useHealthStore.getState().channelStatus('subscribed')
+      useHealthStore.getState().recordFetchOk()
+      queryClient.setQueryData(['locations', SEED_CASE_ID], [])
+      queryClient.setQueryData(['location-counts', [SEED_CASE_ID]], {})
+      queryClient.setQueryData(['media', SEED_CASE_ID], [])
+      queryClient.setQueryData(['preferences'], { theme: 'dark' })
     })
     expect(useCanvassStore.getState().selectedCaseId).toBe(SEED_CASE_ID)
+    expect(useHealthStore.getState().state).toBe('live')
 
     // Unmount IS the session exit (active/locked → anything else): the
-    // module-scoped store must not hand the previous operator's case to
-    // the next sign-in (review MEDIUM).
+    // next operator must inherit neither the case selection, operator
+    // A's liveness marks (a dead-socket 'subscribed' carcass skips the
+    // resubscribe catch-up), nor a cached case list that would suppress
+    // the sign-in refetch (review MEDIUM + fix-delta MEDIUM: only the
+    // canvass store reset at this boundary).
     unmount()
     expect(useCanvassStore.getState().selectedCaseId).toBeNull()
     expect(useCanvassStore.getState().selectedLocationId).toBeNull()
     expect(useCanvassStore.getState().view).toBe('cases')
     expect(useCanvassStore.getState().activity).toHaveLength(0)
+    expect(useHealthStore.getState().state).toBe('connecting')
+    expect(useHealthStore.getState().marks.channel).toBeNull()
+    expect(useHealthStore.getState().marks.lastFetchOkAt).toBeNull()
+    for (const family of CASE_DATA_KEY_FAMILIES) {
+      expect(
+        queryClient.getQueryCache().findAll({ queryKey: [family] })
+      ).toHaveLength(0)
+    }
+    // Non-case families survive the boundary untouched.
+    expect(queryClient.getQueryData(['preferences'])).toEqual({
+      theme: 'dark',
+    })
   })
 
   // Test #111
