@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Map as MapIcon } from 'lucide-react'
+import { useConnectionHealth } from '@/hooks/useConnectionHealth'
 import { useCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
 import { NavRail } from './NavRail'
@@ -16,6 +17,7 @@ export function CanvassRoot() {
   const view = useCanvassStore(state => state.view)
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   useCaseRealtime(selectedCaseId)
+  useConnectionHealth()
 
   return (
     <div className="flex h-full bg-zinc-950 text-zinc-100">

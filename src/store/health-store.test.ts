@@ -1,9 +1,15 @@
+import React from 'react'
+import { renderHook, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, beforeEach } from 'vitest'
+import { useConnectionHealth } from '@/hooks/useConnectionHealth'
 import {
   useHealthStore,
   evaluate,
+  canPoll,
   resetHealthStore,
   STALE_AFTER_MS,
+  SIGNED_URL_KEY_PREFIX,
   type HealthMarks,
 } from './health-store'
 
@@ -99,5 +105,82 @@ describe('health-store', () => {
     useHealthStore.getState().channelStatus('subscribed')
     useHealthStore.getState().recordFetchError()
     expect(useHealthStore.getState().state).toBe('connecting')
+  })
+})
+
+describe('useConnectionHealth (2.5B)', () => {
+  function mountHook() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        children
+      )
+    }
+    const rendered = renderHook(() => useConnectionHealth(), {
+      wrapper: Wrapper,
+    })
+    return { queryClient, rendered }
+  }
+
+  // Test #63
+  it('reports reconnecting on channel drop and invalidates case data on resubscribe', () => {
+    const { queryClient } = mountHook()
+    queryClient.setQueryData(['cases'], [])
+    queryClient.setQueryData(['locations', 'c1'], [])
+    queryClient.setQueryData(
+      [SIGNED_URL_KEY_PREFIX, 'images', 'a/b.jpg'],
+      'https://signed.example'
+    )
+
+    act(() => {
+      useHealthStore.getState().channelStatus('subscribed')
+      useHealthStore.getState().recordFetchOk()
+    })
+    expect(useHealthStore.getState().state).toBe('live')
+
+    // Drop: supabase-js is retrying underneath — honest amber, not live.
+    act(() => {
+      useHealthStore.getState().channelStatus('error')
+    })
+    expect(useHealthStore.getState().state).toBe('reconnecting')
+
+    // Resubscribe: catch-up invalidation of case-data queries ONLY —
+    // signed URLs refresh on their own interval (AD11).
+    act(() => {
+      useHealthStore.getState().channelStatus('subscribed')
+    })
+    expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(['locations', 'c1'])?.isInvalidated).toBe(
+      true
+    )
+    expect(
+      queryClient.getQueryState([SIGNED_URL_KEY_PREFIX, 'images', 'a/b.jpg'])
+        ?.isInvalidated
+    ).toBe(false)
+  })
+
+  // Test #64
+  it('reports offline from the browser signal and pauses the polling gate', () => {
+    const { queryClient } = mountHook()
+    queryClient.setQueryData(['cases'], [])
+
+    act(() => {
+      window.dispatchEvent(new Event('offline'))
+    })
+    expect(useHealthStore.getState().state).toBe('offline')
+    // The gate every poll loop checks (doc 01 §5.4: offline pauses polling).
+    expect(canPoll(useHealthStore.getState().state)).toBe(false)
+
+    // Back online: state leaves offline and case data catches up.
+    act(() => {
+      window.dispatchEvent(new Event('online'))
+    })
+    expect(useHealthStore.getState().state).not.toBe('offline')
+    expect(canPoll(useHealthStore.getState().state)).toBe(true)
+    expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(true)
   })
 })
