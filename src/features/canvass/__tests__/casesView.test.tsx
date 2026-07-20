@@ -122,6 +122,12 @@ describe('CasesView (A1)', () => {
   it('keeps rendering cached cases when a background reconcile fails', async () => {
     const { queryClient } = renderWithClient(<CasesView />)
     expect(await screen.findByText('24-CANVASS-0417')).toBeInTheDocument()
+    // The counts query is `enabled` only once cases resolve — its first
+    // fetch races the case-number await above. Both loads must land
+    // BEFORE the mocks swap to rejection, or the counts' first fetch
+    // rejects and this test proves nothing about stale-visibility
+    // (fix-delta review MEDIUM: measured 13% flake in scoped runs).
+    expect(await screen.findByText('2 Started')).toBeInTheDocument()
 
     vi.mocked(fetchCases).mockRejectedValue(new Error('reconcile failed'))
     vi.mocked(fetchLocationCounts).mockRejectedValue(
