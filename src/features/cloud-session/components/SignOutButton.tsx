@@ -10,7 +10,8 @@ import { signOut } from '../services/authService'
 /**
  * The board's sign-out escape (kept reachable after the M1 placeholder
  * was retired — ledger D4). Auth actions live in cloud-session; other
- * features mount this via the barrel.
+ * features mount this via the barrel. Case File restyle: rail-footer
+ * posture (ghost → accent on hover).
  */
 export function SignOutButton() {
   const { t } = useTranslation()
@@ -36,7 +37,7 @@ export function SignOutButton() {
       title={t('cloudSession.signOut')}
       disabled={busy}
       onClick={() => void handleSignOut()}
-      className="text-zinc-400 hover:text-zinc-100"
+      className="text-hub-ghost hover:border hover:border-hub-hairline hover:bg-transparent hover:text-hub-accent"
     >
       <LogOut className="size-5" aria-hidden />
     </Button>

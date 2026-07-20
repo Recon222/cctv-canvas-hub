@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nextProvider } from 'react-i18next'
@@ -58,6 +58,15 @@ beforeEach(() => {
   })
 })
 
+/** The Case File restyle splits each status count into value + label
+ * sibling spans ("2" / "Started"), so "2 Started" no longer exists as
+ * one text node — read the value through the label's previous sibling.
+ * The pinned contracts are unchanged: real counts, "—" for counts we
+ * don't have (never a fabricated zero), stale-visible beats blank. */
+function statusCountValue(label: string): string | null | undefined {
+  return screen.getByText(label).previousElementSibling?.textContent
+}
+
 describe('CasesView (A1)', () => {
   // Test #110
   it('renders the Cases landing view with one card per active case', async () => {
@@ -72,9 +81,11 @@ describe('CasesView (A1)', () => {
     ).toBeInTheDocument()
     // Status counts come from the ONE agency-wide counts query — never a
     // per-card location fetch (review HIGH: landing N+1).
-    expect(await screen.findByText('2 Started')).toBeInTheDocument()
-    expect(screen.getByText('1 Working')).toBeInTheDocument()
-    expect(screen.getByText('1 Complete')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(statusCountValue('Started')).toBe('2')
+    })
+    expect(statusCountValue('Working')).toBe('1')
+    expect(statusCountValue('Complete')).toBe('1')
     expect(vi.mocked(fetchLocationCounts)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(fetchLocationCounts)).toHaveBeenCalledWith([SEED_CASE_ID])
     // Last activity from the case row.
@@ -90,19 +101,21 @@ describe('CasesView (A1)', () => {
     renderWithFeatureProviders(<CasesView />)
 
     expect(await screen.findByText('24-CANVASS-0417')).toBeInTheDocument()
-    expect(await screen.findByText('— Started')).toBeInTheDocument()
-    expect(screen.getByText('— Working')).toBeInTheDocument()
-    expect(screen.getByText('— Complete')).toBeInTheDocument()
-    expect(screen.queryByText('0 Started')).not.toBeInTheDocument()
+    // "—" is also the not-"0" proof: the value slot holds em-dash, not zero.
+    expect(statusCountValue('Started')).toBe('—')
+    expect(statusCountValue('Working')).toBe('—')
+    expect(statusCountValue('Complete')).toBe('—')
   })
 
   it('renders real zeros for a case absent from a successful counts fetch', async () => {
     vi.mocked(fetchLocationCounts).mockResolvedValue({})
     renderWithFeatureProviders(<CasesView />)
 
-    expect(await screen.findByText('0 Started')).toBeInTheDocument()
-    expect(screen.getByText('0 Working')).toBeInTheDocument()
-    expect(screen.getByText('0 Complete')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(statusCountValue('Started')).toBe('0')
+    })
+    expect(statusCountValue('Working')).toBe('0')
+    expect(statusCountValue('Complete')).toBe('0')
   })
 
   it('renders the designed empty state for an agency with no cases', async () => {
@@ -136,7 +149,9 @@ describe('CasesView (A1)', () => {
     // BEFORE the mocks swap to rejection, or the counts' first fetch
     // rejects and this test proves nothing about stale-visibility
     // (fix-delta review MEDIUM: measured 13% flake in scoped runs).
-    expect(await screen.findByText('2 Started')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(statusCountValue('Started')).toBe('2')
+    })
 
     vi.mocked(fetchCases).mockRejectedValue(new Error('reconcile failed'))
     vi.mocked(fetchLocationCounts).mockRejectedValue(
@@ -148,7 +163,7 @@ describe('CasesView (A1)', () => {
 
     // Stale-visible beats blank: the wall keeps its last-known truth.
     expect(screen.getByText('24-CANVASS-0417')).toBeInTheDocument()
-    expect(screen.getByText('2 Started')).toBeInTheDocument()
+    expect(statusCountValue('Started')).toBe('2')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 

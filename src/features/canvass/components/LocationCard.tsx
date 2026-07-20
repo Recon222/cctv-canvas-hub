@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { MapPinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCanvassStore } from '../store/canvass-store'
+import { formatClockTime } from '../services/format'
 import type { CanvassLocation } from '../types'
 
 /**
@@ -9,20 +10,17 @@ import type { CanvassLocation } from '../types'
  * logical properties. Content NEVER varies with session state — DVR
  * credentials are ordinary strings rendered plainly always (owner
  * directive; AD6: lock alters nothing).
+ *
+ * Case File restyle (design_handoff §4): overlay-grade panel, Nacelle
+ * name, status chip in the trio colors, mono investigator/arrival line,
+ * DVR block as a two-column mono grid with selectable values. The M4
+ * media strip mounts under the meta row (agents wire `MediaThumb`s).
  */
 
-const STATUS_STYLES: Record<CanvassLocation['status'], string> = {
-  started: 'bg-sky-500/15 text-sky-300',
-  working: 'bg-amber-500/15 text-amber-300',
-  complete: 'bg-emerald-500/15 text-emerald-300',
-}
-
-function formatTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) {
-    return iso
-  }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const STATUS_CHIP_STYLES: Record<CanvassLocation['status'], string> = {
+  started: 'border-hub-started/45 bg-hub-started/10 text-hub-started',
+  working: 'border-hub-working/40 bg-hub-working/10 text-hub-working',
+  complete: 'border-hub-complete/40 bg-hub-complete/10 text-hub-complete',
 }
 
 interface LocationCardProps {
@@ -33,6 +31,9 @@ export function LocationCard({ location }: LocationCardProps) {
   const { t } = useTranslation()
   const selected = useCanvassStore(
     state => state.selectedLocationId === location.id
+  )
+  const attentionAt = useCanvassStore(
+    state => state.attentionByLocation[location.id]
   )
   const dvr = location.dvr
   const dvrRows: { label: string; value: string }[] = dvr
@@ -56,6 +57,7 @@ export function LocationCard({ location }: LocationCardProps) {
   return (
     <article
       data-status={location.status}
+      data-attention={attentionAt !== undefined || undefined}
       role="button"
       tabIndex={0}
       onClick={select}
@@ -66,18 +68,24 @@ export function LocationCard({ location }: LocationCardProps) {
         }
       }}
       className={cn(
-        'cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400',
-        selected && 'ring-2 ring-sky-400'
+        'hub-attention-flash cursor-pointer rounded-md border border-hub-hairline bg-hub-overlay p-4 text-start backdrop-blur-md transition-colors duration-200',
+        'hover:border-hub-hairline-bright focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hub-accent',
+        selected && 'border-hub-accent/75'
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-xl font-semibold tracking-tight text-zinc-100">
-          {location.name}
-        </h3>
+        <div className="min-w-0">
+          <h3 className="font-nacelle text-[16.5px] font-semibold leading-tight text-hub-heading">
+            {location.name}
+          </h3>
+          <p className="mt-0.5 text-[12.5px] text-hub-muted">
+            {location.address}
+          </p>
+        </div>
         <span
           className={cn(
-            'rounded-full px-3 py-1 text-sm font-medium',
-            STATUS_STYLES[location.status]
+            'shrink-0 rounded-[3px] border px-2 pb-[3px] pt-1 font-stmono text-[10px] uppercase tracking-[1.5px]',
+            STATUS_CHIP_STYLES[location.status]
           )}
         >
           {/* defaultValue: an unmodeled wire status renders itself, not
@@ -87,32 +95,40 @@ export function LocationCard({ location }: LocationCardProps) {
           })}
         </span>
       </div>
-      <p className="mt-1 text-base text-zinc-400">{location.address}</p>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-base">
-        <span className="text-zinc-200">{location.investigator}</span>
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <span className="font-stmono text-[10.5px] uppercase tracking-[1px] text-hub-accent">
+          {location.investigator}
+        </span>
         {location.arrivedAt !== null && (
-          <span className="text-zinc-400">
+          <span className="font-jbmono text-[10.5px] text-hub-faint">
             {t('canvass.card.arrived', {
-              time: formatTime(location.arrivedAt),
+              time: formatClockTime(location.arrivedAt),
             })}
           </span>
         )}
+        <span className="flex-1" />
         {location.coord === null && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-2.5 py-0.5 text-sm text-zinc-300">
-            <MapPinOff className="size-3.5" aria-hidden />
+          <span className="inline-flex items-center gap-1 rounded-[3px] border border-hub-working/30 bg-hub-working/10 px-1.5 py-0.5 font-stmono text-[9px] uppercase tracking-[1px] text-hub-working">
+            <MapPinOff className="size-3" aria-hidden />
             {t('canvass.card.noFix')}
           </span>
         )}
       </div>
       {dvrRows.length > 0 && (
-        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg bg-zinc-950/60 p-3 text-sm">
-          <dt className="col-span-2 mb-1 font-medium uppercase tracking-wide text-zinc-500">
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-hub-row-divider pt-3">
+          <dt className="col-span-2 mb-0.5 font-stmono text-[9.5px] uppercase tracking-[2px] text-hub-faint">
             {t('canvass.dvr.title')}
           </dt>
           {dvrRows.map(row => (
             <div key={row.label} className="contents">
-              <dt className="text-zinc-500">{row.label}</dt>
-              <dd className="text-zinc-200">{row.value}</dd>
+              <dt className="font-stmono text-[9px] uppercase tracking-[1px] text-hub-ghost">
+                {row.label}
+              </dt>
+              {/* Credentials are ordinary strings, selectable for
+                  transcription — never masked (owner directive). */}
+              <dd className="select-text font-jbmono text-xs text-hub-body-2 [cursor:text]">
+                {row.value}
+              </dd>
             </div>
           ))}
         </dl>

@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { initSupabase } from '@/lib/supabase/client'
 import { useSessionStore } from '../store/session-store'
+import { CornerFrame } from './CornerFrame'
 import {
   parseEnrollmentPayload,
   probeProject,
@@ -17,6 +18,9 @@ import {
 /**
  * First-run enrollment (Flow A): paste `{v,url,key}` → probe → save →
  * init client → signed-out. Wall-legible: large type, dark, calm.
+ *
+ * Case File restyle (design_handoff §7): gold eyebrow, Nacelle display
+ * title, corner-bracketed enrollment panel. Flow logic unchanged.
  */
 export function SetupScreen() {
   const { t } = useTranslation()
@@ -50,51 +54,65 @@ export function SetupScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center bg-zinc-950 px-8 text-zinc-100">
+    <div className="flex h-full flex-col items-center justify-center bg-hub-ground px-8 font-inter text-hub-body [background-image:radial-gradient(900px_500px_at_50%_0%,rgb(43_140_193/8%),transparent_65%)]">
       <div className="flex w-full max-w-2xl flex-col gap-8">
-        <div className="flex flex-col gap-3 text-start">
-          <h1 className="text-4xl font-semibold tracking-tight">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p className="font-stmono text-xs uppercase tracking-[4px] text-hub-working">
+            {t('cloudSession.brand')}
+          </p>
+          <h1 className="font-nacelle text-4xl font-semibold tracking-tight text-hub-heading">
             {t('cloudSession.setup.title')}
           </h1>
-          <p className="text-xl text-zinc-400">
+          <p className="max-w-lg text-xl text-hub-muted [text-wrap:pretty]">
             {t('cloudSession.setup.description')}
           </p>
         </div>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={event => {
-            event.preventDefault()
-            void submit()
-          }}
-        >
-          <Label htmlFor="enrollment-payload" className="text-lg">
-            {t('cloudSession.setup.payloadLabel')}
-          </Label>
-          <Textarea
-            id="enrollment-payload"
-            value={payload}
-            onChange={event => setPayload(event.target.value)}
-            placeholder={t('cloudSession.setup.payloadPlaceholder')}
-            disabled={busy}
-            rows={4}
-            className="bg-zinc-900 font-mono !text-base"
-          />
-          {error && (
-            <p role="alert" className="text-lg text-red-400">
-              {error}
-            </p>
-          )}
-          <Button
-            type="submit"
-            size="lg"
-            disabled={busy || payload.trim() === ''}
-            className="text-lg"
+        <CornerFrame eyebrow={t('cloudSession.setup.panelLabel')}>
+          <form
+            className="flex flex-col gap-4 p-4"
+            onSubmit={event => {
+              event.preventDefault()
+              void submit()
+            }}
           >
-            {busy
-              ? t('cloudSession.setup.probing')
-              : t('cloudSession.setup.submit')}
-          </Button>
-        </form>
+            <Label
+              htmlFor="enrollment-payload"
+              className="font-stmono text-[11px] uppercase tracking-[2px] text-hub-muted"
+            >
+              {t('cloudSession.setup.payloadLabel')}
+            </Label>
+            <Textarea
+              id="enrollment-payload"
+              value={payload}
+              onChange={event => setPayload(event.target.value)}
+              placeholder={t('cloudSession.setup.payloadPlaceholder')}
+              disabled={busy}
+              rows={4}
+              className="rounded border-hub-input-border bg-hub-input font-jbmono !text-[13px] leading-relaxed text-hub-body-2 placeholder:text-hub-ghost"
+            />
+            {error && (
+              <p role="alert" className="text-lg text-hub-danger">
+                {error}
+              </p>
+            )}
+            <Button
+              type="submit"
+              size="lg"
+              disabled={busy || payload.trim() === ''}
+              className="rounded border border-hub-started/60 bg-hub-started/20 font-stmono text-sm uppercase tracking-[2.5px] text-hub-heading hover:bg-hub-started/30"
+            >
+              {busy
+                ? t('cloudSession.setup.probing')
+                : t('cloudSession.setup.submit')}
+            </Button>
+            <p className="text-center font-stmono text-[10px] uppercase tracking-[1.5px] text-hub-ghost">
+              {t('cloudSession.setup.checkedNote')}
+            </p>
+          </form>
+        </CornerFrame>
+        <p className="text-center text-[13px] text-hub-faint">
+          {t('cloudSession.setup.footer')}
+        </p>
       </div>
     </div>
   )
