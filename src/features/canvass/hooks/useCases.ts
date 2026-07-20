@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { RECONCILE_MS, useHealthStore } from '@/store/health-store'
+import { CASES_KEY, RECONCILE_MS, useHealthStore } from '@/store/health-store'
 import { fetchCases } from '../services/canvassService'
 
 /**
@@ -9,7 +9,7 @@ import { fetchCases } from '../services/canvassService'
  */
 export function useCases() {
   return useQuery({
-    queryKey: ['cases'],
+    queryKey: [CASES_KEY],
     queryFn: async () => {
       try {
         const cases = await fetchCases()

@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { useHealthStore } from '@/store/health-store'
+import {
+  CASES_KEY,
+  LOCATIONS_KEY,
+  LOCATION_COUNTS_KEY,
+  MEDIA_KEY,
+  useHealthStore,
+} from '@/store/health-store'
 import {
   subscribeToCaseActivity,
   type ActivityEvent,
@@ -54,7 +60,7 @@ export function useCaseRealtime(caseId: string | null): void {
       () => {
         // Any location broadcast — whoever's case — may change the
         // landing counts; the Cases view stays live with no selection.
-        void queryClient.invalidateQueries({ queryKey: ['location-counts'] })
+        void queryClient.invalidateQueries({ queryKey: [LOCATION_COUNTS_KEY] })
       }
     )
   }, [queryClient])
@@ -103,9 +109,9 @@ function handleEvent(queryClient: QueryClient, event: ActivityEvent): void {
     const caseId = event.row.case_id
     const mapped = toCanvassLocation(event.row)
     const removed = event.op === 'DELETE' || mapped === null
-    cancelStaleFetch(queryClient, ['locations', caseId])
+    cancelStaleFetch(queryClient, [LOCATIONS_KEY, caseId])
     queryClient.setQueryData<CanvassLocation[]>(
-      ['locations', caseId],
+      [LOCATIONS_KEY, caseId],
       previous =>
         // Never build the entry: setQueryData on a GC'd key would
         // resurrect it as a one-row list stamped fresh, suppressing the
@@ -131,7 +137,7 @@ function handleEvent(queryClient: QueryClient, event: ActivityEvent): void {
       })
     }
     // Any location event may mean new media too (Flow D3, spec §3).
-    void queryClient.invalidateQueries({ queryKey: ['media', caseId] })
+    void queryClient.invalidateQueries({ queryKey: [MEDIA_KEY, caseId] })
     return
   }
 
@@ -140,8 +146,8 @@ function handleEvent(queryClient: QueryClient, event: ActivityEvent): void {
   // leaves the list instead of being written back into it (review LOW).
   const removed =
     event.op === 'DELETE' || mapped === null || mapped.status === 'archived'
-  cancelStaleFetch(queryClient, ['cases'])
-  queryClient.setQueryData<CanvassCase[]>(['cases'], previous =>
+  cancelStaleFetch(queryClient, [CASES_KEY])
+  queryClient.setQueryData<CanvassCase[]>([CASES_KEY], previous =>
     previous === undefined
       ? undefined
       : upsertById(previous, mapped, event.row.id, removed).sort(

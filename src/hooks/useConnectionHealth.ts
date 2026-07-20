@@ -1,15 +1,16 @@
 import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { useHealthStore } from '@/store/health-store'
+import { isCaseDataKey, useHealthStore } from '@/store/health-store'
 
 /**
  * Cross-cutting health wiring (Phase 2.5B, AD11): browser online/offline
  * + visibility listeners, the periodic `evaluate` tick, and Flow E
  * catch-up — on reconnect/resubscribe, invalidate the case-data query
- * families via an ALLOW-list. A deny-list would silently capture every
- * family added later (signed URLs — which refresh on their own interval
- * and must not be mass-regenerated on every wifi blip — preferences,
- * M3/M5 families) (review LOW).
+ * families via the ALLOW-list (`CASE_DATA_KEY_FAMILIES`, health-store —
+ * the same tuple the hooks build their keys from). A deny-list would
+ * silently capture every family added later (signed URLs — which
+ * refresh on their own interval and must not be mass-regenerated on
+ * every wifi blip — preferences, M3/M5 families) (review LOW).
  *
  * Wake-time session refresh (`getSession`/`refreshSession` near expiry)
  * is Phase 6.2 — not wired here yet.
@@ -17,18 +18,9 @@ import { useHealthStore } from '@/store/health-store'
 
 const EVALUATE_INTERVAL_MS = 10_000
 
-/** The catch-up families — everything the reconcile net protects. */
-const CASE_DATA_KEY_FAMILIES = [
-  'cases',
-  'locations',
-  'location-counts',
-  'media',
-]
-
 function invalidateCaseData(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({
-    predicate: query =>
-      CASE_DATA_KEY_FAMILIES.includes(query.queryKey[0] as string),
+    predicate: query => isCaseDataKey(query.queryKey[0]),
   })
 }
 

@@ -1,5 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { RECONCILE_MS, useHealthStore } from '@/store/health-store'
+import {
+  LOCATION_COUNTS_KEY,
+  RECONCILE_MS,
+  useHealthStore,
+} from '@/store/health-store'
 import { fetchLocationCounts } from '../services/canvassService'
 
 /**
@@ -13,7 +17,7 @@ export function useLocationCounts(caseIds: string[]) {
   // every update); membership changes still refetch.
   const sorted = [...caseIds].sort()
   return useQuery({
-    queryKey: ['location-counts', sorted],
+    queryKey: [LOCATION_COUNTS_KEY, sorted],
     queryFn: async () => {
       try {
         const counts = await fetchLocationCounts(sorted)

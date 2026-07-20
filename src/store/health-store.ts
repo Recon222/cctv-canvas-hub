@@ -43,6 +43,35 @@ export const RECONCILE_MS = 60_000
  */
 export const SIGNED_URL_KEY_PREFIX = 'signed-url'
 
+/** Case-data query-key family prefixes — the hooks build their keys
+ * from these, never from bare strings. */
+export const CASES_KEY = 'cases'
+export const LOCATIONS_KEY = 'locations'
+export const LOCATION_COUNTS_KEY = 'location-counts'
+export const MEDIA_KEY = 'media'
+
+/**
+ * The case-data key families as one tuple: everything the reconcile net
+ * protects. The catch-up allow-list (useConnectionHealth) and the
+ * session-boundary cache purge (CanvassRoot) both consume it — renaming
+ * a family in a hook without renaming it here is a compile error, not a
+ * silently dropped invalidation (fix-delta review MEDIUM: five files
+ * agreed on bare strings with zero linkage).
+ */
+export const CASE_DATA_KEY_FAMILIES = [
+  CASES_KEY,
+  LOCATIONS_KEY,
+  LOCATION_COUNTS_KEY,
+  MEDIA_KEY,
+] as const
+
+/** Is this query-key head segment a case-data family? */
+export function isCaseDataKey(
+  value: unknown
+): value is (typeof CASE_DATA_KEY_FAMILIES)[number] {
+  return (CASE_DATA_KEY_FAMILIES as readonly unknown[]).includes(value)
+}
+
 /** `offline` pauses polling; every other state keeps data flowing. */
 export function canPoll(state: HealthState): boolean {
   return state !== 'offline'

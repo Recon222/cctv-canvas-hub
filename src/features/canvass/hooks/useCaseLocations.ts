@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
-import { RECONCILE_MS, useHealthStore } from '@/store/health-store'
+import {
+  LOCATIONS_KEY,
+  RECONCILE_MS,
+  useHealthStore,
+} from '@/store/health-store'
 import { fetchLocations } from '../services/canvassService'
 
 /** Case-partitioned location list (G6) with the reconcile safety net. */
 export function useCaseLocations(caseId: string | null) {
   return useQuery({
-    queryKey: ['locations', caseId],
+    queryKey: [LOCATIONS_KEY, caseId],
     queryFn: async () => {
       if (caseId === null) {
         throw new Error('useCaseLocations requires a selected case')
