@@ -53,6 +53,7 @@ function fakeSupabase(overrides?: {
       signOut: vi.fn(() => Promise.resolve({ error: null })),
     },
     realtime: { setAuth: vi.fn(() => Promise.resolve()) },
+    removeAllChannels: vi.fn(() => Promise.resolve([])),
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
@@ -135,9 +136,32 @@ describe('authService', () => {
 
     expect(fake.auth.signOut).toHaveBeenCalled()
     expect(mockCommands.vaultClear).toHaveBeenCalled()
+    // D12: no realtime channel may linger on a revoked token.
+    expect(fake.removeAllChannels).toHaveBeenCalled()
     // The singleton must survive sign-out so the next in-process sign-in
     // can reach getSupabase() — teardown is reserved for re-enrollment.
     expect(mockTeardownSupabase).not.toHaveBeenCalled()
+  })
+
+  it('continues sign-out when channel teardown and cloud sign-out both fail', async () => {
+    // Adversarial: the continue-on-failure contract is security-adjacent
+    // — if the try/catch were tightened away, a network failure would
+    // abort sign-out BEFORE the credential clear (review MEDIUM test
+    // gap #5).
+    const fake = fakeSupabase()
+    const raw = fake as unknown as {
+      removeAllChannels: () => Promise<unknown>
+      auth: { signOut: () => Promise<unknown> }
+    }
+    raw.removeAllChannels = vi.fn(() =>
+      Promise.reject(new Error('socket already gone'))
+    )
+    raw.auth.signOut = vi.fn(() => Promise.reject(new Error('network down')))
+    mockGetSupabase.mockReturnValue(fake)
+
+    await expect(signOut()).resolves.toBeUndefined()
+    // The vault is cleared no matter what the cloud said.
+    expect(mockCommands.vaultClear).toHaveBeenCalled()
   })
 
   it('reports whether a session is restorable', async () => {

@@ -1,11 +1,11 @@
 import {
-  ConnectedPlaceholder,
   SchemaGateScreen,
   SetupScreen,
   SignInScreen,
   useAuthBootstrap,
   useSessionStore,
 } from '@/features/cloud-session'
+import { CanvassRoot } from '@/features/canvass'
 import { cn } from '@/lib/utils'
 
 interface MainWindowContentProps {
@@ -27,7 +27,7 @@ export function MainWindowContent({ className }: MainWindowContentProps) {
       {state === 'needs-setup' && <SetupScreen />}
       {state === 'signed-out' && <SignInScreen />}
       {state === 'schema-gate' && <SchemaGateScreen />}
-      {(state === 'active' || state === 'locked') && <ConnectedPlaceholder />}
+      {(state === 'active' || state === 'locked') && <CanvassRoot />}
     </div>
   )
 }
