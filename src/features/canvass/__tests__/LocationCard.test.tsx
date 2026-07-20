@@ -1,9 +1,13 @@
-import { screen, act } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { I18nextProvider } from 'react-i18next'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import i18n from '@/i18n/config'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { useSessionStore } from '@/features/cloud-session'
 import { LocationCard } from '../components/LocationCard'
 import { LocationCardStack } from '../components/LocationCardStack'
+import { fetchLocations } from '../services/canvassService'
 import { toCanvassLocation } from '../services/mappers'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import type { CanvassLocation, LocationRow } from '../types'
@@ -13,6 +17,7 @@ import { locationRow, SEED_CASE_ID } from './fixtures'
 vi.mock('../services/canvassService', () => ({
   fetchCases: vi.fn(() => Promise.resolve([])),
   fetchLocations: vi.fn(() => Promise.resolve([])),
+  fetchLocationCounts: vi.fn(() => Promise.resolve({})),
   fetchMedia: vi.fn(() => Promise.resolve([])),
 }))
 // The realtime seam under CanvassRoot consumers never runs here, but the
@@ -114,5 +119,36 @@ describe('LocationCard', () => {
         'Locations appear as investigators add them to this case.'
       )
     ).toBeInTheDocument()
+  })
+
+  it('keeps rendering cached cards when a background reconcile fails', async () => {
+    useCanvassStore.setState({ selectedCaseId: SEED_CASE_ID, view: 'case' })
+    vi.mocked(fetchLocations).mockResolvedValue([mapped(locationRow())])
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <LocationCardStack />
+        </I18nextProvider>
+      </QueryClientProvider>
+    )
+    expect(
+      (await screen.findAllByText('QuickMart Convenience')).length
+    ).toBeGreaterThan(0)
+
+    vi.mocked(fetchLocations).mockRejectedValue(new Error('reconcile failed'))
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+
+    // Stale-visible beats blank: one transient failure must not blank an
+    // otherwise-working wall board (review product call).
+    expect(screen.getAllByText('QuickMart Convenience').length).toBeGreaterThan(
+      0
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

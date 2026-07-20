@@ -1,28 +1,40 @@
-import { screen, act } from '@testing-library/react'
+import React from 'react'
+import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { I18nextProvider } from 'react-i18next'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import i18n from '@/i18n/config'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { CasesView } from '../components/CasesView'
 import { NavRail } from '../components/NavRail'
-import { fetchCases, fetchLocations } from '../services/canvassService'
-import { toCanvassCase, toCanvassLocation } from '../services/mappers'
+import { fetchCases, fetchLocationCounts } from '../services/canvassService'
+import { toCanvassCase } from '../services/mappers'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
-import { caseRow, locationRow, SEED_CASE_ID } from './fixtures'
+import { caseRow, SEED_CASE_ID } from './fixtures'
 
 vi.mock('../services/canvassService', () => ({
   fetchCases: vi.fn(),
-  fetchLocations: vi.fn(),
+  fetchLocations: vi.fn(() => Promise.resolve([])),
+  fetchLocationCounts: vi.fn(),
   fetchMedia: vi.fn(() => Promise.resolve([])),
 }))
 vi.mock('@/lib/supabase/client')
 
 const seededCase = toCanvassCase(caseRow())
-const seededLocations = [
-  toCanvassLocation(locationRow({ id: 'l-1', status: 'complete' })),
-  toCanvassLocation(locationRow({ id: 'l-2', status: 'working' })),
-  toCanvassLocation(locationRow({ id: 'l-3', status: 'started' })),
-  toCanvassLocation(locationRow({ id: 'l-4', status: 'started' })),
-].flatMap(location => (location === null ? [] : [location]))
+
+/** Like renderWithFeatureProviders, but exposes the QueryClient. */
+function renderWithClient(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const rendered = render(
+    <QueryClientProvider client={queryClient}>
+      <I18nextProvider i18n={i18n}>{ui}</I18nextProvider>
+    </QueryClientProvider>
+  )
+  return { queryClient, ...rendered }
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -30,7 +42,9 @@ beforeEach(() => {
   vi.mocked(fetchCases).mockResolvedValue(
     seededCase === null ? [] : [seededCase]
   )
-  vi.mocked(fetchLocations).mockResolvedValue(seededLocations)
+  vi.mocked(fetchLocationCounts).mockResolvedValue({
+    [SEED_CASE_ID]: { started: 2, working: 1, complete: 1 },
+  })
 })
 
 describe('CasesView (A1)', () => {
@@ -45,12 +59,80 @@ describe('CasesView (A1)', () => {
     expect(
       screen.getByText('17600 Yonge St, Newmarket, ON')
     ).toBeInTheDocument()
-    // Status counts derived from the case's locations.
+    // Status counts come from the ONE agency-wide counts query — never a
+    // per-card location fetch (review HIGH: landing N+1).
     expect(await screen.findByText('2 Started')).toBeInTheDocument()
     expect(screen.getByText('1 Working')).toBeInTheDocument()
     expect(screen.getByText('1 Complete')).toBeInTheDocument()
+    expect(vi.mocked(fetchLocationCounts)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(fetchLocationCounts)).toHaveBeenCalledWith([SEED_CASE_ID])
     // Last activity from the case row.
     expect(screen.getByText(/Last activity/)).toBeInTheDocument()
+  })
+
+  it('renders "—" for counts it does not have, never a fabricated zero', async () => {
+    // The counts query failing must not render "0 · 0 · 0" — that reads
+    // as "nobody has worked this case" on a wall display (review HIGH).
+    vi.mocked(fetchLocationCounts).mockRejectedValue(
+      new Error('connection refused')
+    )
+    renderWithFeatureProviders(<CasesView />)
+
+    expect(await screen.findByText('24-CANVASS-0417')).toBeInTheDocument()
+    expect(await screen.findByText('— Started')).toBeInTheDocument()
+    expect(screen.getByText('— Working')).toBeInTheDocument()
+    expect(screen.getByText('— Complete')).toBeInTheDocument()
+    expect(screen.queryByText('0 Started')).not.toBeInTheDocument()
+  })
+
+  it('renders real zeros for a case absent from a successful counts fetch', async () => {
+    vi.mocked(fetchLocationCounts).mockResolvedValue({})
+    renderWithFeatureProviders(<CasesView />)
+
+    expect(await screen.findByText('0 Started')).toBeInTheDocument()
+    expect(screen.getByText('0 Working')).toBeInTheDocument()
+    expect(screen.getByText('0 Complete')).toBeInTheDocument()
+  })
+
+  it('renders the designed empty state for an agency with no cases', async () => {
+    vi.mocked(fetchCases).mockResolvedValue([])
+    renderWithFeatureProviders(<CasesView />)
+
+    expect(await screen.findByText('No active cases')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Cases appear here as soon as investigators sync them from the field.'
+      )
+    ).toBeInTheDocument()
+    // No cases ⇒ no counts round trip.
+    expect(vi.mocked(fetchLocationCounts)).not.toHaveBeenCalled()
+  })
+
+  it('renders the error alert when the first cases fetch fails', async () => {
+    vi.mocked(fetchCases).mockRejectedValue(new Error('offline'))
+    renderWithFeatureProviders(<CasesView />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not load cases from the agency cloud'
+    )
+  })
+
+  it('keeps rendering cached cases when a background reconcile fails', async () => {
+    const { queryClient } = renderWithClient(<CasesView />)
+    expect(await screen.findByText('24-CANVASS-0417')).toBeInTheDocument()
+
+    vi.mocked(fetchCases).mockRejectedValue(new Error('reconcile failed'))
+    vi.mocked(fetchLocationCounts).mockRejectedValue(
+      new Error('reconcile failed')
+    )
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+
+    // Stale-visible beats blank: the wall keeps its last-known truth.
+    expect(screen.getByText('24-CANVASS-0417')).toBeInTheDocument()
+    expect(screen.getByText('2 Started')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   // Test #111

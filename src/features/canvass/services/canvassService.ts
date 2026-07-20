@@ -1,5 +1,10 @@
 import { getSupabase } from '@/lib/supabase/client'
-import type { CanvassCase, CanvassLocation, CanvassMedia } from '../types'
+import type {
+  CanvassCase,
+  CanvassLocation,
+  CanvassMedia,
+  LocationRow,
+} from '../types'
 import {
   toCanvassCase,
   toCanvassLocation,
@@ -59,6 +64,39 @@ export async function fetchLocations(
     throw new Error(error.message)
   }
   return mapVisible(data, toCanvassLocation)
+}
+
+export type LocationStatusCounts = Record<LocationRow['status'], number>
+
+/**
+ * Landing-view status counts: ONE bounded two-column query for every
+ * visible case — never one `select('*')` per card (review HIGH: the
+ * per-card N+1 dragged full `form_data` jsonb agency-wide every render).
+ */
+export async function fetchLocationCounts(
+  caseIds: string[]
+): Promise<Record<string, LocationStatusCounts>> {
+  if (caseIds.length === 0) {
+    return {}
+  }
+  const { data, error } = await getSupabase()
+    .from('cloud_locations')
+    .select('case_id,status')
+    .in('case_id', caseIds)
+    .is('deleted_at', null)
+  if (error) {
+    throw new Error(error.message)
+  }
+  const counts: Record<string, LocationStatusCounts> = {}
+  for (const row of data) {
+    const perCase = (counts[row.case_id] ??= {
+      started: 0,
+      working: 0,
+      complete: 0,
+    })
+    perCase[row.status] += 1
+  }
+  return counts
 }
 
 export async function fetchMedia(caseId: string): Promise<CanvassMedia[]> {

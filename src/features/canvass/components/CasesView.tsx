@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { useCases } from '../hooks/useCases'
-import { useCaseLocations } from '../hooks/useCaseLocations'
+import { useLocationCounts } from '../hooks/useLocationCounts'
 import { useCanvassStore } from '../store/canvass-store'
+import type { LocationStatusCounts } from '../services/canvassService'
 import type { CanvassCase, CanvassLocation } from '../types'
 
 /**
@@ -12,12 +13,19 @@ import type { CanvassCase, CanvassLocation } from '../types'
  */
 export function CasesView() {
   const { t } = useTranslation()
-  const { data: cases, isPending, isError } = useCases()
+  const { data: cases, isPending } = useCases()
+  // ONE counts query for the whole wall — never a query per card.
+  const { data: counts } = useLocationCounts(
+    (cases ?? []).map(canvassCase => canvassCase.id)
+  )
 
   if (isPending) {
     return <p className="p-8 text-lg text-zinc-500">{t('canvass.loading')}</p>
   }
-  if (isError) {
+  // Only blank when there is genuinely no data: a failed background
+  // reconcile keeps the cached list on the wall (stale-visible beats
+  // blank — the M5 health UI carries the degradation signal).
+  if (cases === undefined) {
     return (
       <p role="alert" className="p-8 text-lg text-red-400">
         {t('canvass.cases.error')}
@@ -44,7 +52,18 @@ export function CasesView() {
       </h1>
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {cases.map(canvassCase => (
-          <CaseCard key={canvassCase.id} canvassCase={canvassCase} />
+          <CaseCard
+            key={canvassCase.id}
+            canvassCase={canvassCase}
+            // No counts data at all ⇒ unknown (the card refuses to invent
+            // zeros); a case absent from a SUCCESSFUL fetch genuinely has
+            // no locations.
+            counts={
+              counts === undefined
+                ? undefined
+                : (counts[canvassCase.id] ?? ZERO_COUNTS)
+            }
+          />
         ))}
       </div>
     </div>
@@ -57,9 +76,20 @@ const COUNTED_STATUSES: CanvassLocation['status'][] = [
   'complete',
 ]
 
-function CaseCard({ canvassCase }: { canvassCase: CanvassCase }) {
+const ZERO_COUNTS: LocationStatusCounts = {
+  started: 0,
+  working: 0,
+  complete: 0,
+}
+
+function CaseCard({
+  canvassCase,
+  counts,
+}: {
+  canvassCase: CanvassCase
+  counts: LocationStatusCounts | undefined
+}) {
   const { t } = useTranslation()
-  const { data: locations } = useCaseLocations(canvassCase.id)
 
   const lastActivity = new Date(canvassCase.updatedAt)
   return (
@@ -89,8 +119,9 @@ function CaseCard({ canvassCase }: { canvassCase: CanvassCase }) {
             key={status}
             className="rounded-full bg-zinc-800 px-3 py-1 text-sm text-zinc-300"
           >
-            {(locations ?? []).filter(l => l.status === status).length}{' '}
-            {t(`canvass.status.${status}`)}
+            {/* A number we don't have renders as "—", never a fabricated
+                zero indistinguishable from an untouched case. */}
+            {counts?.[status] ?? '—'} {t(`canvass.status.${status}`)}
           </span>
         ))}
       </div>

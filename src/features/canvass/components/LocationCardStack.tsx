@@ -19,7 +19,7 @@ const STATUS_ORDER: CanvassLocation['status'][] = [
 export function LocationCardStack() {
   const { t } = useTranslation()
   const caseId = useCanvassStore(state => state.selectedCaseId)
-  const { data: locations, isPending, isError } = useCaseLocations(caseId)
+  const { data: locations, isPending } = useCaseLocations(caseId)
 
   if (caseId === null) {
     return (
@@ -32,7 +32,9 @@ export function LocationCardStack() {
   if (isPending) {
     return <p className="p-8 text-lg text-zinc-500">{t('canvass.loading')}</p>
   }
-  if (isError) {
+  // Only blank when there is genuinely no data — a failed background
+  // reconcile keeps the cached cards rendering (stale-visible beats blank).
+  if (locations === undefined) {
     return (
       <p role="alert" className="p-8 text-lg text-red-400">
         {t('canvass.locations.error')}

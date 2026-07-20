@@ -8,7 +8,7 @@ import {
   resetHealthStore,
   RECONCILE_MS,
 } from '@/store/health-store'
-import { fetchCases } from '../services/canvassService'
+import { fetchCases, fetchLocationCounts } from '../services/canvassService'
 import { useCases } from '../hooks/useCases'
 import { useCaseLocations } from '../hooks/useCaseLocations'
 import { useCaseMedia } from '../hooks/useCaseMedia'
@@ -32,6 +32,7 @@ function fakeQuery(result: QueryResult) {
     is: vi.fn(),
     neq: vi.fn(),
     eq: vi.fn(),
+    in: vi.fn(),
     order: vi.fn(),
     limit: vi.fn(),
     then: (resolve: (value: QueryResult) => unknown) =>
@@ -41,6 +42,7 @@ function fakeQuery(result: QueryResult) {
   chain.is.mockReturnValue(chain)
   chain.neq.mockReturnValue(chain)
   chain.eq.mockReturnValue(chain)
+  chain.in.mockReturnValue(chain)
   chain.order.mockReturnValue(chain)
   chain.limit.mockReturnValue(chain)
   return chain
@@ -170,6 +172,38 @@ describe('canvass queries', () => {
     expect(cached?.[0]?.mime).toBe('image/jpeg')
     expect(cached?.[0]?.bucket).toBe('images')
     expect(cached?.[0]?.path).toContain(SEED_CASE_ID)
+  })
+
+  it('aggregates landing counts with one two-column query', async () => {
+    const chain = fakeQuery({
+      data: [
+        { case_id: 'c1', status: 'started' },
+        { case_id: 'c1', status: 'started' },
+        { case_id: 'c1', status: 'complete' },
+        { case_id: 'c2', status: 'working' },
+      ],
+      error: null,
+    })
+    const from = installClient(chain)
+
+    const counts = await fetchLocationCounts(['c1', 'c2'])
+
+    // ONE round trip, two columns, tombstones excluded server-side —
+    // never a per-card select('*') (review HIGH: landing N+1).
+    expect(from).toHaveBeenCalledTimes(1)
+    expect(from).toHaveBeenCalledWith('cloud_locations')
+    expect(chain.select).toHaveBeenCalledWith('case_id,status')
+    expect(chain.in).toHaveBeenCalledWith('case_id', ['c1', 'c2'])
+    expect(chain.is).toHaveBeenCalledWith('deleted_at', null)
+    expect(counts).toEqual({
+      c1: { started: 2, working: 0, complete: 1 },
+      c2: { started: 0, working: 1, complete: 0 },
+    })
+
+    // No cases ⇒ no query at all.
+    from.mockClear()
+    await expect(fetchLocationCounts([])).resolves.toEqual({})
+    expect(from).not.toHaveBeenCalled()
   })
 
   // Test #44
