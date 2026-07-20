@@ -6,12 +6,14 @@
 
 **TDD red line:** every test below is written **before** its phase's implementation and must **fail** until that phase lands. Test numbering (`#`) runs continuously across the whole document (post-review additions are appended — numbers never shift). Mock strategy, fixtures, and wiring follow this repo's existing conventions (`docs/developer/testing.md`, `src/test/*` helpers) — this spec pins **what each test proves**, not how it's wired.
 
-**One new seam the repo's conventions don't yet cover:** tests exercising services that wrap supabase-js directly (#11, #15–19, #41–51, #77–78) mock the client at its single choke point — `vi.mock('@/lib/supabase/client')` with a minimal fake returned by `getSupabase()` covering only the touched surfaces (`auth.signInWithPassword/getSession/refreshSession/signOut`, the `from().select()…` chain, `channel().on().subscribe()`, `storage.from().createSignedUrl`). Test #11 is covered by the same seam via `createProbeClient` — the enrollment probe runs before `initSupabase`, so it uses the transient probe client exported from `client.ts`, not `getSupabase()`. The fake's shape gets documented in `docs/developer/supabase-integration.md` (Phase 6.3A).
+**Ported tests (A2, Phase 6.3A):** the adapted `processTerminal` port brings its own test files for the retained surface (`ansiParser`, `vtEngine`/`TextLane` — fix-delta 2 cut `rich/*` with its `DisplayItem` contract), adapted to compile against canvas-hub homes; files covering the discarded dispatcher/sources are dropped with their subjects. Ported tests run in the gate (`check:all` runs `test:run`) but are **excluded from the numbered count in this document** — the numbering counts canvas-hub-authored tests only.
+
+**One new seam the repo's conventions don't yet cover:** tests exercising services that wrap supabase-js directly (#11, #15–19, #41–51, #77–78) mock the client at its single choke point — `vi.mock('@/lib/supabase/client')` with a minimal fake returned by `getSupabase()` covering only the touched surfaces (`auth.signInWithPassword/getSession/refreshSession/signOut`, the `from().select()…` chain, `channel().on().subscribe()`, `storage.from().createSignedUrl`). Test #11 is covered by the same seam via `createProbeClient` — the enrollment probe runs before `initSupabase`, so it uses the transient probe client exported from `client.ts`, not `getSupabase()`. The fake's shape gets documented in `docs/developer/supabase-integration.md` (Phase 6.4A — the docs pass; renumbered from 6.3 by A2).
 
 **Run commands:**
 
 - TypeScript (scoped): `npx vitest run src/features/cloud-session src/features/canvass src/lib/supabase`
-- Rust: `cd src-tauri && cargo test -p secure-vault`
+- Rust: `cd src-tauri && cargo test -p secure-vault -p platform-utils` (platform-utils gains #127–129 at 6.3B′)
 - Full gate: `npm run check:all`
 
 ---
@@ -52,9 +54,11 @@
 | `src/features/canvass/__tests__/casesView.test.tsx` (A1, #110–111)     | 2.4   | NEW       |
 | `src/lib/supabase/secondary-client.test.ts` (A1, #114–116)             | 7.2   | NEW       |
 | `src/features/canvass/__tests__/secondaryWindows.test.tsx` (A1, #112–113, #117–119, #121) | 7.1–7.3 | NEW |
-| `src/features/cloud-session/__tests__/diagnostics.test.tsx` (A1, #120)  | 7.3   | NEW       |
+| `src/features/process-panel/__tests__/processPanel.test.tsx` (A2, #120, #122–125) | 6.3   | NEW       |
+| `src/features/canvass/__tests__/imageViewer.test.tsx` (A2, #126)        | 4.3   | NEW       |
+| `src-tauri/crates/platform-utils/src/lib.rs` (inline `#[cfg(test)]`, A2 fix round, #127–129) | 6.3 | additions |
 
-No existing test file is deleted or rewritten. One existing file receives **additions** only (`src/lib/commands/commands.test.ts`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
+No existing test file is deleted or rewritten, with one sanctioned exception: **#98 is amended in place at Phase 6.3C** (the feed relocates to the panel — the test flips to assert the recomposed dashboard). Two existing files receive **additions** only (`src/lib/commands/commands.test.ts`, `src-tauri/crates/platform-utils/src/lib.rs`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
 
 ---
 
@@ -87,7 +91,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 18  | Should fail the schema gate on any other version                            | version 2 / missing row ⇒ `'mismatch'`                                   |
 | 19  | Should clear vault and client state on sign-out                             | `signOut()` ⇒ vault cleared + subsequent `getSupabase` re-init required  |
 
-**M1 verification obligation (not a numbered test — app-crate Rust is not unit-testable on Windows):** before closing M1, grep-review the vault service/commands for any `{value:?}`/`{result:?}`/argument logging (the 1.2A no-log constraint), and verify Flow B relaunch-restore against the running app — a per-write `generate_key()` regression manifests as forced re-sign-in on every restart. Re-checked in the Phase 6.3B pass.
+**M1 verification obligation (not a numbered test — app-crate Rust is not unit-testable on Windows):** before closing M1, grep-review the vault service/commands for any `{value:?}`/`{result:?}`/argument logging (the 1.2A no-log constraint), and verify Flow B relaunch-restore against the running app — a per-write `generate_key()` regression manifests as forced re-sign-in on every restart. Re-checked in the Phase 6.3B pass (A2: 6.3B is the `read_log_tail`/`vault_status` Rust MODIFY touching the same `cloud_session` services — the re-check rides that touch).
 
 ## Phase 1.3 — session store + bootstrap
 
@@ -251,7 +255,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | --- | -------------------------------------------------------------------- | ------------------------------------------------- |
 | 96  | Should show status counts for the selected case                      | started/working/complete counts match seed        |
 | 97  | Should derive the roster from location rows (AD8)                    | investigators grouped with their locations/status |
-| 98  | Should embed the activity feed                                       | feed rendered within dashboard                    |
+| 98  | Should embed the activity feed (M5 interim home)                     | feed rendered within dashboard at M5 (5.3A); **Phase 6.3C amends this test in place** to assert the recomposed dashboard — feed absent (relocated to the panel's ACTIVITY lane), roster occupying the freed column |
 | 99  | Should register the M5 palette commands (A1)                         | `canvass-view-cases` / `canvass-view-case` / `canvass-view-map` + `session-sign-out` in the registry (`session-lock-now` registers in 6.1, with its unlock overlay) |
 
 ## Phase 6.1 — idle lock
@@ -299,7 +303,7 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 
 ## Revision R4 additions (Amendment A1 — three-view IA + multi-window)
 
-#110–111 belong to **Phase 2.4**; #112–113 to **Phase 7.1**; #114–117 to **Phase 7.2**; #118–121 to **Phase 7.3** (counted there in the summary).
+#110–111 belong to **Phase 2.4**; #112–113 to **Phase 7.1**; #114–117 to **Phase 7.2**; #118–119 and #121 to **Phase 7.3**; **#120 reassigned by A2 to Phase 6.3** (the ProcessPanel owns diagnostics content).
 
 | #   | Test Description                                                          | Key Assertion                                                                 |
 | --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -310,11 +314,26 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | 114 | Should authenticate secondary REST requests with the pushed user token     | client is created with the `accessToken` callback; a REST request carries the user bearer token, NOT the publishable key (anon REST = RLS-empty board); no refresh ticker |
 | 115 | Should never touch the vault from a secondary context                      | secondary init + reads issue zero `vaultGet`/`vaultSet`/`vaultClear` calls (T9) |
 | 116 | Should update the secondary client when main rebroadcasts a refreshed token | `session-token` event ⇒ `updateSecondaryToken` swaps the `accessToken` closure token AND calls `realtime.setAuth` (no `onAuthStateChange` exists in a secondary) |
-| 117 | Should tear down and terminalize on `session-ended` (sign-out only)        | event ⇒ channels removed + realtime disconnected + token discarded BEFORE the ended screen (no broadcast delivered after the event); `session-locked` instead ⇒ this context's session-store goes `locked` (interaction in step with main), board keeps flowing, content unchanged (AD6 parity + owner directive); no credential prompt exists in the secondary context |
-| 118 | Should host the view and consume the case-id round-trip                    | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient; `view-context {view, caseId}` drives `selectCase(caseId)` + `subscribeToCaseActivity(caseId, …)` (the receive side of the H2/H3 contract) |
+| 117 | Should tear down and terminalize on `session-ended` (sign-out only)        | event ⇒ channels removed + realtime disconnected + token discarded BEFORE the ended screen (no broadcast delivered after the event); teardown also runs the **per-context session-exit purge** — this context's stores reset + its own QueryClient's `CASE_DATA_KEY_FAMILIES` entries removed (doc 01 §5.4 invariant); `session-locked` instead ⇒ this context's session-store goes `locked` (interaction in step with main), board keeps flowing, content unchanged (AD6 parity + owner directive); no credential prompt exists in the secondary context |
+| 118 | Should host the view and consume the case-id round-trip                    | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient; `view-context {view, caseId}` drives `selectCase(caseId)` + the mount-scoped subscription — `subscribeToCaseActivity(getCaseId, …)` in the five-arg thunk form (doc 01 §5.2), with `getCaseId` reading THIS context's canvass-store (a positional case id is a type error and would freeze the channel to one case) (the receive side of the H2/H3 contract) |
 | 119 | Should offer pop-out only on case and map rail entries                     | `cases` entry has no pop-out affordance (bound to main)                        |
-| 120 | Should render diagnostics content                                          | health detail, log tail (via `readLogTail`), vault/keyring status, app + schema versions present |
+| 120 | Should render diagnostics content in the SYSTEM lane (A2: panel, not window) | health detail, log tail (via the diagnostics service wrapping `readLogTail`), vault/keyring status, app + schema versions present |
 | 121 | Should keep main-window state untouched when a secondary closes            | close event ⇒ canvass-store selection/view unchanged in main                   |
+
+## Revision R5 additions (Amendment A2 — process panel + design bindings)
+
+#122–125 belong to **Phase 6.3**; #126 to **Phase 4.3**; #127–129 (Rust — `platform-utils::tail_log`, A2 fix round) to **Phase 6.3B′** (counted under 6.3 in the summary). Ported 6.3A test files are **not numbered here** — see the ported-tests rule in the preamble.
+
+| #   | Test Description                                                          | Key Assertion                                                                 |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 122 | Should render canvass activity in the ACTIVITY lane                        | activity-ring entries appear newest-first — the lane renders the `activitySlot` ReactNode that `CanvassRoot` fills with `<ActivityFeed />` (composition; no cross-feature import — fix-delta 2) |
+| 123 | Should feed the SYSTEM lane from health transitions + the log tail         | health-store transition rows + polled `readLogTail` lines render source-tagged; a failed tail read renders an inline error row, board unaffected |
+| 124 | Should toggle lanes and collapse to the SYS tab                            | ACTIVITY ↔ SYSTEM toggle swaps content; collapse renders the slim tab; expand restores lane + scroll state |
+| 125 | Should default the panel posture per view, with user toggles winning       | fresh mount on `cases`/`case` ⇒ expanded, ACTIVITY active; first entry to `map` ⇒ SYS tab; **a manual expand on `map` survives `map → case → map`** (view-derived posture applies on first entry per view only — `viewsSeen`; explicit toggles win thereafter, fix-delta 2); expanded-on-map overlays the card stack — nothing reflows |
+| 126 | Should wrap through a location's photos in the ImageViewer                 | ‹ from photo 1 lands on photo N, › from N lands on 1; header shows `PHOTO n OF N` |
+| 127 | Should tail cleanly across a mid-codepoint slice boundary (Rust)           | `tail_log(bytes, n, partial_first_line: true)` on a slice starting mid-UTF-8-codepoint never errors — `from_utf8_lossy` + the flagged first-partial-line drop yields only clean lines |
+| 128 | Should clamp to the last `max_lines` lines (Rust)                          | input above the clamp returns exactly the newest `max_lines` lines             |
+| 129 | Should return the whole input when shorter than the window (Rust)          | `tail_log(bytes, n, partial_first_line: false)` ⇒ all lines intact, first line included — the caller passes `false` because it never seeked (fix-delta 2: the flag is the caller's knowledge, not inferable from bytes) |
 
 ---
 
@@ -322,14 +341,14 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 
 | Phase | Tests | Phase | Tests | Phase | Tests |
 | ----- | ----- | ----- | ----- | ----- | ----- |
-| 1.1   | 6     | 2.5   | 5     | 4.3   | 3     |
+| 1.1   | 6     | 2.5   | 5     | 4.3   | 4     |
 | 1.2   | 14    | 3.1   | 2     | 5.1   | 4     |
 | 1.3   | 5     | 3.2   | 2     | 5.2   | 3     |
 | 1.4   | 4     | 3.3   | 5     | 5.3   | 4     |
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
-| 2.3   | 6     | 4.2   | 4     | 6.3   | 0     |
-| 2.4   | 11    | 7.1   | 2     | 7.2   | 4     |
-| 7.3   | 4     |       |       |       |       |
+| 2.3   | 6     | 4.2   | 4     | 6.3   | 8 (5 TS + 3 Rust) |
+| 2.4   | 11    | 7.1   | 2     | 6.4   | 0     |
+| 7.2   | 4     | 7.3   | 3     |       |       |
 
-**Total: 121** (Rust 6 · TypeScript 115; #107 → R1/Phase 2.2, #108 → R2/Phase 6.1, #109 → R3/Phase 1.2, #110–121 → R4/A1: Phase 2.4 + M7) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 129** (Rust 9 — 6 `secure-vault` + 3 `platform-utils` · TypeScript 120; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–129 → R5/A2 with #127–129 the Phase 6.3B′ Rust tests; ported 6.3A test files are excluded — this count is canvas-hub-authored tests only) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
