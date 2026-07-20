@@ -4,7 +4,7 @@
 
 **Authority split:** this doc is authoritative for **data contracts and flows**; the implementation plan for **file-level technical detail and decisions**; the test spec for **coverage**.
 
-**Basis:** `docs/plans/initial plan/canvas-hub-spec.md` (product spec; §3 is the pinned cloud contract) + the mobile repo as contract source of truth (`extraction_case_notes_react_native_expo`: `provisioning-sql.ts`, `sync-mapper.ts`, `enrollment-service.ts`, `supabase-client.ts`) + live verification against the provisioned `canvas-hub-dev` project (2026-07-19; see `CLAUDE.local.md`). **Supersedes:** nothing — first planning set.
+**Basis:** `docs/plans/initial plan/canvas-hub-spec.md` (product spec; §3 is the pinned cloud contract) + the mobile repo as contract source of truth (`extraction_case_notes_react_native_expo`: `provisioning-sql.ts`, `sync-mapper.ts`, `enrollment-service.ts`, `supabase-client.ts`) + live verification against the provisioned `canvas-hub-dev` project (2026-07-19; see `CLAUDE.local.md`). **Supersedes:** nothing — first planning set. **Amended A1 (2026-07-19, post-M1, product decisions):** three-view information architecture on a left nav rail (Cases · Case dashboard · Map), multi-window pop-out topology (M7), diagnostics window. See doc 02 AD12–AD14.
 
 ---
 
@@ -94,16 +94,19 @@ src/
 ├── features/canvass/                      NEW   the live board feature
 │   ├── components/  (CanvassRoot, MapCanvas, MarkerLayer, LocationCardStack,
 │   │                 LocationCard, MediaThumb, VideoPlayer, DashboardView,
-│   │                 ActivityFeed, CaseSwitcher)                                   NEW
+│   │                 ActivityFeed, NavRail, CasesView, SecondaryRoot)              NEW
 │   ├── hooks/       (useCases, useCaseLocations, useCaseMedia, useCaseRealtime,
 │   │                 useMediaPolling, useSignedUrl)                                NEW
 │   ├── services/    (canvassService, realtimeService, mediaService, geo,
 │   │                 mappers, attention)                                           NEW
 │   ├── store/       (canvass-store.ts)                                             NEW
 │   ├── types/ · __tests__/ · index.ts                                              NEW
-├── components/layout/MainWindow.tsx       MODIFIED  drop sidebar panels; render CanvassRoot
+├── components/layout/MainWindow.tsx       MODIFIED  drop sidebar panels; render NavRail + active view (A1)
+│   (A1: `LeftSideBar` is repurposed as a slim icon NavRail — navigation chrome
+│    switching Cases / Case dashboard / Map, NOT an info panel; spec §4's
+│    "no edge-docked panels" governs location info, which stays floating.)
 ├── components/layout/MainWindowContent.tsx MODIFIED  host CanvassRoot (or session screens)
-├── lib/commands/feature-commands.ts       MODIFIED  palette entries (view toggle, lock now…)
+├── lib/commands/feature-commands.ts       MODIFIED  palette entries (per-view go-tos, lock now…)
 └── locales/{en,fr,ar}.json                MODIFIED  cloudSession.* / canvass.* keys
 
 src-tauri/
@@ -115,7 +118,7 @@ src-tauri/
 ├── Cargo.toml                             MODIFIED  workspace member + keyring dep
 └── tauri.conf.json                        MODIFIED  CSP for Supabase + Mapbox + blob workers
 
-DELETED: nothing (LeftSideBar/RightSideBar become unreferenced → flagged for a later /cleanup pass; see §11)
+DELETED: nothing (A1: LeftSideBar is repurposed into the NavRail; RightSideBar stays unreferenced → later /cleanup; see §11)
 ```
 
 ## 5. Data Contracts
@@ -225,7 +228,7 @@ interface LocationFormData {
     dvrTypeBrand?: string
     serialModelNumber?: string
     dvrUsername?: string
-    dvrPassword?: string // rendered PLAINLY when unlocked (spec §3/§7); masked only while idle-locked (AD6)
+    dvrPassword?: string // an ordinary string like an address (owner directive 2026-07-20): rendered plainly ALWAYS, never masked anywhere — no secrecy semantics at any layer (spec §3/§7)
     numberOfChannels?: string
     activeCameras?: string
     recordingSchedule?: string
@@ -326,7 +329,7 @@ interface AppPreferences {
 | `signed-out`    | config present, no session                   | client initialized, no subscriptions  | SignInScreen                         |
 | `schema-gate`   | signed in, `app_meta.schema_version ≠ 1`     | block all data features               | SchemaGateScreen (version mismatch)  |
 | `active`        | signed in, gate passed, not locked           | queries + realtime + polling run      | CanvassRoot (board)                  |
-| `locked`        | `active` + idle timer elapsed                | **data keeps flowing** — queries, realtime, and media polling all continue (a wall display is idle by default; only `offline`/`signed-out` stop data); interaction dead | Board visible under LockOverlay; DVR credentials masked; password re-auth to resume |
+| `locked`        | `active` + idle timer elapsed                | **data keeps flowing** — queries, realtime, and media polling all continue (a wall display is idle by default; only `offline`/`signed-out` stop data); interaction dead | Board visible and **unchanged** under LockOverlay (DVR credentials are ordinary strings — never masked); password re-auth to resume |
 
 **Connection health** (global `src/store/health-store.ts` — cross-cutting by design, see AD11; pure `evaluate()` exported alongside):
 
@@ -385,7 +388,7 @@ interface AppPreferences {
 
 **Flow F — idle lock / unlock.**
 
-1. No pointer/keyboard for `idle_lock_minutes` → `locked`: overlay swallows input, DVR credentials mask, board stays visible (it's a wall display in a secured room — going dark defeats the product; AD6).
+1. No pointer/keyboard for `idle_lock_minutes` → `locked`: overlay swallows input, board stays visible and unchanged (it's a wall display in a secured room — going dark defeats the product; AD6. Content is never altered by lock — DVR credentials are ordinary strings, owner directive).
 2. Unlock: password re-auth via `signInWithPassword(signed_in_email, pw)` → `active`. Failed attempts stay locked.
 
 ## 7. Integration Points
@@ -394,7 +397,7 @@ interface AppPreferences {
 | ----------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
 | `src/components/layout/MainWindow.tsx`          | drop sidebar panels/handles; render content full-bleed          | spec §4: map-maximal, no edge-docked panels    |
 | `src/components/layout/MainWindowContent.tsx`   | render session screens / `CanvassRoot` by session state         | single mount point, App.tsx untouched          |
-| `src/lib/commands/feature-commands.ts`          | add palette commands (toggle dashboard, lock now, sign out)     | template command-centric design                |
+| `src/lib/commands/feature-commands.ts`          | add palette commands (per-view go-tos, lock now, sign out)      | template command-centric design                |
 | `src/test/setup.ts`                             | mock new `cloud_session` commands                               | template testing convention                    |
 | `locales/en.json` / `fr.json` / `ar.json`       | `cloudSession.*`, `canvass.*` keys                              | i18n rule: all strings in locales              |
 | `package.json`                                  | `@supabase/supabase-js`, `mapbox-gl`, `react-map-gl`            | §9 Dependencies                                |
@@ -417,7 +420,7 @@ Honesty: 12 integration-point rows, ≈17 physical files once multi-file rows ar
 | OD3 | Media freshness cadence                 | per-location visible-only queries · one per-case query     | **one per-case query @ 20 s** + event-triggered refetch                   |
 | OD4 | Map binding                             | raw `mapbox-gl` · `react-map-gl` wrapper                   | **react-map-gl v8** (declarative markers/viewport; React 19-ready)        |
 | OD5 | Session-at-rest storage                 | keychain-only · key-in-keychain + ciphertext file          | **vault split** (Windows credential blob ≈ 2.5 KB cap; mobile precedent)  |
-| OD6 | Idle lock UX on a wall display          | blank/black lock · interaction lock + credential masking   | **interaction lock + masking** (board stays visible; spec §1 vs §7 tension resolved) |
+| OD6 | Idle lock UX on a wall display          | blank/black lock · interaction-only lock                   | **interaction-only lock** (board visible and unchanged; spec §1 vs §7 tension resolved; content never altered — owner directive) |
 | OD7 | Activity feed persistence               | in-memory ring · persisted (SQLite/file)                   | **in-memory, cap 200** (V1; persistence has no stated consumer)           |
 | OD8 | Investigator identity source            | auth admin listing · `requester_name` from location rows   | **requester_name** (publishable key cannot list auth users)               |
 | OD9 | Sidebars of the template shell          | delete files · stop rendering, files dormant               | **stop rendering** (smallest diff; delete in a later /cleanup)            |
@@ -443,18 +446,28 @@ Long-lived coordinator session on an always-on host (G5). Enumerated:
 | #   | Threat                                                       | Mitigation                                                                                       |
 | --- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | T1  | Session theft from disk (image/backup/exfil)                 | AES-256-GCM vault; key only in OS keychain; ciphertext useless alone (AD5)                       |
-| T2  | Unattended console interaction                               | idle interaction-lock + password re-auth; DVR credentials masked while locked (AD6)              |
+| T2  | Unattended console interaction                               | idle interaction-lock + password re-auth (AD6). Display content is not part of this threat: DVR credentials are ordinary strings by owner directive — never treated as secrets at any layer |
 | T3  | Credential/token leakage via logs or error UI                | tokens never logged; error paths surface messages, never session objects; no session in devtools-persisted state |
 | T4  | Publishable key + URL on disk in plain JSON                  | by design — designed-public, RLS-bounded values (mobile enrollment QR carries the same pair)     |
 | T5  | Signed URL leakage (bearer URLs grant temporary media access)| short TTL (60 min), held in query cache only, never logged/persisted                             |
 | T6  | Stale board misleading live operations                       | health state machine + STALE banner; last-updated always visible (G4 — a safety mitigation, not UX polish) |
 | T7  | Webview code injection reading agency data                   | strict CSP (no remote script; mapbox workers via `blob:` only; `connect-src` allow-list of the two hosts) |
 | T8  | V1 write-path abuse from the hub                             | no write code paths exist; cloud RLS refuses coordinator writes anyway (verified live: HTTP 403) |
+| T9 (A1) | Secondary pop-out windows widening the session attack surface | main window is the **sole auth owner** — vault, keyring, and token refresh never run in a secondary context; secondaries hold the access token in memory only (pushed via Tauri event, `persistSession: false`), so closing them leaves nothing at rest (AD13) |
 
-**Accepted risks (explicit):** DVR credentials are rendered in clear when unlocked — that is the product requirement ("police inside a police building", spec §3/§7). Agency-wide reads are V1's shipped RLS posture; the hub scopes by case in UI/state only — real per-case authorization is V2's `case_members`. The OS user account securing the keychain is the trust anchor; a compromised OS session defeats the vault — mitigated operationally (secured room, kiosk posture), not cryptographically.
+**Accepted risks (explicit):** DVR credentials are ordinary data, not secrets — rendered in clear always, in every state and every window, exactly like an address (owner directive 2026-07-20; "police inside a police building", spec §3/§7). No layer of this app gives them secrecy semantics. Agency-wide reads are V1's shipped RLS posture; the hub scopes by case in UI/state only — real per-case authorization is V2's `case_members`. The OS user account securing the keychain is the trust anchor; a compromised OS session defeats the vault — mitigated operationally (secured room, kiosk posture), not cryptographically.
 
 ## 11. Net Effect
 
-Additive feature set; nothing deleted in V1. Dormant after this lands (candidates for a later `/cleanup` pass, deliberately out of scope): `LeftSideBar`/`RightSideBar` components + their ui-store visibility state and palette/menu toggles (OD9), and the template's `example-feature`/`quick-pane` demo surfaces. The template's recovery, preferences, command-palette, i18n, and quality-gate infrastructure is used as-is.
+Additive feature set; nothing deleted in V1. Dormant after this lands (candidates for a later `/cleanup` pass, deliberately out of scope): `RightSideBar` + ui-store visibility state and palette/menu toggles (OD9; **A1: `LeftSideBar` exits dormancy — repurposed as the NavRail**), and the template's `example-feature` demo surface. The `quick-pane` feature is retained as the **reference implementation for secondary windows** (M7 reuses its create-once/show-hide lifecycle and async-command discipline — `AGENTS.md` "Window-Creating Commands Must Be `async`"). The template's recovery, preferences, command-palette, i18n, and quality-gate infrastructure is used as-is.
+
+### A1 — Multi-window topology (M7)
+
+The **case dashboard and map views can pop out as secondary Tauri windows** (two-screen command centre: map on the wall TV, dashboard at the operator desk); the **Cases view stays bound** to the main window; a small **diagnostics window** (health-state detail, log tail, vault status, versions) rides the same machinery. Pinned decisions:
+
+1. **Separate JS contexts are the ground truth** — no shared React/Zustand/Query state, no shared supabase client. Each secondary window runs its own read-only data stack.
+2. **Main window is the sole auth owner** (T9). Secondaries never touch the vault or keyring and never run a refresh ticker: two GoTrueClients on one storage key is a documented concurrency hazard. Token delivery: initial = **handshake** (`secondary-ready` → main replies `session-token` + `view-context {view, caseId}`); ongoing pushes on every `TOKEN_REFRESHED`. Secondaries run clients created with the **`accessToken` callback option** — the mechanism that authenticates PostgREST, storage, AND realtime from the pushed token (their `auth.*` namespace is a throwing proxy by design). **`session-ended` fires on sign-out only**; idle lock emits `session-locked`/`session-unlocked` and secondaries mirror AD6 — seed their own-context session-store `locked`/`active` so interaction locks in step with main while the board keeps flowing unchanged (a wall display is idle by default; lock revokes nothing and alters no content). Secondaries are **refresh-passive**: they never mount the wake-refresh health path (`auth.refreshSession()` throws under the accessToken proxy) — their health display feeds from channel status and query results only. On `session-ended`, secondaries tear down realtime and drop the token before overlaying (the access token outlives sign-out by up to ~1 h).
+3. **Window lifecycle copies quick-pane**: create-once/show-hide, native-✕ handling, and **async Rust commands only** (sync window commands deadlock WebView2 on Windows — AGENTS.md CRITICAL).
+4. **The Claude-design prototype never sees multi-window** — it designs the three views + rail single-window; pop-out is wiring, not design.
 
 **Upstream notes (for the mobile/cloud team, not this app):** the shipped RPCs (`locations_for_case`, `locations_in_view`) return soft-deleted rows and omit `user_id`/`form_data` — verified live. V1 routes around this (AD2); a v2 RPC revision should add a `deleted_at is null` predicate. Putting `cloud_media_files` on the realtime substrate remains the known V2 cloud-side addition (spec §3).

@@ -258,6 +258,18 @@ specta-typescript = "=0.0.9"
 
 Note: Using exact versions (`=`) during RC phase to prevent breaking changes.
 
+## Secondary-Window Checklist
+
+Referenced by AGENTS.md ("Window-Creating Commands Must Be `async`"). Every secondary window (quick pane, view pop-outs, diagnostics) follows all of these:
+
+1. **Commands are `async fn`** — a sync command that builds/destroys/shows a `WebviewWindow` deadlocks WebView2 on Windows (multi-second hang → ghost window). macOS NSPanel is the inverse (main-thread/`setup()`); see the platform notes in AGENTS.md.
+2. **Create-once, then show/hide or focus** — never rebuild an existing label. Lazy creation must handle the double-open race: async commands interleave, so on a build error **re-check whether the window now exists** — if it does, focus it and return Ok; destroy only on genuine partial creation (never destroy the window a concurrent call just built).
+3. **Destroy on failed creation** — a half-created window with no webview is a ghost: its ✕ does nothing and the label is burned. On any post-build wiring error, `destroy()` before returning Err.
+4. **Native ✕ → `destroy()`, not `hide()`**, for decorated windows whose state should reset per open (handle `WindowEvent::CloseRequested` deliberately either way — decide reset-per-open vs. persistent and say so in the feature).
+5. **Set a background color matching the app theme** on the window config and ship an **entry CSS reset** in the window's HTML — otherwise Windows flashes a white rectangle before the webview paints.
+6. **Own capability file per window label** — never add secondary labels to `default.json` (that grants main's full permission set). Copy the `capabilities/quick-pane.json` pattern: minimal set, and remember `core:event:default` if the window must `listen`/`emit` — a label in no capability file has zero permissions and event listeners silently never fire.
+7. **Separate JS context** — no shared state with main. Communicate via Tauri events; each entry point (vite multi-entry, `quick-pane.html` precedent) bootstraps its own providers.
+
 ## References
 
 - [tauri-specta GitHub](https://github.com/specta-rs/tauri-specta)

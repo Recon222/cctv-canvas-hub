@@ -49,6 +49,10 @@
 | `src/features/canvass/__tests__/DashboardView.test.tsx`                | 5.3   | NEW       |
 | `src/lib/commands/commands.test.ts`                                    | 5.3, 6.1 (#108) | additions |
 | `src/features/cloud-session/__tests__/idleLock.test.tsx`               | 6.1   | NEW       |
+| `src/features/canvass/__tests__/casesView.test.tsx` (A1, #110–111)     | 2.4   | NEW       |
+| `src/lib/supabase/secondary-client.test.ts` (A1, #114–116)             | 7.2   | NEW       |
+| `src/features/canvass/__tests__/secondaryWindows.test.tsx` (A1, #112–113, #117–119, #121) | 7.1–7.3 | NEW |
+| `src/features/cloud-session/__tests__/diagnostics.test.tsx` (A1, #120)  | 7.3   | NEW       |
 
 No existing test file is deleted or rewritten. One existing file receives **additions** only (`src/lib/commands/commands.test.ts`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
 
@@ -119,7 +123,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 37  | Should surface the latest arrival across multiple visits                    | max `arrivalDateTime` wins (multi-visit seed shape)              |
 | 38  | Should degrade gracefully on older-shape/empty form_data                    | all enrichment fields null/absent; no throw, no "undefined" text |
 | 39  | Should label the investigator from requester_name with uid fallback         | empty `requester_name` ⇒ shortened `user_id`                     |
-| 40  | Should keep DVR credentials present on the view-model                       | `dvrUsername`/`dvrPassword` pass through unmasked (AD6 renders)  |
+| 40  | Should keep DVR credentials present on the view-model                       | `dvrUsername`/`dvrPassword` pass through verbatim — ordinary strings, no secrecy handling at any layer (owner directive) |
 
 ## Phase 2.2 — queries
 
@@ -150,9 +154,9 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 53  | Should cap the activity ring at 200 entries                               | 201st push evicts the oldest                                   |
 | 54  | Should scope activity entries to their case                               | entries carry `caseId`; other-case entries not shown           |
 | 55  | Should stamp and expire attention marks                                   | stamp sets timestamp; `clearExpiredAttention(now+TTL)` removes |
-| 56  | Should toggle view between map and dashboard                              | `setView` round-trips                                          |
+| 56  | Should navigate across the three views (A1)                               | `setView` round-trips `'cases'` / `'case'` / `'map'`           |
 | 57  | Should render card fields from the view-model                             | name, address, status, investigator, arrival visible           |
-| 58  | Should render DVR credentials plainly when unlocked                       | username/password text present (spec §3 requirement)           |
+| 58  | Should render DVR credentials plainly, always                             | username/password text present in every session state (spec §3; owner directive — ordinary strings) |
 | 59  | Should reflect status with distinct styling per state                     | started/working/complete map to distinct classes               |
 | 60  | Should render designed empty states                                       | no locations ⇒ empty-state copy, not blank                     |
 
@@ -248,7 +252,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 96  | Should show status counts for the selected case                      | started/working/complete counts match seed        |
 | 97  | Should derive the roster from location rows (AD8)                    | investigators grouped with their locations/status |
 | 98  | Should embed the activity feed                                       | feed rendered within dashboard                    |
-| 99  | Should register the two M5 palette commands                          | `canvass-toggle-view` + `session-sign-out` in the registry (`session-lock-now` registers in 6.1, with its unlock overlay) |
+| 99  | Should register the M5 palette commands (A1)                         | `canvass-view-cases` / `canvass-view-case` / `canvass-view-map` + `session-sign-out` in the registry (`session-lock-now` registers in 6.1, with its unlock overlay) |
 
 ## Phase 6.1 — idle lock
 
@@ -256,7 +260,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | --- | ----------------------------------------------------------------------- | --------------------------------------------------- |
 | 100 | Should lock after the configured idle period                            | fake timers: no activity ⇒ `locked`                 |
 | 101 | Should reset the idle timer on user activity                            | activity event ⇒ timer restarts, no lock            |
-| 102 | Should mask DVR credentials while locked                                | locked ⇒ masked text on card; unlocked ⇒ plain (AD6) |
+| 102 | Should leave board content untouched while locked                       | locked ⇒ overlay blocks interaction but card text — DVR credentials included — is byte-identical to unlocked (AD6 + owner directive: lock alters nothing) |
 | 103 | Should resume on successful re-auth and stay locked on failure          | good pw ⇒ `active`; bad pw ⇒ `locked` + inline error |
 
 ## Phase 6.2 — wake / reconnect catch-up
@@ -293,6 +297,25 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | --- | -------------------------------------------------------- | ----------------------------------------------------------------- |
 | 109 | Should report whether a session is restorable            | `restoreSession()` resolves `true` with a vaulted session, `false` without |
 
+## Revision R4 additions (Amendment A1 — three-view IA + multi-window)
+
+#110–111 belong to **Phase 2.4**; #112–113 to **Phase 7.1**; #114–117 to **Phase 7.2**; #118–121 to **Phase 7.3** (counted there in the summary).
+
+| #   | Test Description                                                          | Key Assertion                                                                 |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 110 | Should render the Cases landing view with one card per active case         | seeded case ⇒ card with case number, incident address, status counts, last activity |
+| 111 | Should navigate from a case card to the case dashboard                     | selecting a card sets `selectedCaseId` + `view: 'case'`; `case`/`map` rail entries disabled with no selection |
+| 112 | Should open a view window with its case context                            | rail pop-out affordance ⇒ `commands.openViewWindow(view, caseId)` called with the selected case's id (the window is unusable without it) |
+| 113 | Should focus, not duplicate, an already-open view window                   | second open call for the same view resolves without creating a second window (service contract) |
+| 114 | Should authenticate secondary REST requests with the pushed user token     | client is created with the `accessToken` callback; a REST request carries the user bearer token, NOT the publishable key (anon REST = RLS-empty board); no refresh ticker |
+| 115 | Should never touch the vault from a secondary context                      | secondary init + reads issue zero `vaultGet`/`vaultSet`/`vaultClear` calls (T9) |
+| 116 | Should update the secondary client when main rebroadcasts a refreshed token | `session-token` event ⇒ `updateSecondaryToken` swaps the `accessToken` closure token AND calls `realtime.setAuth` (no `onAuthStateChange` exists in a secondary) |
+| 117 | Should tear down and terminalize on `session-ended` (sign-out only)        | event ⇒ channels removed + realtime disconnected + token discarded BEFORE the ended screen (no broadcast delivered after the event); `session-locked` instead ⇒ this context's session-store goes `locked` (interaction in step with main), board keeps flowing, content unchanged (AD6 parity + owner directive); no credential prompt exists in the secondary context |
+| 118 | Should host the view and consume the case-id round-trip                    | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient; `view-context {view, caseId}` drives `selectCase(caseId)` + `subscribeToCaseActivity(caseId, …)` (the receive side of the H2/H3 contract) |
+| 119 | Should offer pop-out only on case and map rail entries                     | `cases` entry has no pop-out affordance (bound to main)                        |
+| 120 | Should render diagnostics content                                          | health detail, log tail (via `readLogTail`), vault/keyring status, app + schema versions present |
+| 121 | Should keep main-window state untouched when a secondary closes            | close event ⇒ canvass-store selection/view unchanged in main                   |
+
 ---
 
 ## Test Count Summary
@@ -306,6 +329,7 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
 | 2.3   | 6     | 4.2   | 4     | 6.3   | 0     |
-| 2.4   | 9     |       |       |       |       |
+| 2.4   | 11    | 7.1   | 2     | 7.2   | 4     |
+| 7.3   | 4     |       |       |       |       |
 
-**Total: 109** (Rust 6 · TypeScript 103; #107 appended in Revision R1 → Phase 2.2, #108 in Revision R2 → Phase 6.1, #109 in Revision R3 → Phase 1.2) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 121** (Rust 6 · TypeScript 115; #107 → R1/Phase 2.2, #108 → R2/Phase 6.1, #109 → R3/Phase 1.2, #110–121 → R4/A1: Phase 2.4 + M7) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
