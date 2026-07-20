@@ -6,7 +6,11 @@ import { I18nextProvider } from 'react-i18next'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import i18n from '@/i18n/config'
 import { getSupabase } from '@/lib/supabase/client'
-import { CASE_DATA_KEY_FAMILIES, useHealthStore } from '@/store/health-store'
+import {
+  CASE_DATA_KEY_FAMILIES,
+  resetHealthStore,
+  useHealthStore,
+} from '@/store/health-store'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { CanvassRoot } from '../components/CanvassRoot'
 import { CasesView } from '../components/CasesView'
@@ -41,6 +45,10 @@ function renderWithClient(ui: React.ReactElement) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Round-2 fix-delta: the boundary-reset test flaked 3/90 with the
+  // mutation's signature — health marks leaking between tests. Every
+  // test in this file starts from a pristine health store.
+  resetHealthStore()
   resetCanvassStore()
   vi.mocked(fetchCases).mockResolvedValue(
     seededCase === null ? [] : [seededCase]

@@ -9,6 +9,7 @@ import {
   canPoll,
   resetHealthStore,
   STALE_AFTER_MS,
+  RECONCILE_MS,
   SIGNED_URL_KEY_PREFIX,
   type HealthMarks,
 } from './health-store'
@@ -24,6 +25,17 @@ function marks(overrides: Partial<HealthMarks> = {}): HealthMarks {
     ...overrides,
   }
 }
+
+describe('cadence invariant', () => {
+  // The reconcile fetch is the ONLY positive liveness confirmation on a
+  // silent agency. If it fires slower than the stale threshold, a
+  // healthy quiet board reads STALE most of every cycle (the PR #4
+  // fix-delta round-2 mutation: reverting RECONCILE_MS to 300_000 left
+  // the whole suite green — this test is the tripwire).
+  it('reconciles faster than the stale threshold', () => {
+    expect(RECONCILE_MS).toBeLessThan(STALE_AFTER_MS)
+  })
+})
 
 beforeEach(() => {
   resetHealthStore()

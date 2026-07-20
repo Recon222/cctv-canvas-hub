@@ -131,9 +131,14 @@ export function subscribeToCaseActivity(
       return
     }
     if (table === 'cloud_cases') {
-      onCaseTraffic?.()
       const row = raw as CaseRow
       if (row.id !== getCaseId()) {
+        // Non-selected case: the landing list is refreshed by
+        // invalidation. The SELECTED case skips this — its update is
+        // patched into `['cases']` by handleEvent, and invalidating too
+        // would start a refetch that cancelStaleFetch immediately
+        // discards (review LOW: one wasted request per event).
+        onCaseTraffic?.()
         return
       }
       onEvent({

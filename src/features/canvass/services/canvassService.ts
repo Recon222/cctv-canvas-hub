@@ -102,7 +102,14 @@ export async function fetchLocationCounts(
       working: 0,
       complete: 0,
     })
-    perCase[row.status] += 1
+    // Drift guard (same posture as LocationCardStack's catch-all): the
+    // wire can carry a status outside the union; counting it would seed
+    // NaN. It renders in the stack's "Other" group; the three counts
+    // deliberately omit it.
+    const status: string = row.status
+    if (status === 'started' || status === 'working' || status === 'complete') {
+      perCase[status] += 1
+    }
   }
   return counts
 }

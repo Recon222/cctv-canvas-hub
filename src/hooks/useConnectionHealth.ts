@@ -38,6 +38,10 @@ export function useConnectionHealth(): void {
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         useHealthStore.getState().reevaluate()
+        // Flow E3: a restored board catches up immediately instead of
+        // waiting out the reconcile interval (refetchInterval is
+        // focus-gated while hidden, so data really is stale here).
+        invalidateCaseData(queryClient)
       }
     }
     window.addEventListener('online', onOnline)
