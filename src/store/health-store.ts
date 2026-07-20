@@ -26,10 +26,14 @@ export type ChannelStatus = 'subscribed' | 'timed-out' | 'closed' | 'error'
 export const STALE_AFTER_MS = 90_000
 
 /**
- * Slow reconcile interval for case-data queries — the lost-broadcast
- * safety net (Flow E4). Broadcast is best-effort with no replay.
+ * Reconcile interval for case-data queries — the lost-broadcast safety
+ * net (Flow E4) AND the liveness floor on a silent agency: with zero
+ * broadcasts (e.g. an idle overnight wall board) the reconcile fetch is
+ * the only positive confirmation, so this must stay BELOW
+ * `STALE_AFTER_MS` or a healthy quiet board reads stale most of every
+ * cycle. Two small queries per minute is the accepted cost.
  */
-export const RECONCILE_MS = 300_000
+export const RECONCILE_MS = 60_000
 
 /**
  * Query-key prefix for signed-URL queries (M4). Signed URLs refresh on
