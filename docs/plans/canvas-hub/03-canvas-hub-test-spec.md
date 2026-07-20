@@ -123,7 +123,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 37  | Should surface the latest arrival across multiple visits                    | max `arrivalDateTime` wins (multi-visit seed shape)              |
 | 38  | Should degrade gracefully on older-shape/empty form_data                    | all enrichment fields null/absent; no throw, no "undefined" text |
 | 39  | Should label the investigator from requester_name with uid fallback         | empty `requester_name` ⇒ shortened `user_id`                     |
-| 40  | Should keep DVR credentials present on the view-model                       | `dvrUsername`/`dvrPassword` pass through unmasked (AD6 renders)  |
+| 40  | Should keep DVR credentials present on the view-model                       | `dvrUsername`/`dvrPassword` pass through verbatim — ordinary strings, no secrecy handling at any layer (owner directive) |
 
 ## Phase 2.2 — queries
 
@@ -156,7 +156,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 55  | Should stamp and expire attention marks                                   | stamp sets timestamp; `clearExpiredAttention(now+TTL)` removes |
 | 56  | Should navigate across the three views (A1)                               | `setView` round-trips `'cases'` / `'case'` / `'map'`           |
 | 57  | Should render card fields from the view-model                             | name, address, status, investigator, arrival visible           |
-| 58  | Should render DVR credentials plainly when unlocked                       | username/password text present (spec §3 requirement)           |
+| 58  | Should render DVR credentials plainly, always                             | username/password text present in every session state (spec §3; owner directive — ordinary strings) |
 | 59  | Should reflect status with distinct styling per state                     | started/working/complete map to distinct classes               |
 | 60  | Should render designed empty states                                       | no locations ⇒ empty-state copy, not blank                     |
 
@@ -260,7 +260,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | --- | ----------------------------------------------------------------------- | --------------------------------------------------- |
 | 100 | Should lock after the configured idle period                            | fake timers: no activity ⇒ `locked`                 |
 | 101 | Should reset the idle timer on user activity                            | activity event ⇒ timer restarts, no lock            |
-| 102 | Should mask DVR credentials while locked                                | locked ⇒ masked text on card; unlocked ⇒ plain (AD6) |
+| 102 | Should leave board content untouched while locked                       | locked ⇒ overlay blocks interaction but card text — DVR credentials included — is byte-identical to unlocked (AD6 + owner directive: lock alters nothing) |
 | 103 | Should resume on successful re-auth and stay locked on failure          | good pw ⇒ `active`; bad pw ⇒ `locked` + inline error |
 
 ## Phase 6.2 — wake / reconnect catch-up
@@ -310,8 +310,8 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | 114 | Should authenticate secondary REST requests with the pushed user token     | client is created with the `accessToken` callback; a REST request carries the user bearer token, NOT the publishable key (anon REST = RLS-empty board); no refresh ticker |
 | 115 | Should never touch the vault from a secondary context                      | secondary init + reads issue zero `vaultGet`/`vaultSet`/`vaultClear` calls (T9) |
 | 116 | Should update the secondary client when main rebroadcasts a refreshed token | `session-token` event ⇒ `updateSecondaryToken` swaps the `accessToken` closure token AND calls `realtime.setAuth` (no `onAuthStateChange` exists in a secondary) |
-| 117 | Should tear down and terminalize on `session-ended` (sign-out only)        | event ⇒ channels removed + realtime disconnected + token discarded BEFORE the ended screen (no broadcast delivered after the event); `session-locked` instead ⇒ board keeps flowing with DVR credentials masked (AD6 parity); no credential prompt exists in the secondary context |
-| 118 | Should host the map or dashboard view by window query param                | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient |
+| 117 | Should tear down and terminalize on `session-ended` (sign-out only)        | event ⇒ channels removed + realtime disconnected + token discarded BEFORE the ended screen (no broadcast delivered after the event); `session-locked` instead ⇒ this context's session-store goes `locked` (interaction in step with main), board keeps flowing, content unchanged (AD6 parity + owner directive); no credential prompt exists in the secondary context |
+| 118 | Should host the view and consume the case-id round-trip                    | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient; `view-context {view, caseId}` drives `selectCase(caseId)` + `subscribeToCaseActivity(caseId, …)` (the receive side of the H2/H3 contract) |
 | 119 | Should offer pop-out only on case and map rail entries                     | `cases` entry has no pop-out affordance (bound to main)                        |
 | 120 | Should render diagnostics content                                          | health detail, log tail (via `readLogTail`), vault/keyring status, app + schema versions present |
 | 121 | Should keep main-window state untouched when a secondary closes            | close event ⇒ canvass-store selection/view unchanged in main                   |
