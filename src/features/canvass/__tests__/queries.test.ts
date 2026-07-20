@@ -127,6 +127,10 @@ describe('canvass queries', () => {
     })
     expect(from).toHaveBeenCalledWith('cloud_locations')
     expect(chain.eq).toHaveBeenCalledWith('case_id', SEED_CASE_ID)
+    // Tombstones excluded server-side; stable order — no heap-order
+    // reshuffle on reconcile (review MEDIUMs).
+    expect(chain.is).toHaveBeenCalledWith('deleted_at', null)
+    expect(chain.order).toHaveBeenCalledWith('created_at')
     // The case-partitioned cache key (G6).
     const cached = queryClient.getQueryData<CanvassLocation[]>([
       'locations',
@@ -163,6 +167,8 @@ describe('canvass queries', () => {
     })
     expect(from).toHaveBeenCalledWith('cloud_media_files')
     expect(chain.eq).toHaveBeenCalledWith('case_id', SEED_CASE_ID)
+    expect(chain.is).toHaveBeenCalledWith('deleted_at', null)
+    expect(chain.order).toHaveBeenCalledWith('created_at')
     const cached = queryClient.getQueryData<CanvassMedia[]>([
       'media',
       SEED_CASE_ID,
@@ -300,5 +306,51 @@ describe('canvass queries', () => {
     expect(
       queryClient.getQueryData<CanvassCase[]>(['cases'])?.[0]?.displayName
     ).toBe('reconciled name')
+  })
+
+  it('reconciles the locations list on the same slow interval', async () => {
+    // The spec row names locations too — they are the board's actual
+    // content and the likelier victim of a dropped broadcast (review
+    // MEDIUM test gap #4).
+    vi.useFakeTimers()
+    const staleChain = fakeQuery({ data: [locationRow()], error: null })
+    const freshChain = fakeQuery({
+      data: [locationRow({ status: 'working' })],
+      error: null,
+    })
+    let fetches = 0
+    const from = vi.fn(() => {
+      fetches += 1
+      return fetches === 1 ? staleChain : freshChain
+    })
+    mockGetSupabase.mockReturnValue({ from } as unknown as ReturnType<
+      typeof getSupabase
+    >)
+    const queryClient = makeQueryClient()
+
+    renderHook(() => useCaseLocations(SEED_CASE_ID), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(
+      queryClient.getQueryData<CanvassLocation[]>([
+        'locations',
+        SEED_CASE_ID,
+      ])?.[0]?.status
+    ).toBe('complete')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RECONCILE_MS + 1_000)
+    })
+    expect(fetches).toBe(2)
+    expect(
+      queryClient.getQueryData<CanvassLocation[]>([
+        'locations',
+        SEED_CASE_ID,
+      ])?.[0]?.status
+    ).toBe('working')
   })
 })

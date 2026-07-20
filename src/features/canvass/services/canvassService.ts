@@ -53,6 +53,12 @@ export async function fetchCases(): Promise<CanvassCase[]> {
   return mapVisible(data, toCanvassCase)
 }
 
+/**
+ * Locations and media mirror the cases predicates: tombstones are
+ * excluded server-side too (the mapper choke point still drops them
+ * client-side — belt and braces), and a stable `created_at` order keeps
+ * cards from reshuffling with heap order on every reconcile.
+ */
 export async function fetchLocations(
   caseId: string
 ): Promise<CanvassLocation[]> {
@@ -60,6 +66,8 @@ export async function fetchLocations(
     .from('cloud_locations')
     .select('*')
     .eq('case_id', caseId)
+    .is('deleted_at', null)
+    .order('created_at')
   if (error) {
     throw new Error(error.message)
   }
@@ -104,6 +112,8 @@ export async function fetchMedia(caseId: string): Promise<CanvassMedia[]> {
     .from('cloud_media_files')
     .select('*')
     .eq('case_id', caseId)
+    .is('deleted_at', null)
+    .order('created_at')
   if (error) {
     throw new Error(error.message)
   }
