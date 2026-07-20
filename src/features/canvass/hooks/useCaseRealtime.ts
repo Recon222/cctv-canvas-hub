@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useHealthStore } from '@/store/health-store'
 import {
@@ -19,8 +19,16 @@ import type {
  * `toCanvass*` choke point as the fetch path (a live-patched row must
  * render identically to a fetched one), then patch the TanStack cache
  * in place: no refetch, INSERT upserts by id (redelivery-safe),
- * soft-delete/DELETE removes. Every event feeds the activity ring,
- * stamps attention, invalidates the case's media, and confirms health.
+ * soft-delete/DELETE removes. Every dispatched event feeds the activity
+ * ring, stamps attention, and invalidates the case's media; liveness is
+ * confirmed at delivery, inside the service.
+ *
+ * ONE subscription per mount, never keyed on the case: a cleanup→setup
+ * pair on the same topic hands realtime-js's mid-leave channel back and
+ * `subscribe()` silently no-ops — switching cases would permanently kill
+ * realtime for the session (review CRITICAL). The current case is read
+ * through a ref at delivery time instead, and the channel exists even
+ * while no case is selected so the Cases landing stays live.
  *
  * Teardown: the subscription lives and dies with the mount — CanvassRoot
  * mounts only while the session is active/locked, so the transition
@@ -28,21 +36,28 @@ import type {
  */
 export function useCaseRealtime(caseId: string | null): void {
   const queryClient = useQueryClient()
+  const caseIdRef = useRef(caseId)
 
   useEffect(() => {
-    if (caseId === null) {
-      return
-    }
+    caseIdRef.current = caseId
+  }, [caseId])
+
+  useEffect(() => {
     return subscribeToCaseActivity(
-      caseId,
+      () => caseIdRef.current,
       event => {
-        handleEvent(queryClient, caseId, event)
+        handleEvent(queryClient, event)
       },
       status => {
         useHealthStore.getState().channelStatus(status)
+      },
+      () => {
+        // Any location broadcast — whoever's case — may change the
+        // landing counts; the Cases view stays live with no selection.
+        void queryClient.invalidateQueries({ queryKey: ['location-counts'] })
       }
     )
-  }, [caseId, queryClient])
+  }, [queryClient])
 }
 
 function upsertById<T extends { id: string }>(
@@ -71,15 +86,9 @@ function locationKind(
   return 'location-updated'
 }
 
-function handleEvent(
-  queryClient: QueryClient,
-  caseId: string,
-  event: ActivityEvent
-): void {
-  // A delivered broadcast is a positive liveness confirmation (G4).
-  useHealthStore.getState().recordEvent()
-
+function handleEvent(queryClient: QueryClient, event: ActivityEvent): void {
   if (event.table === 'cloud_locations') {
+    const caseId = event.row.case_id
     const mapped = toCanvassLocation(event.row)
     queryClient.setQueryData<CanvassLocation[]>(
       ['locations', caseId],
@@ -109,7 +118,7 @@ function handleEvent(
   useCanvassStore.getState().pushActivity({
     id: crypto.randomUUID(),
     at: Date.now(),
-    caseId,
+    caseId: event.row.id,
     kind: 'case-updated',
     summary: event.row.display_name ?? event.row.case_number,
   })

@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getSupabase } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 import { useHealthStore, resetHealthStore } from '@/store/health-store'
 import { subscribeToCaseActivity } from '../services/realtimeService'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
@@ -50,9 +51,27 @@ function broadcastMessage(
   }
 }
 
+/**
+ * Library-faithful fake, modelling the realtime-js 2.110.7 behaviors the
+ * CRITICAL regression depends on (traced through installed sources by
+ * the review):
+ * - `RealtimeClient.channel()` returns the EXISTING channel for a topic
+ *   (params discarded) — even one that is mid-leave.
+ * - `RealtimeChannel.subscribe()` is gated on `isClosed()`: any state
+ *   but 'closed' is a SILENT no-op — no join, no status callback.
+ * - `removeChannel()` → phoenix `leave()` sets state 'leaving' and waits
+ *   for the server's leave ack (a network round trip — `ackLeave()`
+ *   here); only the ack closes the channel, fires the old subscriber's
+ *   CLOSED, and empties the client's channel list.
+ * - A channel that is not joined delivers nothing.
+ */
 function fakeRealtime() {
   const broadcastHandlers = new Map<string, (message: unknown) => void>()
-  let statusCallback: ((status: string) => void) | undefined
+  let statusCallback: ((status: string, err?: Error) => void) | undefined
+  let state: 'closed' | 'joined' | 'leaving' = 'closed'
+  let registered = false
+  let pendingLeave: (() => void) | undefined
+
   const channel: {
     on: ReturnType<typeof vi.fn>
     subscribe: ReturnType<typeof vi.fn>
@@ -71,14 +90,33 @@ function fakeRealtime() {
     }
   )
   channel.subscribe.mockImplementation(
-    (callback?: (status: string) => void) => {
+    (callback?: (status: string, err?: Error) => void) => {
+      if (state !== 'closed') {
+        // The isClosed() gate: the entire join body silently no-ops.
+        return channel
+      }
       statusCallback = callback
+      state = 'joined'
       return channel
     }
   )
   const supabase = {
-    channel: vi.fn(() => channel),
-    removeChannel: vi.fn(() => Promise.resolve('ok')),
+    channel: vi.fn(() => {
+      registered = true
+      return channel // topic reuse: the same object, whatever its state
+    }),
+    removeChannel: vi.fn(() => {
+      state = 'leaving'
+      return new Promise(resolve => {
+        pendingLeave = () => {
+          state = 'closed'
+          registered = false
+          broadcastHandlers.clear()
+          statusCallback?.('CLOSED')
+          resolve('ok')
+        }
+      })
+    }),
     from: vi.fn(),
   }
   mockGetSupabase.mockReturnValue(
@@ -87,11 +125,19 @@ function fakeRealtime() {
   return {
     supabase,
     channel,
+    /** The server's leave ack lands (the round trip completes). */
+    ackLeave: () => {
+      pendingLeave?.()
+      pendingLeave = undefined
+    },
     fire: (event: string, message: unknown) => {
+      if (state !== 'joined' || !registered) {
+        return // a dead or dying channel delivers nothing
+      }
       broadcastHandlers.get(event)?.(message)
     },
-    fireStatus: (status: string) => {
-      statusCallback?.(status)
+    fireStatus: (status: string, err?: Error) => {
+      statusCallback?.(status, err)
     },
   }
 }
@@ -130,7 +176,11 @@ describe('realtimeService', () => {
     const rt = fakeRealtime()
     const onStatus = vi.fn()
 
-    const unsubscribe = subscribeToCaseActivity(SEED_CASE_ID, vi.fn(), onStatus)
+    const unsubscribe = subscribeToCaseActivity(
+      () => SEED_CASE_ID,
+      vi.fn(),
+      onStatus
+    )
 
     expect(rt.supabase.channel).toHaveBeenCalledWith('agency:activity', {
       config: { private: true },
@@ -152,11 +202,31 @@ describe('realtimeService', () => {
     expect(rt.supabase.removeChannel).toHaveBeenCalledWith(rt.channel)
   })
 
+  it('logs the cause when the channel reports an error', () => {
+    const rt = fakeRealtime()
+    const onStatus = vi.fn()
+    const errorSpy = vi
+      .spyOn(logger, 'error')
+      .mockImplementation(() => undefined)
+    subscribeToCaseActivity(() => SEED_CASE_ID, vi.fn(), onStatus)
+
+    // A private-channel RLS denial is the likeliest field failure — the
+    // err argument is its only trace (review MEDIUM: cause was dropped).
+    rt.fireStatus('CHANNEL_ERROR', new Error('permission denied'))
+
+    expect(onStatus).toHaveBeenCalledWith('error')
+    expect(errorSpy).toHaveBeenCalledWith(
+      'realtime: channel error',
+      expect.objectContaining({ cause: expect.any(Error) as Error })
+    )
+    errorSpy.mockRestore()
+  })
+
   // Test #47
   it('decodes the broadcast_changes payload shape (pinned to the live capture)', () => {
     const rt = fakeRealtime()
     const onEvent = vi.fn()
-    subscribeToCaseActivity(SEED_CASE_ID, onEvent, vi.fn())
+    subscribeToCaseActivity(() => SEED_CASE_ID, onEvent, vi.fn())
 
     const oldRow = locationRow({ location_contact: '' })
     const newRow = locationRow({
@@ -181,10 +251,10 @@ describe('realtimeService', () => {
   })
 
   // Test #48
-  it('dispatches only events matching the subscribed case_id', () => {
+  it('dispatches only events matching the current case id', () => {
     const rt = fakeRealtime()
     const onEvent = vi.fn()
-    subscribeToCaseActivity(SEED_CASE_ID, onEvent, vi.fn())
+    subscribeToCaseActivity(() => SEED_CASE_ID, onEvent, vi.fn())
 
     // A location from another case never reaches the handler (G6).
     const foreign = locationRow({ id: 'l-x', case_id: 'some-other-case' })
@@ -220,9 +290,200 @@ describe('realtimeService', () => {
     )
     expect(onEvent).toHaveBeenCalledTimes(1)
   })
+
+  it('records liveness on ANY well-formed envelope, before the case filter', () => {
+    const rt = fakeRealtime()
+    const onEvent = vi.fn()
+    subscribeToCaseActivity(() => SEED_CASE_ID, onEvent, vi.fn())
+
+    // Another case's event is filtered out — but it is still a delivered
+    // broadcast proving the channel is alive (review HIGH: post-filter
+    // confirms turn a quiet selected case into a false STALE ~70% of the
+    // time on a healthy board).
+    const foreign = locationRow({ id: 'l-x', case_id: 'some-other-case' })
+    rt.fire(
+      'UPDATE',
+      broadcastMessage(
+        'UPDATE',
+        foreign as unknown as Record<string, unknown>,
+        null
+      )
+    )
+    expect(onEvent).not.toHaveBeenCalled()
+    expect(useHealthStore.getState().marks.lastEventAt).not.toBeNull()
+
+    // Garbage confirms nothing.
+    resetHealthStore()
+    rt.fire('UPDATE', { type: 'broadcast', event: 'UPDATE' })
+    rt.fire('UPDATE', null)
+    expect(useHealthStore.getState().marks.lastEventAt).toBeNull()
+  })
+
+  it('contains handler throws instead of letting them die in the socket loop', () => {
+    const rt = fakeRealtime()
+    const onEvent = vi.fn(() => {
+      throw new Error('mapper exploded')
+    })
+    const errorSpy = vi
+      .spyOn(logger, 'error')
+      .mockImplementation(() => undefined)
+    subscribeToCaseActivity(() => SEED_CASE_ID, onEvent, vi.fn())
+
+    // phoenix's bind.callback loop has no try/catch — an escaping throw
+    // dies invisibly in the WebSocket onmessage path (review HIGH).
+    expect(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow() as unknown as Record<string, unknown>,
+          null
+        )
+      )
+    }).not.toThrow()
+    expect(onEvent).toHaveBeenCalledTimes(1)
+    expect(errorSpy).toHaveBeenCalledWith(
+      'realtime: event dispatch failed',
+      expect.objectContaining({ cause: expect.any(Error) as Error })
+    )
+    // Delivery still counted: the channel IS alive, the handler broke.
+    expect(useHealthStore.getState().marks.lastEventAt).not.toBeNull()
+    errorSpy.mockRestore()
+  })
 })
 
 describe('useCaseRealtime', () => {
+  // Regression for the review CRITICAL: the subscription must never be
+  // keyed on the case. With a keyed effect, React's synchronous
+  // cleanup→setup on a case switch runs removeChannel (state 'leaving',
+  // ack pending) then channel() (same mid-leave channel back) then
+  // subscribe() (isClosed()-gated silent no-op) — and when the leave ack
+  // lands, ZERO channels remain for the rest of the session.
+  it('keeps delivering after the selected case changes (no re-subscribe)', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    const caseB = 'b6a1c000-0000-4000-8000-000000000001'
+    const locB = locationRow({
+      id: 'l-b',
+      case_id: caseB,
+      location_name: 'B spot',
+      status: 'started',
+    })
+    queryClient.setQueryData(
+      ['locations', SEED_CASE_ID],
+      [mappedLocation(locationRow())]
+    )
+    queryClient.setQueryData(['locations', caseB], [mappedLocation(locB)])
+
+    const { rerender, unmount } = renderHook(
+      ({ caseId }: { caseId: string | null }) => useCaseRealtime(caseId),
+      {
+        wrapper: wrapperFor(queryClient),
+        initialProps: { caseId: SEED_CASE_ID as string | null },
+      }
+    )
+
+    // The coordinator switches cases while CanvassRoot stays mounted;
+    // any pending leave ack then lands.
+    rerender({ caseId: caseB })
+    act(() => {
+      rt.ackLeave()
+    })
+
+    // A case-B update must still arrive live.
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow({
+            id: 'l-b',
+            case_id: caseB,
+            location_name: 'B spot',
+            status: 'working',
+          }) as unknown as Record<string, unknown>,
+          locB as unknown as Record<string, unknown>
+        )
+      )
+    })
+    expect(
+      queryClient.getQueryData<CanvassLocation[]>(['locations', caseB])?.[0]
+        ?.status
+    ).toBe('working')
+
+    // Exactly one channel and one subscribe for the whole mount.
+    expect(rt.supabase.channel).toHaveBeenCalledTimes(1)
+    expect(rt.channel.subscribe).toHaveBeenCalledTimes(1)
+    expect(rt.supabase.removeChannel).not.toHaveBeenCalled()
+
+    // Back to the first case: still flowing.
+    rerender({ caseId: SEED_CASE_ID })
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow({ status: 'working' }) as unknown as Record<
+            string,
+            unknown
+          >,
+          locationRow() as unknown as Record<string, unknown>
+        )
+      )
+    })
+    expect(
+      queryClient.getQueryData<CanvassLocation[]>([
+        'locations',
+        SEED_CASE_ID,
+      ])?.[0]?.status
+    ).toBe('working')
+
+    // Unmount is the one true teardown (D12).
+    unmount()
+    expect(rt.supabase.removeChannel).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the landing counts live while NO case is selected', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    queryClient.setQueryData(['location-counts', [SEED_CASE_ID]], {
+      [SEED_CASE_ID]: { started: 1, working: 0, complete: 0 },
+    })
+
+    renderHook(() => useCaseRealtime(null), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    // The channel exists even with no selection (the landing is live).
+    expect(rt.supabase.channel).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow({ status: 'working' }) as unknown as Record<
+            string,
+            unknown
+          >,
+          locationRow() as unknown as Record<string, unknown>
+        )
+      )
+    })
+
+    // The counts family was invalidated (pre-filter), and no per-case
+    // cache was touched (no case is selected).
+    expect(
+      queryClient.getQueryState(['location-counts', [SEED_CASE_ID]])
+        ?.isInvalidated
+    ).toBe(true)
+    expect(
+      queryClient.getQueryData<CanvassLocation[]>(['locations', SEED_CASE_ID])
+    ).toBeUndefined()
+    // Delivery confirmed health despite the filter.
+    expect(useHealthStore.getState().marks.lastEventAt).not.toBeNull()
+  })
+
   // Test #49
   it('patches an UPDATE into the locations cache by id, mapped', () => {
     const rt = fakeRealtime()

@@ -1,14 +1,23 @@
 import { getSupabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
-import type { ChannelStatus } from '@/store/health-store'
+import { useHealthStore, type ChannelStatus } from '@/store/health-store'
 import type { CaseRow, LocationRow } from '../types'
 
 /**
  * AD1: one private broadcast channel, `agency:activity`, carrying full
  * old+new rows from the `broadcast_agency_activity` trigger. The ONLY
  * consumer API is case-partitioned (G6) — events are filtered by case
- * before dispatch. V2 migrates by swapping the topic string to
+ * before dispatch, against the CURRENT case id read through `getCaseId`
+ * at delivery time. V2 migrates by swapping the topic string to
  * `case:{id}:activity`; this API does not change.
+ *
+ * The subscription must never be torn down and re-created on a case
+ * switch: against installed realtime-js 2.110.7, `removeChannel` waits a
+ * network round trip for the leave ack while `channel()` on the same
+ * topic returns the SAME mid-leave channel, whose `subscribe()` is gated
+ * on `isClosed()` and silently no-ops — a cleanup→setup pair on one
+ * topic permanently kills realtime for the session (review CRITICAL).
+ * Subscribe once, filter live.
  *
  * Envelope shape verified against a live capture (2026-07-20):
  * `{ type, event, payload: { id, table, record, schema, operation,
@@ -50,16 +59,24 @@ function mapChannelStatus(status: string): ChannelStatus {
 }
 
 export function subscribeToCaseActivity(
-  caseId: string,
+  getCaseId: () => string | null,
   onEvent: (event: ActivityEvent) => void,
-  onStatus: (status: ChannelStatus) => void
+  onStatus: (status: ChannelStatus) => void,
+  /**
+   * Any well-formed `cloud_locations` envelope, BEFORE the case filter —
+   * whoever's case it is, the landing counts may have changed.
+   */
+  onLocationTraffic?: () => void
 ): () => void {
   const supabase = getSupabase()
 
-  const handle = (message: unknown): void => {
+  // Envelope-contract violations log at `warn`: `debug` is a no-op
+  // outside DEV, and if the trigger payload drifts, 100% of events land
+  // in these branches with nothing else explaining the dead board.
+  const dispatch = (message: unknown): void => {
     const payload = (message as { payload?: unknown } | null)?.payload
     if (typeof payload !== 'object' || payload === null) {
-      logger.debug('realtime: ignoring malformed broadcast envelope')
+      logger.warn('realtime: ignoring malformed broadcast envelope')
       return
     }
     const { operation, table, record, old_record } = payload as {
@@ -69,7 +86,7 @@ export function subscribeToCaseActivity(
       old_record?: unknown
     }
     if (!isOp(operation)) {
-      logger.debug('realtime: ignoring unknown operation', {
+      logger.warn('realtime: ignoring unknown operation', {
         operation: String(operation),
       })
       return
@@ -77,12 +94,18 @@ export function subscribeToCaseActivity(
     // DELETE carries the row in old_record only.
     const raw = record ?? old_record
     if (typeof raw !== 'object' || raw === null) {
-      logger.debug('realtime: ignoring event with no row')
+      logger.warn('realtime: ignoring event with no row')
       return
     }
+    // Any delivered well-formed envelope proves the channel is alive —
+    // record BEFORE the case filter (G4). With only post-filter confirms,
+    // a healthy multi-case agency reads STALE most of the time, because
+    // other cases' events silently confirm nothing.
+    useHealthStore.getState().recordEvent()
     if (table === 'cloud_locations') {
+      onLocationTraffic?.()
       const row = raw as LocationRow
-      if (row.case_id !== caseId) {
+      if (row.case_id !== getCaseId()) {
         return
       }
       onEvent({
@@ -95,7 +118,7 @@ export function subscribeToCaseActivity(
     }
     if (table === 'cloud_cases') {
       const row = raw as CaseRow
-      if (row.id !== caseId) {
+      if (row.id !== getCaseId()) {
         return
       }
       onEvent({
@@ -110,15 +133,34 @@ export function subscribeToCaseActivity(
     logger.debug('realtime: ignoring unknown table', { table: String(table) })
   }
 
+  // A handler throw would otherwise escape into phoenix's catch-less
+  // `bind.callback` loop and die invisibly in the WebSocket onmessage
+  // path — no ErrorBoundary, no log, green light on stale data.
+  const handle = (message: unknown): void => {
+    try {
+      dispatch(message)
+    } catch (cause) {
+      logger.error('realtime: event dispatch failed', { cause })
+    }
+  }
+
   const channel = supabase.channel(TOPIC, { config: { private: true } })
   for (const op of OPS) {
     channel.on('broadcast', { event: op }, handle)
   }
-  channel.subscribe(status => {
+  channel.subscribe((status, err) => {
+    if (err !== undefined) {
+      // The err argument carries the only diagnosable cause (e.g. a
+      // `realtime.messages` RLS denial) — CHANNEL_ERROR alone is a
+      // symptom with no cause.
+      logger.error('realtime: channel error', { status, cause: err })
+    }
     onStatus(mapChannelStatus(status))
   })
 
   return () => {
-    void supabase.removeChannel(channel)
+    void supabase.removeChannel(channel).catch((cause: unknown) => {
+      logger.warn('realtime: channel removal failed', { cause })
+    })
   }
 }
