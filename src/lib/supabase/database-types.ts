@@ -129,7 +129,9 @@ export interface LocationRow {
   requester_phone: string
   requester_email: string
   duplicated_from: string | null
-  form_data: LocationFormData
+  /** The wire can carry null despite the mobile contract — consumers
+   * must degrade to empty, never dereference (trap §5.5.3). */
+  form_data: LocationFormData | null
   content_hash: string | null
   created_at: string
   updated_at: string
@@ -142,13 +144,17 @@ export interface MediaRow {
   case_id: string
   location_id: string
   user_id: string
-  type: 'image' | 'video' | 'audio'
+  /** 'image' | 'video' | 'audio' today — left open: under the
+   * `select('*')` drift strategy an unmodeled value must not become a
+   * type the compiler calls impossible. */
+  type: string
   /** 'dvr-original' | 'dvr-cropped' are per-location singletons. */
   category: string | null
   filename: string
   mime_type: string
   size_bytes: number
-  storage_bucket: 'images' | 'video' | 'audio'
+  /** 'images' | 'video' | 'audio' today — open for the same reason. */
+  storage_bucket: string
   /** `{userId}/{caseId}/{locationId}/{filename}` */
   storage_path: string
   metadata: Record<string, unknown>
@@ -186,7 +192,11 @@ export interface Database {
       cloud_locations: ReadOnlyTable<TableRow<LocationRow>>
       cloud_media_files: ReadOnlyTable<TableRow<MediaRow>>
     }
-    Views: Record<string, never>
-    Functions: Record<string, never>
+    // `Record<never, never>` — NOT `Record<string, never>`: a string
+    // index signature widens postgrest-js's relation-name union to
+    // `string`, so a typo'd table name compiles end-to-end and only
+    // fails as a runtime 404 (review MEDIUM, typecheck-probed).
+    Views: Record<never, never>
+    Functions: Record<never, never>
   }
 }

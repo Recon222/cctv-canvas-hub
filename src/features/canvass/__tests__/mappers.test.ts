@@ -7,8 +7,6 @@ import {
   investigatorLabel,
   visibleRows,
 } from '../services/mappers'
-import type { LocationRow } from '../types'
-
 import { caseRow, locationRow, mediaRow } from './fixtures'
 
 describe('mappers', () => {
@@ -64,7 +62,9 @@ describe('mappers', () => {
   // Test #37
   it('surfaces the latest arrival across multiple visits', () => {
     // The real QuickMart multi-visit shape.
-    expect(latestArrival(locationRow().form_data)).toBe('2026-07-17T16:40:00Z')
+    expect(latestArrival(locationRow().form_data ?? {})).toBe(
+      '2026-07-17T16:40:00Z'
+    )
     // Order in the array must not matter.
     expect(
       latestArrival({
@@ -92,13 +92,9 @@ describe('mappers', () => {
     expect(legacy).not.toBeNull()
     expect(legacy?.arrivedAt).toBeNull()
     expect(legacy?.dvr).toBeNull()
-    // Empty and null-ish form_data never throw.
+    // Empty and null form_data never throw — the row type admits null.
     expect(toCanvassLocation(locationRow({ form_data: {} }))).not.toBeNull()
-    expect(
-      toCanvassLocation(
-        locationRow({ form_data: null as unknown as LocationRow['form_data'] })
-      )
-    ).not.toBeNull()
+    expect(toCanvassLocation(locationRow({ form_data: null }))).not.toBeNull()
     // Malformed arrivals shape ⇒ absent, not a crash or "undefined" text.
     expect(
       latestArrival({
@@ -116,6 +112,43 @@ describe('mappers', () => {
     expect(investigatorLabel(locationRow({ requester_name: '   ' }))).toBe(
       'f1232b36'
     )
+    // The wire can carry null despite the contract: a broadcast row with
+    // a null name must not throw in the dispatch path (review HIGH — the
+    // throw died in phoenix's catch-less callback loop).
+    expect(
+      investigatorLabel(
+        locationRow({ requester_name: null as unknown as string })
+      )
+    ).toBe('f1232b36')
+    expect(
+      toCanvassLocation(
+        locationRow({ requester_name: null as unknown as string })
+      )?.investigator
+    ).toBe('f1232b36')
+    expect(
+      investigatorLabel(
+        locationRow({
+          requester_name: null as unknown as string,
+          user_id: null as unknown as string,
+        })
+      )
+    ).toBe('')
+  })
+
+  it('rejects out-of-range incident coordinates like the WKB path does', () => {
+    // geo.ts range-guards WKB points; a mis-keyed manual incident coord
+    // must not become an off-planet marker in M3 (review LOW).
+    expect(
+      toCanvassCase(caseRow({ incident_latitude: 91 }))?.incidentCoord
+    ).toBeNull()
+    expect(
+      toCanvassCase(caseRow({ incident_longitude: -181 }))?.incidentCoord
+    ).toBeNull()
+    expect(
+      toCanvassCase(
+        caseRow({ incident_latitude: -90, incident_longitude: 180 })
+      )?.incidentCoord
+    ).toEqual({ lat: -90, lng: 180 })
   })
 
   // Test #40

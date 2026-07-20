@@ -24,10 +24,15 @@ export function visibleRows<T extends { deleted_at: string | null }>(
   return rows.filter(row => row.deleted_at === null)
 }
 
+/** The wire can carry null despite the contract — treat as absent. */
+function wireString(value: string | null | undefined): string {
+  return value ?? ''
+}
+
 /** §5.5.4 — `requester_name`, falling back to a shortened `user_id` (AD8). */
 export function investigatorLabel(row: LocationRow): string {
-  const name = row.requester_name.trim()
-  return name !== '' ? name : row.user_id.slice(0, 8)
+  const name = wireString(row.requester_name).trim()
+  return name !== '' ? name : wireString(row.user_id).slice(0, 8)
 }
 
 /**
@@ -56,12 +61,17 @@ export function latestArrival(fd: LocationFormData): string | null {
   return latest
 }
 
-/** `(0,0)` and half-null numeric pairs ⇒ no fix (§5.5.2). */
+/** `(0,0)` and half-null numeric pairs ⇒ no fix (§5.5.2). Out-of-range
+ * values ⇒ null too, mirroring the WKB path (geo.ts) — a mis-keyed
+ * manual incident coord must not become an off-planet marker in M3. */
 function numericCoord(
   lat: number | null,
   lng: number | null
 ): Coordinate | null {
   if (lat === null || lng === null || (lat === 0 && lng === 0)) {
+    return null
+  }
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     return null
   }
   return { lat, lng }
@@ -88,8 +98,8 @@ export function toCanvassLocation(row: LocationRow): CanvassLocation | null {
   if (row.deleted_at !== null) {
     return null
   }
-  // The wire can carry null despite the contract; degrade to empty.
-  const fd = (row.form_data as LocationFormData | null) ?? {}
+  // The row type is honest about nullability; degrade to empty.
+  const fd: LocationFormData = row.form_data ?? {}
   return {
     id: row.id,
     caseId: row.case_id,
