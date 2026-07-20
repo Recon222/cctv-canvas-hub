@@ -31,6 +31,9 @@ Resolves every Open Design Decision from doc 01 §8.
 | AD9 | Template sidebars (OD9)   | Stop rendering panels in `MainWindow`; files stay  | Smallest diff that satisfies "no edge-docked panels". _Deleting files rejected for V1_: touches menus/shortcuts/commands/tests for zero product value; scheduled for a later `/cleanup`.        |
 | AD10 | Schema gate              | `APP_REQUIRED_SCHEMA_VERSION = 1` checked after sign-in; mismatch blocks the app | Mirrors the phones' fail-closed gate so a stale/partial cloud can't render a half-true board. _No gate rejected_: violates Honest Liveness (principle 1).                                       |
 | AD11 | Cross-feature seams (net-new; no OD) | Connection health lives in the **global layer** (`src/store/health-store.ts` + `src/hooks/useConnectionHealth.ts`), not inside either feature — `HealthState` and `ChannelStatus` are defined there, once; catch-up invalidation targets **case-data queries only** via an exclusion predicate on the `SIGNED_URL_KEY_PREFIX` constant — owned by the **global health-store from M2** (no cross-milestone forward reference; the predicate harmlessly matches nothing until M4's `useSignedUrl` builds its keys from the same constant) — signed URLs refresh on their own interval (4.1B) and must not be mass-regenerated on every wifi blip; the only feature→feature imports are **one-way, read-only barrel consumptions**: canvass → cloud-session (session state for gating/masking) and canvass/cloud-session → preferences via the **barrel-exported `usePreferences` hook** — the preferences *service* is not barrel-exported, and `App.tsx`'s existing relative deep import of it predates this plan and must not be copied (an aliased deep import fails `ast:lint`). `lib/supabase/vault-storage.ts` calling `commands.*` outside a feature `services/` dir is a sanctioned adapter (it *is* the storage seam of the client singleton). | Architecture-guide rule 5 says features communicate via events, and today zero feature→feature imports exist — so the seams are named and bounded here instead of appearing ad hoc. _Event-bus health signals rejected_: health is shared **state** (a store), not a notification; the global-store layer is the documented home for exactly this. _cloud-session-owned health rejected_: canvass would then import cloud-session services (a cycle risk). _Unfiltered invalidation rejected_: it refetches every mounted signed-URL query — N storage calls + a visible thumbnail flash per reconnect. |
+| AD12 (A1) | Three-view IA + nav rail | Views: **Cases** (landing: one card per active case) → **Case dashboard** → **Map**, switched by a slim icon `NavRail` (repurposed `LeftSideBar` slot); rail sized for a fourth entry | Product decision (Kris, 2026-07-19). _CaseSwitcher dropdown rejected_: hides the multi-case reality the forensic-office persona lives in (spec §1). _V1 admin dashboard rejected_: the hub is read-only and the secret key never lands here — an admin surface has no legitimate V1 job; it becomes real with V2 `case_members`/assignment (rail slot reserved). |
+| AD13 (A1) | Pop-out window auth topology | Main window is the **sole auth owner** (vault + keyring + refresh ticker); secondaries receive the access token via Tauri events (`session-token` on open + every `TOKEN_REFRESHED`; `session-ended` on sign-out/lock) and run `persistSession: false` clients with their own case-scoped realtime (`setAuth(token)`) | Tauri windows are separate JS contexts — sharing is impossible, so the question is auth topology. _Secondary-owns-its-own-session rejected_: two GoTrueClients on one storage key race the refresh rotation on the single vault (documented auth-js hazard; the vault's single-blob invariant exists precisely to prevent this). _Dumb-renderer event mirroring rejected_: continuously serializing live board state over IPC costs more than a second read-only query/realtime stack and diverges under load. |
+| AD14 (A1) | Diagnostics as a secondary window | Small window (health-state detail, log tail via a `read_log_tail` Rust command, vault/keyring status, app + schema versions) on the same M7 machinery; quick-pane is the lifecycle reference (create-once/show-hide, async commands per AGENTS.md CRITICAL) | _In-main panel rejected_: wall display shouldn't lose board space to diagnostics; a window can sit on the operator's screen. _Admin-auth gate rejected_: nothing in it is privileged beyond what the signed-in coordinator already sees; the idle lock gates interaction. |
 
 ---
 
@@ -46,6 +49,7 @@ Each milestone leaves a working, gate-green app (`npm run check:all`).
 | **M4**    | Media: signed URLs, thumbnails, polling + diff, video, fallbacks            | Seeded photos render on cards; an uploaded photo appears **≤ 20 s** with a pulse; the `.mp4` plays on demand; the HEIC row shows a fallback tile, never a broken image. |
 | **M5**    | Attention & dashboard: feed UI, pulses, connection indicator, dashboard view | Feed shows most-recent-first case-scoped entries; markers/cards pulse on change; pulling the network shows reconnecting → STALE honestly; dashboard shows counts/roster/feed. |
 | **M6**    | Kiosk hardening: idle lock, wake catch-up, preferences UI, docs             | After idle timeout the board stays visible but locked with DVR credentials masked; password resumes; sleep/wake catches up missed events; preferences edit token/style/idle minutes. |
+| **M7** (A1) | Multi-window: pop-out case dashboard + map, diagnostics window, session propagation | From the rail, Map and Case dashboard each pop out into their own window (main keeps working independently); sign-out in main ends every secondary; a diagnostics window shows health detail, log tail, vault status, versions. Cases view never pops out. |
 
 ---
 
@@ -148,8 +152,8 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 
 | ID   | File                                                     | Tag | Signatures                                                                                                                        |
 | ---- | -------------------------------------------------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 2.4A | `src/features/canvass/store/canvass-store.ts`            | NEW | `selectedCaseId` · `selectedLocationId` · `view: 'map' \| 'dashboard'` · `activity: ActivityEntry[]` (ring 200) · `attentionByLocation: Record<string, number>` · actions (`selectCase`, `selectLocation`, `pushActivity`, `clearExpiredAttention`, `setView`) — selector-only access (repo-wide ast-grep `no-destructure` rule already covers any `use*Store`) |
-| 2.4B | `src/features/canvass/components/{CanvassRoot,CaseSwitcher,LocationCardStack,LocationCard}.tsx` | NEW | `CanvassRoot` mounts bootstrap-gated board; `LocationCard` renders name/address/status/investigator/arrival + DVR block (credentials plain; masked when `locked`). All new UI uses CSS logical properties (`text-start`, `ps-*`) per `i18n-patterns.md` — `ar.json` ships RTL |
+| 2.4A | `src/features/canvass/store/canvass-store.ts`            | NEW | `selectedCaseId` · `selectedLocationId` · `view: 'cases' \| 'case' \| 'map'` (A1 three-view IA, AD12 — `'cases'` is the landing view; `'case'`/`'map'` require a selected case) · `activity: ActivityEntry[]` (ring 200) · `attentionByLocation: Record<string, number>` · actions (`selectCase`, `selectLocation`, `pushActivity`, `clearExpiredAttention`, `setView`) — selector-only access (repo-wide ast-grep `no-destructure` rule already covers any `use*Store`) |
+| 2.4B | `src/features/canvass/components/{CanvassRoot,NavRail,CasesView,LocationCardStack,LocationCard}.tsx` | NEW | `CanvassRoot` mounts bootstrap-gated board = `NavRail` + active view; `NavRail` = slim icon rail (Cases / Case dashboard / Map — repurposes `LeftSideBar`'s slot, AD12; built rail-of-four so a V2 admin entry slots in); `CasesView` = landing grid, one card per active case (case number, incident address, status counts, last activity) replacing the planned CaseSwitcher dropdown; `LocationCard` renders name/address/status/investigator/arrival + DVR block (credentials plain; masked when `locked`). All new UI uses CSS logical properties (`text-start`, `ps-*`) per `i18n-patterns.md` — `ar.json` ships RTL |
 | 2.4C | `locales/{en,fr,ar}.json`                                | MODIFY | `canvass.*` keys                                                                                                                   |
 | 2.4D | `src/components/layout/MainWindowContent.tsx`            | MODIFY | swap the 1.4C placeholder for the real `CanvassRoot`                                                                               |
 
@@ -307,11 +311,47 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | 6.3A | `docs/developer/supabase-integration.md` + `README.md` index | NEW/MODIFY | the client/vault/health patterns for future work                                        |
 | 6.3B | — threat-model walkthrough (doc 01 §10) against the running app; full `check:all`; live smoke per `driving-agent-shell` | — | verification, no code |
 
+### Phase 7.1 — Rust `view_windows` feature + secondary entry ⚠ (A1)
+
+**Goal:** window plumbing — create-once/show-hide secondary windows on the quick-pane pattern, all commands `async` (AGENTS.md CRITICAL: sync window commands deadlock WebView2 on Windows).
+
+| ID   | File                                                       | Tag    | Signatures                                                                                                       |
+| ---- | ----------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| 7.1A | `src-tauri/src/features/view_windows/{mod,commands/mod,services/mod}.rs` | NEW | `pub async fn open_view_window(app: AppHandle, view: String) -> Result<(), String>` (view ∈ `case`/`map`/`diagnostics`; focus-if-open, create-once otherwise, `window.html?view=…`) · `pub async fn close_view_window(app, view)` · `pub async fn read_log_tail(app, lines: u32) -> Result<String, String>` (diagnostics; never includes secrets — the log is already token-free by T3) |
+| 7.1B | `window.html` + `src/window-main.tsx`                       | NEW    | secondary entry point (vite input): parses `view` param, mounts `SecondaryRoot`                                    |
+| 7.1C | `src-tauri/{tauri.conf.json,capabilities/default.json}` + `vite.config.ts` + `features/mod.rs` + `bindings.rs` | MODIFY | window labels in capabilities; vite multi-entry; command registration; regenerate bindings |
+
+**Error handling:** window-creation failure surfaces as a toast in the invoking window; a failed open never leaves a half-created ghost window (destroy on error — see `tauri-commands.md` secondary-window checklist).
+
+### Phase 7.2 — Session propagation (main = sole auth owner, AD13) ⚠ (A1)
+
+**Goal:** secondaries get live auth without ever touching the vault (T9).
+
+| ID   | File                                                    | Tag    | Signatures                                                                                                        |
+| ---- | -------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| 7.2A | `src/lib/supabase/secondary-client.ts`                   | NEW    | `initSecondaryClient(url, key, token): SupabaseClient` (`persistSession: false`, `autoRefreshToken: false`, in-memory storage) · `updateSecondaryToken(token)` |
+| 7.2B | `src/lib/services/sessionEvents.ts`                      | NEW    | typed Tauri events: `emitSessionToken(token)` · `emitSessionEnded()` · `onSessionToken(cb)` · `onSessionEnded(cb)` — main emits on window-open request, every `TOKEN_REFRESHED`, sign-out, and lock |
+| 7.2C | `src/lib/supabase/client.ts` + `authService.ts`          | MODIFY | main's `onAuthStateChange(TOKEN_REFRESHED)` → `emitSessionToken`; `signOut()`/`lock()` → `emitSessionEnded`          |
+
+**Error handling:** a secondary that receives `session-ended` (or no token within a boot timeout) renders a terminal "session ended — reopen from the main window" state; it never prompts for credentials (auth UI exists only in main).
+
+### Phase 7.3 — Pop-out surfaces + diagnostics window (A1)
+
+**Goal:** the product part — Map and Case dashboard open in their own windows; Cases stays bound; diagnostics window ships.
+
+| ID   | File                                                     | Tag    | Signatures                                                                                                     |
+| ---- | --------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| 7.3A | `src/features/canvass/components/SecondaryRoot.tsx`      | NEW    | hosts `MapCanvas`-view or `DashboardView` by `view` param with its own QueryClient + realtime subscription (case id passed via window query/event); reuses the same view components — pop-out is hosting, not forking |
+| 7.3B | `NavRail.tsx` + `DashboardView.tsx`/`MapCanvas` chrome   | MODIFY | pop-out affordance on the `case` and `map` entries (never on `cases`); popped state indicated on the rail          |
+| 7.3C | `src/features/cloud-session/components/DiagnosticsView.tsx` | NEW  | health-state detail (current + recent transitions), log tail (`read_log_tail`), vault/keyring presence, app + `APP_REQUIRED_SCHEMA_VERSION` |
+
+**Error handling:** closing a secondary window never mutates main-window state; main's board is authoritative regardless of what's popped out.
+
 ---
 
 ## Appendix A — File Manifest (new files)
 
-`src-tauri/crates/secure-vault/{Cargo.toml, src/lib.rs}` · `src-tauri/src/features/cloud_session/{mod.rs, types/mod.rs, services/mod.rs, commands/mod.rs}` · `src/lib/supabase/{client.ts, vault-storage.ts}` · `src/store/health-store.ts` · `src/hooks/useConnectionHealth.ts` · `src/features/cloud-session/{index.ts, types/index.ts, store/session-store.ts, hooks/{useAuthBootstrap,useIdleLock}.ts, services/{configService,authService}.ts, components/{SetupScreen,SignInScreen,SchemaGateScreen,LockOverlay,ConnectionIndicator}.tsx}` · `src/features/canvass/{index.ts, types/index.ts, store/canvass-store.ts, services/{canvassService,realtimeService,mediaService,mappers,geo,mapData,attention}.ts, hooks/{useCases,useCaseLocations,useCaseMedia,useCaseRealtime,useMediaPolling,useSignedUrl,useFlyTo}.ts, components/{CanvassRoot,CaseSwitcher,MapCanvas,MarkerLayer,LocationCardStack,LocationCard,MediaThumb,VideoPlayer,DashboardView,ActivityFeed}.tsx}` · `docs/developer/supabase-integration.md` — **50 new source files** (test files per doc 03 on top), all behind the two feature barrels, `lib/supabase`, and the global store/hooks layer (AD11).
+`src-tauri/crates/secure-vault/{Cargo.toml, src/lib.rs}` · `src-tauri/src/features/cloud_session/{mod.rs, types/mod.rs, services/mod.rs, commands/mod.rs}` · `src/lib/supabase/{client.ts, vault-storage.ts}` · `src/store/health-store.ts` · `src/hooks/useConnectionHealth.ts` · `src/features/cloud-session/{index.ts, types/index.ts, store/session-store.ts, hooks/{useAuthBootstrap,useIdleLock}.ts, services/{configService,authService}.ts, components/{SetupScreen,SignInScreen,SchemaGateScreen,LockOverlay,ConnectionIndicator}.tsx}` · `src/features/canvass/{index.ts, types/index.ts, store/canvass-store.ts, services/{canvassService,realtimeService,mediaService,mappers,geo,mapData,attention}.ts, hooks/{useCases,useCaseLocations,useCaseMedia,useCaseRealtime,useMediaPolling,useSignedUrl,useFlyTo}.ts, components/{CanvassRoot,NavRail,CasesView,MapCanvas,MarkerLayer,LocationCardStack,LocationCard,MediaThumb,VideoPlayer,DashboardView,ActivityFeed,SecondaryRoot}.tsx}` · `docs/developer/supabase-integration.md` · **A1/M7:** `src-tauri/src/features/view_windows/{mod,commands/mod,services/mod}.rs` · `window.html` · `src/window-main.tsx` · `src/lib/supabase/secondary-client.ts` · `src/lib/services/sessionEvents.ts` · `src/features/cloud-session/components/DiagnosticsView.tsx` — **59 new source files** (test files per doc 03 on top; A1 swapped CaseSwitcher→CasesView and added NavRail + 8 M7 files), all behind the two feature barrels, `lib/supabase`, and the global store/hooks layer (AD11).
 
 ## Appendix B — Integration Point Summary (modified files)
 
@@ -329,6 +369,8 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | `package.json`                                      | 1.2, 3.2       |
 | `src/lib/commands/feature-commands.ts`              | 5.3, 6.1       |
 | `docs/developer/README.md`                          | 6.3            |
+| `src-tauri/{tauri.conf.json, capabilities/default.json}`, `vite.config.ts` (A1) | 7.1 |
+| `src/lib/supabase/client.ts`, `authService.ts` (A1) | 7.2            |
 
 **Honesty metric:** 12 integration-point rows (≈17 physical files once multi-file rows — locales ×3, mod.rs+bindings.rs, types+service — are expanded; plus regenerated `src/lib/bindings.ts` and lockfiles) across 50 new source files — everything substantive is additive behind barrels.
 
@@ -343,6 +385,7 @@ Per-file signatures fix contracts; bodies live in the code. `⚠` marks phases t
 | 2.1   | 12       | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6        | 4.1   | 5     | 6.2   | 3     |
 | 2.3   | 6        | 4.2   | 4     | 6.3   | 0     |
-| 2.4   | 9        |       |       |       |       |
+| 2.4   | 11       | 7.1   | 2     | 7.2   | 4     |
+| 7.3   | 4        |       |       |       |       |
 
-**Total: 109** (6 Rust in `secure-vault`, 103 TypeScript; Revision additions #107 → Phase 2.2, #108 → Phase 6.1, #109 → Phase 1.2). Must reconcile with the Test Spec's closing summary; if counts drift during implementation, reconcile both docs before proceeding.
+**Total: 121** (6 Rust in `secure-vault`, 115 TypeScript; Revision additions #107 → Phase 2.2, #108 → Phase 6.1, #109 → Phase 1.2, #110–121 → A1 additions per Revision R4: two for Phase 2.4's CasesView/NavRail, ten across M7). Must reconcile with the Test Spec's closing summary; if counts drift during implementation, reconcile both docs before proceeding.

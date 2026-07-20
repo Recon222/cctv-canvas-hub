@@ -49,6 +49,9 @@
 | `src/features/canvass/__tests__/DashboardView.test.tsx`                | 5.3   | NEW       |
 | `src/lib/commands/commands.test.ts`                                    | 5.3, 6.1 (#108) | additions |
 | `src/features/cloud-session/__tests__/idleLock.test.tsx`               | 6.1   | NEW       |
+| `src/features/canvass/__tests__/casesView.test.tsx` (A1, #110–111)     | 2.4   | NEW       |
+| `src/lib/supabase/secondary-client.test.ts` (A1, #114–116)             | 7.2   | NEW       |
+| `src/features/canvass/__tests__/secondaryWindows.test.tsx` (A1, #112–113, #117–121) | 7.1–7.3 | NEW |
 
 No existing test file is deleted or rewritten. One existing file receives **additions** only (`src/lib/commands/commands.test.ts`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
 
@@ -293,6 +296,25 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | --- | -------------------------------------------------------- | ----------------------------------------------------------------- |
 | 109 | Should report whether a session is restorable            | `restoreSession()` resolves `true` with a vaulted session, `false` without |
 
+## Revision R4 additions (Amendment A1 — three-view IA + multi-window)
+
+#110–111 belong to **Phase 2.4**; #112–113 to **Phase 7.1**; #114–117 to **Phase 7.2**; #118–121 to **Phase 7.3** (counted there in the summary).
+
+| #   | Test Description                                                          | Key Assertion                                                                 |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 110 | Should render the Cases landing view with one card per active case         | seeded case ⇒ card with case number, incident address, status counts, last activity |
+| 111 | Should navigate from a case card to the case dashboard                     | selecting a card sets `selectedCaseId` + `view: 'case'`; `case`/`map` rail entries disabled with no selection |
+| 112 | Should open a view window via the async typed command                      | rail pop-out affordance ⇒ `commands.openViewWindow('map' \| 'case')` called    |
+| 113 | Should focus, not duplicate, an already-open view window                   | second open call for the same view resolves without creating a second window (service contract) |
+| 114 | Should initialize the secondary client from a pushed token                 | `initSecondaryClient(url, key, token)` ⇒ `persistSession: false`, no refresh ticker, in-memory storage |
+| 115 | Should never touch the vault from a secondary context                      | secondary init + reads issue zero `vaultGet`/`vaultSet`/`vaultClear` calls (T9) |
+| 116 | Should update the secondary client when main rebroadcasts a refreshed token | `session-token` event ⇒ `updateSecondaryToken` applied to auth + realtime      |
+| 117 | Should render the terminal session-ended state on `session-ended`          | event ⇒ ended screen; no credential prompt exists in the secondary context     |
+| 118 | Should host the map or dashboard view by window query param                | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient |
+| 119 | Should offer pop-out only on case and map rail entries                     | `cases` entry has no pop-out affordance (bound to main)                        |
+| 120 | Should render diagnostics content                                          | health detail, log tail (via `readLogTail`), vault/keyring status, app + schema versions present |
+| 121 | Should keep main-window state untouched when a secondary closes            | close event ⇒ canvass-store selection/view unchanged in main                   |
+
 ---
 
 ## Test Count Summary
@@ -306,6 +328,7 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
 | 2.3   | 6     | 4.2   | 4     | 6.3   | 0     |
-| 2.4   | 9     |       |       |       |       |
+| 2.4   | 11    | 7.1   | 2     | 7.2   | 4     |
+| 7.3   | 4     |       |       |       |       |
 
-**Total: 109** (Rust 6 · TypeScript 103; #107 appended in Revision R1 → Phase 2.2, #108 in Revision R2 → Phase 6.1, #109 in Revision R3 → Phase 1.2) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 121** (Rust 6 · TypeScript 115; #107 → R1/Phase 2.2, #108 → R2/Phase 6.1, #109 → R3/Phase 1.2, #110–121 → R4/A1: Phase 2.4 + M7) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.

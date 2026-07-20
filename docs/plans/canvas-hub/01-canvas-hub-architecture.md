@@ -4,7 +4,7 @@
 
 **Authority split:** this doc is authoritative for **data contracts and flows**; the implementation plan for **file-level technical detail and decisions**; the test spec for **coverage**.
 
-**Basis:** `docs/plans/initial plan/canvas-hub-spec.md` (product spec; §3 is the pinned cloud contract) + the mobile repo as contract source of truth (`extraction_case_notes_react_native_expo`: `provisioning-sql.ts`, `sync-mapper.ts`, `enrollment-service.ts`, `supabase-client.ts`) + live verification against the provisioned `canvas-hub-dev` project (2026-07-19; see `CLAUDE.local.md`). **Supersedes:** nothing — first planning set.
+**Basis:** `docs/plans/initial plan/canvas-hub-spec.md` (product spec; §3 is the pinned cloud contract) + the mobile repo as contract source of truth (`extraction_case_notes_react_native_expo`: `provisioning-sql.ts`, `sync-mapper.ts`, `enrollment-service.ts`, `supabase-client.ts`) + live verification against the provisioned `canvas-hub-dev` project (2026-07-19; see `CLAUDE.local.md`). **Supersedes:** nothing — first planning set. **Amended A1 (2026-07-19, post-M1, product decisions):** three-view information architecture on a left nav rail (Cases · Case dashboard · Map), multi-window pop-out topology (M7), diagnostics window. See doc 02 AD12–AD14.
 
 ---
 
@@ -101,7 +101,10 @@ src/
 │   │                 mappers, attention)                                           NEW
 │   ├── store/       (canvass-store.ts)                                             NEW
 │   ├── types/ · __tests__/ · index.ts                                              NEW
-├── components/layout/MainWindow.tsx       MODIFIED  drop sidebar panels; render CanvassRoot
+├── components/layout/MainWindow.tsx       MODIFIED  drop sidebar panels; render NavRail + active view (A1)
+│   (A1: `LeftSideBar` is repurposed as a slim icon NavRail — navigation chrome
+│    switching Cases / Case dashboard / Map, NOT an info panel; spec §4's
+│    "no edge-docked panels" governs location info, which stays floating.)
 ├── components/layout/MainWindowContent.tsx MODIFIED  host CanvassRoot (or session screens)
 ├── lib/commands/feature-commands.ts       MODIFIED  palette entries (view toggle, lock now…)
 └── locales/{en,fr,ar}.json                MODIFIED  cloudSession.* / canvass.* keys
@@ -450,11 +453,21 @@ Long-lived coordinator session on an always-on host (G5). Enumerated:
 | T6  | Stale board misleading live operations                       | health state machine + STALE banner; last-updated always visible (G4 — a safety mitigation, not UX polish) |
 | T7  | Webview code injection reading agency data                   | strict CSP (no remote script; mapbox workers via `blob:` only; `connect-src` allow-list of the two hosts) |
 | T8  | V1 write-path abuse from the hub                             | no write code paths exist; cloud RLS refuses coordinator writes anyway (verified live: HTTP 403) |
+| T9 (A1) | Secondary pop-out windows widening the session attack surface | main window is the **sole auth owner** — vault, keyring, and token refresh never run in a secondary context; secondaries hold the access token in memory only (pushed via Tauri event, `persistSession: false`), so closing them leaves nothing at rest (AD13) |
 
 **Accepted risks (explicit):** DVR credentials are rendered in clear when unlocked — that is the product requirement ("police inside a police building", spec §3/§7). Agency-wide reads are V1's shipped RLS posture; the hub scopes by case in UI/state only — real per-case authorization is V2's `case_members`. The OS user account securing the keychain is the trust anchor; a compromised OS session defeats the vault — mitigated operationally (secured room, kiosk posture), not cryptographically.
 
 ## 11. Net Effect
 
-Additive feature set; nothing deleted in V1. Dormant after this lands (candidates for a later `/cleanup` pass, deliberately out of scope): `LeftSideBar`/`RightSideBar` components + their ui-store visibility state and palette/menu toggles (OD9), and the template's `example-feature`/`quick-pane` demo surfaces. The template's recovery, preferences, command-palette, i18n, and quality-gate infrastructure is used as-is.
+Additive feature set; nothing deleted in V1. Dormant after this lands (candidates for a later `/cleanup` pass, deliberately out of scope): `RightSideBar` + ui-store visibility state and palette/menu toggles (OD9; **A1: `LeftSideBar` exits dormancy — repurposed as the NavRail**), and the template's `example-feature` demo surface. The `quick-pane` feature is retained as the **reference implementation for secondary windows** (M7 reuses its create-once/show-hide lifecycle and async-command discipline — `AGENTS.md` "Window-Creating Commands Must Be `async`"). The template's recovery, preferences, command-palette, i18n, and quality-gate infrastructure is used as-is.
+
+### A1 — Multi-window topology (M7)
+
+The **case dashboard and map views can pop out as secondary Tauri windows** (two-screen command centre: map on the wall TV, dashboard at the operator desk); the **Cases view stays bound** to the main window; a small **diagnostics window** (health-state detail, log tail, vault status, versions) rides the same machinery. Pinned decisions:
+
+1. **Separate JS contexts are the ground truth** — no shared React/Zustand/Query state, no shared supabase client. Each secondary window runs its own read-only data stack.
+2. **Main window is the sole auth owner** (T9). Secondaries never touch the vault or keyring and never run a refresh ticker: two GoTrueClients on one storage key is a documented concurrency hazard. Main pushes the access token over Tauri events (`session-token` on window-open and on every `TOKEN_REFRESHED`; `session-ended` on sign-out/lock), and secondaries run `persistSession: false` clients, calling `realtime.setAuth(token)` for their own case-scoped subscriptions.
+3. **Window lifecycle copies quick-pane**: create-once/show-hide, native-✕ handling, and **async Rust commands only** (sync window commands deadlock WebView2 on Windows — AGENTS.md CRITICAL).
+4. **The Claude-design prototype never sees multi-window** — it designs the three views + rail single-window; pop-out is wiring, not design.
 
 **Upstream notes (for the mobile/cloud team, not this app):** the shipped RPCs (`locations_for_case`, `locations_in_view`) return soft-deleted rows and omit `user_id`/`form_data` — verified live. V1 routes around this (AD2); a v2 RPC revision should add a `deleted_at is null` predicate. Putting `cloud_media_files` on the realtime substrate remains the known V2 cloud-side addition (spec §3).
