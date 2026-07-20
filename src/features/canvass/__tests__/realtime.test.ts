@@ -7,10 +7,20 @@ import { logger } from '@/lib/logger'
 import { useHealthStore, resetHealthStore } from '@/store/health-store'
 import { subscribeToCaseActivity } from '../services/realtimeService'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
-import { toCanvassLocation } from '../services/mappers'
+import { toCanvassCase, toCanvassLocation } from '../services/mappers'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
-import type { CanvassLocation, LocationRow } from '../types'
-import { locationRow, SEED_CASE_ID, SEED_LOCATION_ID } from './fixtures'
+import type {
+  CanvassCase,
+  CanvassLocation,
+  CaseRow,
+  LocationRow,
+} from '../types'
+import {
+  caseRow,
+  locationRow,
+  SEED_CASE_ID,
+  SEED_LOCATION_ID,
+} from './fixtures'
 
 // The single supabase-js seam.
 vi.mock('@/lib/supabase/client')
@@ -158,6 +168,14 @@ function wrapperFor(queryClient: QueryClient) {
 
 function mappedLocation(row: LocationRow): CanvassLocation {
   const mapped = toCanvassLocation(row)
+  if (mapped === null) {
+    throw new Error('fixture row unexpectedly soft-deleted')
+  }
+  return mapped
+}
+
+function mappedCase(row: CaseRow): CanvassCase {
+  const mapped = toCanvassCase(row)
   if (mapped === null) {
     throw new Error('fixture row unexpectedly soft-deleted')
   }
@@ -634,5 +652,256 @@ describe('useCaseRealtime', () => {
       queryClient.getQueryData<CanvassLocation[]>(['locations', SEED_CASE_ID])
     ).toEqual(seeded)
     expect(useCanvassStore.getState().activity).toHaveLength(0)
+  })
+
+  it('removes a hard-DELETEd location via the removed flag, without activity', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    const victim = locationRow()
+    queryClient.setQueryData(
+      ['locations', SEED_CASE_ID],
+      [
+        mappedLocation(victim),
+        mappedLocation(locationRow({ id: 'l-2', location_name: 'Other' })),
+      ]
+    )
+
+    renderHook(() => useCaseRealtime(SEED_CASE_ID), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    act(() => {
+      // A hard DELETE carries the row in old_record ONLY, with
+      // deleted_at still null — only the op says it is gone. Dropping
+      // the flag would re-insert the row as a phantom location
+      // (review: mutation-confirmed coverage gap).
+      rt.fire(
+        'DELETE',
+        broadcastMessage(
+          'DELETE',
+          null,
+          victim as unknown as Record<string, unknown>
+        )
+      )
+    })
+
+    const cached = queryClient.getQueryData<CanvassLocation[]>([
+      'locations',
+      SEED_CASE_ID,
+    ])
+    expect(cached).toHaveLength(1)
+    expect(cached?.some(l => l.id === victim.id)).toBe(false)
+    // No activity entry / attention stamp for a card that just vanished
+    // (review LOW: DELETE carries row === old and read as an update).
+    expect(useCanvassStore.getState().activity).toHaveLength(0)
+    expect(
+      useCanvassStore.getState().attentionByLocation[victim.id]
+    ).toBeUndefined()
+  })
+
+  it('never builds a cache entry that does not exist (GC resurrection)', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    // NO seeded entries: both families are absent (evicted or never
+    // fetched). setQueryData with a non-functional value would BUILD the
+    // query and stamp it fresh — a one-row list suppressing the real
+    // refetch for up to staleTime (review HIGH).
+    renderHook(() => useCaseRealtime(SEED_CASE_ID), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow({ status: 'working' }) as unknown as Record<
+            string,
+            unknown
+          >,
+          locationRow() as unknown as Record<string, unknown>
+        )
+      )
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          caseRow() as unknown as Record<string, unknown>,
+          null,
+          'cloud_cases'
+        )
+      )
+    })
+
+    expect(queryClient.getQueryState(['locations', SEED_CASE_ID])).toBe(
+      undefined
+    )
+    expect(queryClient.getQueryState(['cases'])).toBe(undefined)
+  })
+
+  it('patches cloud_cases events into the cases list, mapped and ordered', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    const olderCase = mappedCase(
+      caseRow({
+        id: 'c-2',
+        case_number: '24-CANVASS-0001',
+        display_name: 'Older case',
+        updated_at: '2026-07-01T00:00:00+00:00',
+      })
+    )
+    queryClient.setQueryData(['cases'], [mappedCase(caseRow()), olderCase])
+
+    renderHook(() => useCaseRealtime(SEED_CASE_ID), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    // An UPDATE for the SELECTED case patches ['cases'] through the
+    // mapper (review: the cloud_cases branch had no hook-level coverage).
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          caseRow({
+            display_name: 'Renamed canvass',
+            updated_at: '2026-07-20T00:00:00+00:00',
+          }) as unknown as Record<string, unknown>,
+          caseRow() as unknown as Record<string, unknown>,
+          'cloud_cases'
+        )
+      )
+    })
+    let cached = queryClient.getQueryData<CanvassCase[]>(['cases'])
+    expect(cached).toHaveLength(2)
+    expect(cached?.[0]?.displayName).toBe('Renamed canvass')
+    // A view-model, not a raw row.
+    expect(cached?.[0]).not.toHaveProperty('display_name')
+    // The fetch's updated_at desc order is preserved by the patch.
+    expect(cached?.[1]?.id).toBe('c-2')
+    const activity = useCanvassStore.getState().activity
+    expect(activity[0]?.kind).toBe('case-updated')
+    expect(activity[0]?.summary).toBe('Renamed canvass')
+    expect(activity[0]?.caseId).toBe(SEED_CASE_ID)
+
+    // A null display_name falls back to the case number, never "null".
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          caseRow({
+            display_name: null,
+            updated_at: '2026-07-20T00:01:00+00:00',
+          }) as unknown as Record<string, unknown>,
+          null,
+          'cloud_cases'
+        )
+      )
+    })
+    expect(useCanvassStore.getState().activity[0]?.summary).toBe(
+      '24-CANVASS-0417'
+    )
+
+    // Archiving mirrors the fetch predicate: the case LEAVES the list
+    // instead of being written back into it (review LOW).
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          caseRow({
+            status: 'archived',
+            updated_at: '2026-07-20T00:02:00+00:00',
+          }) as unknown as Record<string, unknown>,
+          null,
+          'cloud_cases'
+        )
+      )
+    })
+    cached = queryClient.getQueryData<CanvassCase[]>(['cases'])
+    expect(cached).toHaveLength(1)
+    expect(cached?.[0]?.id).toBe('c-2')
+  })
+
+  it('labels INSERTs and unchanged-status UPDATEs distinctly', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    queryClient.setQueryData(
+      ['locations', SEED_CASE_ID],
+      [mappedLocation(locationRow())]
+    )
+
+    renderHook(() => useCaseRealtime(SEED_CASE_ID), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    act(() => {
+      rt.fire(
+        'INSERT',
+        broadcastMessage(
+          'INSERT',
+          locationRow({
+            id: 'l-new',
+            location_name: 'New spot',
+          }) as unknown as Record<string, unknown>,
+          null
+        )
+      )
+    })
+    expect(useCanvassStore.getState().activity[0]?.kind).toBe('location-new')
+
+    // Same status on both sides of the UPDATE: an edit, not a move.
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow({
+            location_contact: 'Night manager',
+          }) as unknown as Record<string, unknown>,
+          locationRow() as unknown as Record<string, unknown>
+        )
+      )
+    })
+    expect(useCanvassStore.getState().activity[0]?.kind).toBe(
+      'location-updated'
+    )
+  })
+
+  it('cancels an in-flight refetch before patching an entry with data', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    const cancelSpy = vi.spyOn(queryClient, 'cancelQueries')
+    queryClient.setQueryData(
+      ['locations', SEED_CASE_ID],
+      [mappedLocation(locationRow())]
+    )
+
+    renderHook(() => useCaseRealtime(SEED_CASE_ID), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow({ status: 'working' }) as unknown as Record<
+            string,
+            unknown
+          >,
+          locationRow() as unknown as Record<string, unknown>
+        )
+      )
+    })
+
+    // A reconcile issued before the patch but resolving after it would
+    // overwrite the patch with an older snapshot (review LOW).
+    expect(cancelSpy).toHaveBeenCalledWith({
+      queryKey: ['locations', SEED_CASE_ID],
+    })
+    // The absent ['cases'] entry was NOT cancelled (nothing to protect).
+    expect(cancelSpy).not.toHaveBeenCalledWith({ queryKey: ['cases'] })
   })
 })

@@ -86,40 +86,77 @@ function locationKind(
   return 'location-updated'
 }
 
+/**
+ * An in-flight reconcile that resolves AFTER a realtime patch would
+ * overwrite it with an older snapshot — cancel it first. Only when the
+ * entry has data: cancelling a first fetch would strand the query, and
+ * a data-less entry has nothing to patch anyway.
+ */
+function cancelStaleFetch(queryClient: QueryClient, queryKey: unknown[]): void {
+  if (queryClient.getQueryData(queryKey) !== undefined) {
+    void queryClient.cancelQueries({ queryKey })
+  }
+}
+
 function handleEvent(queryClient: QueryClient, event: ActivityEvent): void {
   if (event.table === 'cloud_locations') {
     const caseId = event.row.case_id
     const mapped = toCanvassLocation(event.row)
+    const removed = event.op === 'DELETE' || mapped === null
+    cancelStaleFetch(queryClient, ['locations', caseId])
     queryClient.setQueryData<CanvassLocation[]>(
       ['locations', caseId],
       previous =>
-        upsertById(previous ?? [], mapped, event.row.id, event.op === 'DELETE')
+        // Never build the entry: setQueryData on a GC'd key would
+        // resurrect it as a one-row list stamped fresh, suppressing the
+        // real refetch for up to staleTime (review HIGH).
+        previous === undefined
+          ? undefined
+          : upsertById(previous, mapped, event.row.id, removed)
     )
-    useCanvassStore.getState().pushActivity({
-      id: crypto.randomUUID(),
-      at: Date.now(),
-      caseId,
-      kind: locationKind(event),
-      locationId: event.row.id,
-      summary:
-        locationKind(event) === 'location-status'
-          ? `${event.row.location_name} → ${event.row.status}`
-          : event.row.location_name,
-    })
+    if (!removed) {
+      // A removal pushes no activity: an attention stamp on a card that
+      // just vanished has nothing to highlight (review LOW: a DELETE
+      // carries row === old and read as 'location-updated').
+      useCanvassStore.getState().pushActivity({
+        id: crypto.randomUUID(),
+        at: Date.now(),
+        caseId,
+        kind: locationKind(event),
+        locationId: event.row.id,
+        summary:
+          locationKind(event) === 'location-status'
+            ? `${event.row.location_name} → ${event.row.status}`
+            : event.row.location_name,
+      })
+    }
     // Any location event may mean new media too (Flow D3, spec §3).
     void queryClient.invalidateQueries({ queryKey: ['media', caseId] })
     return
   }
 
   const mapped = toCanvassCase(event.row)
+  // Mirror fetchCases' server predicates: an archived or deleted case
+  // leaves the list instead of being written back into it (review LOW).
+  const removed =
+    event.op === 'DELETE' || mapped === null || mapped.status === 'archived'
+  cancelStaleFetch(queryClient, ['cases'])
   queryClient.setQueryData<CanvassCase[]>(['cases'], previous =>
-    upsertById(previous ?? [], mapped, event.row.id, event.op === 'DELETE')
+    previous === undefined
+      ? undefined
+      : upsertById(previous, mapped, event.row.id, removed).sort(
+          // Keep the fetch's `updated_at desc` order — ISO strings
+          // compare lexicographically.
+          (a, b) => b.updatedAt.localeCompare(a.updatedAt)
+        )
   )
-  useCanvassStore.getState().pushActivity({
-    id: crypto.randomUUID(),
-    at: Date.now(),
-    caseId: event.row.id,
-    kind: 'case-updated',
-    summary: event.row.display_name ?? event.row.case_number,
-  })
+  if (!removed) {
+    useCanvassStore.getState().pushActivity({
+      id: crypto.randomUUID(),
+      at: Date.now(),
+      caseId: event.row.id,
+      kind: 'case-updated',
+      summary: event.row.display_name ?? event.row.case_number,
+    })
+  }
 }
