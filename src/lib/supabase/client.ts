@@ -12,15 +12,17 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { CloudConfig } from '@/lib/tauri-bindings'
+import type { Database } from './database-types'
 import { resetVaultStorageBinding, vaultStorage } from './vault-storage'
 
 /**
- * The concrete client type `createClient` returns (untyped Database
- * generics until a schema type exists). Using the inferred type keeps
- * every assignment/return exact — annotating with bare `SupabaseClient`
- * re-parameterizes the generics and trips no-unsafe-assignment.
+ * The concrete client type `createClient<Database>` returns — typed rows
+ * from the hand-written contract in `database-types.ts` (doc 01 §5.1).
+ * Using the inferred type keeps every assignment/return exact —
+ * annotating with bare `SupabaseClient` re-parameterizes the generics
+ * and trips no-unsafe-assignment.
  */
-export type SupabaseClient = ReturnType<typeof createClient>
+export type SupabaseClient = ReturnType<typeof createClient<Database>>
 
 export class SupabaseNotInitializedError extends Error {
   constructor() {
@@ -34,7 +36,7 @@ export class SupabaseNotInitializedError extends Error {
 let client: SupabaseClient | null = null
 
 export function initSupabase(config: CloudConfig): SupabaseClient {
-  client = createClient(config.url, config.publishable_key, {
+  client = createClient<Database>(config.url, config.publishable_key, {
     auth: {
       storage: vaultStorage,
       persistSession: true,
@@ -71,7 +73,7 @@ export async function teardownSupabase(): Promise<void> {
  * persistence, no refresh loop, never the vault.
  */
 export function createProbeClient(url: string, key: string): SupabaseClient {
-  return createClient(url, key, {
+  return createClient<Database>(url, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
