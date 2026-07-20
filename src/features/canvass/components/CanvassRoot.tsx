@@ -1,7 +1,8 @@
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Map as MapIcon } from 'lucide-react'
 import { useConnectionHealth } from '@/hooks/useConnectionHealth'
-import { useCanvassStore } from '../store/canvass-store'
+import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
 import { NavRail } from './NavRail'
 import { CasesView } from './CasesView'
@@ -18,6 +19,11 @@ export function CanvassRoot() {
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   useCaseRealtime(selectedCaseId)
   useConnectionHealth()
+  // The module-scoped store outlives sign-out; unmount IS the session
+  // exit (active/locked → anything else), so reset here — the next
+  // operator must not inherit the previous session's case selection
+  // (review MEDIUM: view/selection carried across sessions).
+  useEffect(() => resetCanvassStore, [])
 
   return (
     <div className="flex h-full bg-zinc-950 text-zinc-100">

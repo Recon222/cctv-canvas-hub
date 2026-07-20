@@ -57,7 +57,10 @@ describe('canvass-store', () => {
       .pushActivity(entry({ id: 'other', caseId: 'other-case' }))
 
     const activity = useCanvassStore.getState().activity
-    // Entries carry their caseId — the feed filters on it (G6).
+    // Entries carry their caseId so the M5 feed CAN filter on it. The
+    // filter below is this test's own, not production's — the G6
+    // partition proof lives in the realtime suite (review LOW: don't
+    // count this as the partition proof).
     const forSeedCase = activity.filter(e => e.caseId === SEED_CASE_ID)
     expect(forSeedCase.map(e => e.id)).toEqual(['mine'])
   })

@@ -94,7 +94,8 @@ export const useCanvassStore = create<CanvassStore>()(
   )
 )
 
-/** Test helper: back to the landing state. */
+/** Back to the landing state — the session-exit unmount (CanvassRoot)
+ * and tests both call this. */
 export function resetCanvassStore(): void {
   useCanvassStore.setState({
     selectedCaseId: null,

@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nextProvider } from 'react-i18next'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import i18n from '@/i18n/config'
+import { getSupabase } from '@/lib/supabase/client'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
+import { CanvassRoot } from '../components/CanvassRoot'
 import { CasesView } from '../components/CasesView'
 import { NavRail } from '../components/NavRail'
 import { fetchCases, fetchLocationCounts } from '../services/canvassService'
@@ -133,6 +135,34 @@ describe('CasesView (A1)', () => {
     expect(screen.getByText('24-CANVASS-0417')).toBeInTheDocument()
     expect(screen.getByText('2 Started')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('resets board state when the session unmounts the board', () => {
+    // CanvassRoot mounts realtime, so the auto-mocked client needs a
+    // minimal channel surface.
+    const channel = { on: vi.fn(), subscribe: vi.fn() }
+    channel.on.mockReturnValue(channel)
+    vi.mocked(getSupabase).mockReturnValue({
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(() => Promise.resolve('ok')),
+    } as unknown as ReturnType<typeof getSupabase>)
+
+    const { unmount } = renderWithFeatureProviders(<CanvassRoot />)
+    act(() => {
+      const store = useCanvassStore.getState()
+      store.selectCase(SEED_CASE_ID)
+      store.setView('case')
+    })
+    expect(useCanvassStore.getState().selectedCaseId).toBe(SEED_CASE_ID)
+
+    // Unmount IS the session exit (active/locked → anything else): the
+    // module-scoped store must not hand the previous operator's case to
+    // the next sign-in (review MEDIUM).
+    unmount()
+    expect(useCanvassStore.getState().selectedCaseId).toBeNull()
+    expect(useCanvassStore.getState().selectedLocationId).toBeNull()
+    expect(useCanvassStore.getState().view).toBe('cases')
+    expect(useCanvassStore.getState().activity).toHaveLength(0)
   })
 
   // Test #111
