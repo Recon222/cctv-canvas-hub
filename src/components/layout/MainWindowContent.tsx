@@ -1,28 +1,33 @@
+import {
+  ConnectedPlaceholder,
+  SchemaGateScreen,
+  SetupScreen,
+  SignInScreen,
+  useAuthBootstrap,
+  useSessionStore,
+} from '@/features/cloud-session'
 import { cn } from '@/lib/utils'
-import { useUIStore } from '@/store/ui-store'
 
 interface MainWindowContentProps {
-  children?: React.ReactNode
   className?: string
 }
 
-export function MainWindowContent({
-  children,
-  className,
-}: MainWindowContentProps) {
-  const lastQuickPaneEntry = useUIStore(state => state.lastQuickPaneEntry)
+/**
+ * Single mount point for the session state machine (doc 01 §5.4):
+ * bootstrap runs here, and the screen renders by session state.
+ * `booting` shows the calm empty shell until bootstrap resolves —
+ * the bootstrap guarantees it always exits to another state.
+ */
+export function MainWindowContent({ className }: MainWindowContentProps) {
+  useAuthBootstrap()
+  const state = useSessionStore(s => s.state)
 
   return (
     <div className={cn('flex h-full flex-col bg-background', className)}>
-      {children ?? (
-        <div className="flex flex-1 flex-col items-center justify-center">
-          <h1 className="text-4xl font-bold text-foreground">
-            {lastQuickPaneEntry
-              ? `Last entry: ${lastQuickPaneEntry}`
-              : 'Hello World'}
-          </h1>
-        </div>
-      )}
+      {state === 'needs-setup' && <SetupScreen />}
+      {state === 'signed-out' && <SignInScreen />}
+      {state === 'schema-gate' && <SchemaGateScreen />}
+      {(state === 'active' || state === 'locked') && <ConnectedPlaceholder />}
     </div>
   )
 }

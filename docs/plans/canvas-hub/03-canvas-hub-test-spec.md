@@ -75,7 +75,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 10  | Should reject malformed enrollment payloads                                 | bad JSON / wrong shape / `v≠1` ⇒ `EnrollmentPayloadError`                |
 | 11  | Should surface probe rejection distinctly from unreachable                  | PostgREST error ⇒ "rejected"; network throw ⇒ "unreachable"              |
 | 12  | Should read the vault through the storage adapter                           | `vaultStorage.getItem` returns the command's decrypted value             |
-| 13  | Should write the vault through the storage adapter (single-key invariant)   | `setItem` forwards value to `vaultSet`; a second distinct storage key triggers the loud warning path (key name only — never the value) |
+| 13  | Should write the vault through the storage adapter (single-blob invariant)  | `setItem` forwards value to `vaultSet`; transient `…-code-verifier` keys are backed in-memory and never reach the vault (live-falsified single-key premise, M1); any other second session-class key triggers the loud failure path (key name only — never the value) |
 | 14  | Should treat vault command failure as absent session, not a crash           | command error ⇒ `getItem` resolves `null`                                |
 | 15  | Should sign in and persist the session via the adapter                      | after `signIn`, session lands in vault storage                           |
 | 16  | Should surface bad credentials as a typed sign-in failure                   | auth error message reaches the caller; no session stored                 |
@@ -285,6 +285,14 @@ Belongs to **Phase 6.1** (counted there in the summary).
 | --- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | 108 | Should register `session-lock-now` when 6.1 lands          | command id present in the registry after 6.1C init (it ships with LockOverlay — restores the registration coverage #99 lost when the command moved out of 5.3) |
 
+## Revision R3 additions (M1 implementation)
+
+Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as cheap real coverage of otherwise mock-only code; recorded here per the reconcile rule.
+
+| #   | Test Description                                        | Key Assertion                                                    |
+| --- | -------------------------------------------------------- | ----------------------------------------------------------------- |
+| 109 | Should report whether a session is restorable            | `restoreSession()` resolves `true` with a vaulted session, `false` without |
+
 ---
 
 ## Test Count Summary
@@ -292,7 +300,7 @@ Belongs to **Phase 6.1** (counted there in the summary).
 | Phase | Tests | Phase | Tests | Phase | Tests |
 | ----- | ----- | ----- | ----- | ----- | ----- |
 | 1.1   | 6     | 2.5   | 5     | 4.3   | 3     |
-| 1.2   | 13    | 3.1   | 2     | 5.1   | 4     |
+| 1.2   | 14    | 3.1   | 2     | 5.1   | 4     |
 | 1.3   | 5     | 3.2   | 2     | 5.2   | 3     |
 | 1.4   | 4     | 3.3   | 5     | 5.3   | 4     |
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
@@ -300,4 +308,4 @@ Belongs to **Phase 6.1** (counted there in the summary).
 | 2.3   | 6     | 4.2   | 4     | 6.3   | 0     |
 | 2.4   | 9     |       |       |       |       |
 
-**Total: 108** (Rust 6 · TypeScript 102; #107 appended in Revision R1 → Phase 2.2, #108 in Revision R2 → Phase 6.1) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 109** (Rust 6 · TypeScript 103; #107 appended in Revision R1 → Phase 2.2, #108 in Revision R2 → Phase 6.1, #109 in Revision R3 → Phase 1.2) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.

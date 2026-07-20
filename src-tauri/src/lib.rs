@@ -72,8 +72,11 @@ pub fn run() {
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     // Log to webview console for development
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
-                    // Log to system logs on macOS (appears in Console.app)
-                    #[cfg(target_os = "macos")]
+                    // Persistent log file on every platform (Windows:
+                    // %LOCALAPPDATA%\{bundle}\logs; macOS: Console.app/log dir).
+                    // Windows release builds detach the console
+                    // (windows_subsystem = "windows"), so without this target
+                    // production warn/error would vanish entirely.
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
                         file_name: None,
                     }),

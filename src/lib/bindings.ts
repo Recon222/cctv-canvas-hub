@@ -168,6 +168,54 @@ async saveExampleData(data: ExampleData) : Promise<Result<null, ExampleError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async loadCloudConfig() : Promise<Result<CloudConfig | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("load_cloud_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveCloudConfig(config: CloudConfig) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_cloud_config", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearCloudConfig() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_cloud_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async vaultGet() : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("vault_get") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async vaultSet(value: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("vault_set", { value }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async vaultClear() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("vault_clear") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -196,6 +244,23 @@ quick_pane_shortcut: string | null;
  * If None, uses system locale detection
  */
 language: string | null }
+/**
+ * Cloud connection config — designed-public values (project URL +
+ * RLS-bounded publishable key), stored as plain JSON in app data (T4).
+ */
+export type CloudConfig = { 
+/**
+ * `https://{ref}.supabase.co`
+ */
+url: string; 
+/**
+ * `sb_publishable_…` — designed-public, RLS-bounded.
+ */
+publishable_key: string; 
+/**
+ * Convenience for the re-auth prompt; NOT a secret.
+ */
+signed_in_email: string | null }
 /**
  * Example data structure demonstrating feature-scoped types.
  * 

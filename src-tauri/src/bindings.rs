@@ -2,8 +2,8 @@ use tauri_specta::{collect_commands, Builder};
 
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::features::{
-        example_feature_commands, notifications_commands, preferences_commands,
-        quick_pane_commands, recovery_commands,
+        cloud_session_commands, example_feature_commands, notifications_commands,
+        preferences_commands, quick_pane_commands, recovery_commands,
     };
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
@@ -26,6 +26,13 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         // Example feature (template)
         example_feature_commands::load_example_data,
         example_feature_commands::save_example_data,
+        // Cloud session feature
+        cloud_session_commands::load_cloud_config,
+        cloud_session_commands::save_cloud_config,
+        cloud_session_commands::clear_cloud_config,
+        cloud_session_commands::vault_get,
+        cloud_session_commands::vault_set,
+        cloud_session_commands::vault_clear,
     ])
 }
 

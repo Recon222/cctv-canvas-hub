@@ -115,5 +115,41 @@
   "toast.error.windowMinimizeFailed": "Failed to minimize window: {{message}}",
   "toast.error.windowMaximizeFailed": "Failed to toggle maximize: {{message}}",
   "toast.error.fullscreenEnterFailed": "Failed to enter fullscreen: {{message}}",
-  "toast.error.fullscreenExitFailed": "Failed to exit fullscreen: {{message}}"
+  "toast.error.fullscreenExitFailed": "Failed to exit fullscreen: {{message}}",
+
+  "cloudSession.errors.configLoadFailed": "Could not read the saved cloud configuration",
+  "cloudSession.errors.bootstrapFailed": "Could not restore the cloud session",
+
+  "cloudSession.setup.title": "Connect to your agency cloud",
+  "cloudSession.setup.description": "Paste the enrollment payload from your agency administrator.",
+  "cloudSession.setup.payloadLabel": "Enrollment payload",
+  "cloudSession.setup.payloadPlaceholder": "{ \"v\": 1, \"url\": \"https://…\", \"key\": \"sb_publishable_…\" }",
+  "cloudSession.setup.submit": "Connect",
+  "cloudSession.setup.probing": "Checking…",
+  "cloudSession.setup.invalidPayload": "That payload is not valid — check it matches the enrollment JSON exactly",
+  "cloudSession.setup.probeRejected": "The project refused this key — check the enrollment payload",
+  "cloudSession.setup.probeUnreachable": "Could not reach the project — check the network connection",
+  "cloudSession.setup.saveFailed": "Could not save the cloud configuration",
+
+  "cloudSession.signIn.title": "Sign in",
+  "cloudSession.signIn.description": "Coordinator account for this agency cloud",
+  "cloudSession.signIn.emailLabel": "Email",
+  "cloudSession.signIn.passwordLabel": "Password",
+  "cloudSession.signIn.submit": "Sign in",
+  "cloudSession.signIn.signingIn": "Signing in…",
+  "cloudSession.signIn.failed": "Sign-in failed. {{message}}",
+
+  "cloudSession.gate.title": "Cloud schema mismatch",
+  "cloudSession.gate.description": "This display cannot safely render data from this cloud version.",
+  "cloudSession.gate.requiredVersion": "Required schema version: {{version}}",
+  "cloudSession.gate.foundVersion": "Cloud schema version: {{version}}",
+  "cloudSession.gate.foundVersionUnknown": "Cloud schema version: unknown",
+  "cloudSession.gate.retry": "Retry",
+  "cloudSession.gate.signOut": "Sign out",
+  "cloudSession.gate.signOutFailed": "Sign-out failed",
+
+  "cloudSession.connected.status": "Connected · schema v{{version}}",
+  "cloudSession.connected.description": "The live canvass board arrives in the next milestone.",
+  "cloudSession.connected.signOut": "Sign out",
+  "cloudSession.connected.signOutFailed": "Sign-out failed"
 }

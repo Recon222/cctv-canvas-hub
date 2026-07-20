@@ -1,0 +1,9 @@
+[package]
+name = "secure-vault"
+version = "0.1.0"
+edition = "2021"
+description = "Pure AES-256-GCM seal/open for the session vault. No Tauri/keyring dependency — unit-testable with `cargo test` on Windows (a harness that links tauri/WebView2 aborts at load; see docs/developer/testing.md)."
+
+[dependencies]
+aes-gcm = "0.10"
+rand = "0.8"

@@ -2,8 +2,14 @@
  * Simple logging utility for the frontend
  *
  * In development: logs to browser console
- * In production: can optionally send to Tauri backend for system logging
+ * In production: warn/error forward to the Tauri log plugin
+ * (stdout + the on-disk log file), so failures stay diagnosable
  */
+
+import {
+  warn as backendWarn,
+  error as backendError,
+} from '@tauri-apps/plugin-log'
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error'
 
@@ -67,15 +73,35 @@ class Logger {
     // Always log to console in development
     if (this.isDevelopment) {
       this.logToConsole(entry)
+      return
     }
 
-    // In production, you could optionally send logs to Tauri backend
-    // This is commented out to keep it simple, but here's how you might do it:
-    /*
-    if (!this.isDevelopment && (level === 'warn' || level === 'error')) {
+    // Production: warn/error must survive somewhere inspectable —
+    // the Tauri log plugin writes them to stdout and the log file.
+    if (level === 'warn' || level === 'error') {
       this.logToBackend(entry)
     }
-    */
+  }
+
+  /**
+   * Forward to the Tauri log plugin. Call sites must never pass secret
+   * material — the message and context land in the on-disk log.
+   */
+  private logToBackend(entry: LogEntry): void {
+    let message = entry.message
+    if (entry.context) {
+      try {
+        message += ` ${JSON.stringify(entry.context, (_key, value: unknown) =>
+          value instanceof Error ? value.message : value
+        )}`
+      } catch {
+        message += ' [context unserializable]'
+      }
+    }
+    const sink = entry.level === 'error' ? backendError : backendWarn
+    void sink(message).catch(() => {
+      // The plugin IS the last-resort sink — nothing left to fall back to.
+    })
   }
 
   private logToConsole(entry: LogEntry): void {
@@ -102,22 +128,6 @@ class Logger {
         break
     }
   }
-
-  /*
-  // Optional: Send logs to Tauri backend for system logging
-  private async logToBackend(entry: LogEntry): Promise<void> {
-    try {
-      await invoke('log_from_frontend', {
-        level: entry.level,
-        message: entry.message,
-        timestamp: entry.timestamp.toISOString(),
-        context: entry.context,
-      })
-    } catch (error) {
-      console.warn('Failed to send log to backend:', error)
-    }
-  }
-  */
 }
 
 // Export a singleton logger instance

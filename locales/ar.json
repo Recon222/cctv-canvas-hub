@@ -115,5 +115,41 @@
   "toast.error.windowMinimizeFailed": "فشل تصغير النافذة: {{message}}",
   "toast.error.windowMaximizeFailed": "فشل تبديل التكبير: {{message}}",
   "toast.error.fullscreenEnterFailed": "فشل الدخول إلى ملء الشاشة: {{message}}",
-  "toast.error.fullscreenExitFailed": "فشل الخروج من ملء الشاشة: {{message}}"
+  "toast.error.fullscreenExitFailed": "فشل الخروج من ملء الشاشة: {{message}}",
+
+  "cloudSession.errors.configLoadFailed": "تعذّر قراءة إعدادات السحابة المحفوظة",
+  "cloudSession.errors.bootstrapFailed": "تعذّر استعادة جلسة السحابة",
+
+  "cloudSession.setup.title": "الاتصال بسحابة وكالتك",
+  "cloudSession.setup.description": "الصق حمولة التسجيل المقدمة من مسؤول وكالتك.",
+  "cloudSession.setup.payloadLabel": "حمولة التسجيل",
+  "cloudSession.setup.payloadPlaceholder": "{ \"v\": 1, \"url\": \"https://…\", \"key\": \"sb_publishable_…\" }",
+  "cloudSession.setup.submit": "اتصال",
+  "cloudSession.setup.probing": "جارٍ التحقق…",
+  "cloudSession.setup.invalidPayload": "هذه الحمولة غير صالحة — تأكد من مطابقتها تمامًا لملف JSON الخاص بالتسجيل",
+  "cloudSession.setup.probeRejected": "رفض المشروع هذا المفتاح — تحقق من حمولة التسجيل",
+  "cloudSession.setup.probeUnreachable": "تعذّر الوصول إلى المشروع — تحقق من اتصال الشبكة",
+  "cloudSession.setup.saveFailed": "تعذّر حفظ إعدادات السحابة",
+
+  "cloudSession.signIn.title": "تسجيل الدخول",
+  "cloudSession.signIn.description": "حساب المنسق لسحابة هذه الوكالة",
+  "cloudSession.signIn.emailLabel": "البريد الإلكتروني",
+  "cloudSession.signIn.passwordLabel": "كلمة المرور",
+  "cloudSession.signIn.submit": "تسجيل الدخول",
+  "cloudSession.signIn.signingIn": "جارٍ تسجيل الدخول…",
+  "cloudSession.signIn.failed": "فشل تسجيل الدخول. {{message}}",
+
+  "cloudSession.gate.title": "عدم تطابق مخطط السحابة",
+  "cloudSession.gate.description": "لا يمكن لهذه الشاشة عرض بيانات هذا الإصدار من السحابة بأمان.",
+  "cloudSession.gate.requiredVersion": "إصدار المخطط المطلوب: {{version}}",
+  "cloudSession.gate.foundVersion": "إصدار مخطط السحابة: {{version}}",
+  "cloudSession.gate.foundVersionUnknown": "إصدار مخطط السحابة: غير معروف",
+  "cloudSession.gate.retry": "إعادة المحاولة",
+  "cloudSession.gate.signOut": "تسجيل الخروج",
+  "cloudSession.gate.signOutFailed": "فشل تسجيل الخروج",
+
+  "cloudSession.connected.status": "متصل · المخطط الإصدار {{version}}",
+  "cloudSession.connected.description": "لوحة المسح الميداني المباشرة تصل في المرحلة القادمة.",
+  "cloudSession.connected.signOut": "تسجيل الخروج",
+  "cloudSession.connected.signOutFailed": "فشل تسجيل الخروج"
 }
