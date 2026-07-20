@@ -32,6 +32,15 @@ This repository is a template with sensible defaults for building Tauri v2 + Rea
 
 **CRITICAL:** Use Tauri v2 docs only. Always use modern Rust formatting: `format!("{variable}")`
 
+### Git & Review Workflow (owner preferences)
+
+- **Merges are always merge commits**: `gh pr merge N --merge --delete-branch` — never squash, never rebase (the owner wants merge bubbles and connector lines in the graph). After merging: `git checkout main && git pull && git fetch --prune`.
+- **Granular commits, red+green together**: one commit per green TDD unit — the failing test and the code that passes it land in the same commit (the pre-commit hook typechecks every commit, so red-only commits can't compile anyway).
+- **Fix commits map to review findings**: one commit per finding when clean, grouped when entangled; post a commit→finding mapping table as a PR comment after every fix round.
+- **Review pipeline**: PRs are reviewed externally via `/react-tauri-rust-code-review` / `/react-tauri-rust-plan-review` (run by the owner). Write PR bodies for the review fan-out: scope, live evidence, deviations-with-justification, and a "deliberate choices — don't re-flag" section. **Every revision pass gets a `--fix-delta` re-review before merge.** Verify each review finding against code/installed-sources/live-cloud before fixing; refute with evidence when a finding is wrong.
+- **Review artifacts are committed**: `docs/plan-reviews/`, `docs/code-reviews/`, and the living deferral ledger `docs/code-reviews/deferred.md` (every deferred item carries a pick-up trigger; remove rows when done).
+- Every commit body ends with the `Co-Authored-By` trailer plus a `Claude-Session:` link to the authoring session.
+
 ## Architecture Patterns (CRITICAL)
 
 ### State Management Onion

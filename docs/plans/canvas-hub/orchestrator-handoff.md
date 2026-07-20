@@ -1,0 +1,60 @@
+# Orchestrator Handoff — Canvas Hub
+
+**From:** the Fable 5 session that planned this project and shipped M1 + M2 (2026-07-19 → 2026-07-20). **To:** the incoming orchestrator instance. **Read everything in §2, then deep-dive whatever parts of the repo you need until you are 100% comfortable taking the baton — the git history, the review documents, and the shipped code are all self-explanatory by design.** The outgoing session remains reachable through Kris for questions.
+
+## 1. Where the project stands
+
+| Done | State |
+| --- | --- |
+| Planning set (PR #1) + Amendments A1 (PR #3) and A2 (PR #5) | Merged. The three docs in `docs/plans/canvas-hub/` are the single source of truth — **129 tests pinned** (9 Rust + 120 TS), 7 milestones, AD1–AD15 |
+| **M1** — session foundation (PR #2) | Shipped + live-verified: encrypted vault (AES-GCM, key in OS keychain), enrollment, sign-in, schema gate, relaunch-restore |
+| **M2** — live data plane (PR #4) | Shipped + live-verified: three-view board (Cases/Case/Map-placeholder + NavRail), realtime at **13 ms** broadcast-to-board on the pure patch path, health machine, 135-test suite |
+| Design | Locked: the handoff package (§2) is the **binding design**. Claude design is **currently authoring the production components** per `design/production-brief.md` — that package arrives next |
+| **Next: M3 (map)** | Kicks off when the production package lands. Everything staged: Mapbox token in `CLAUDE.local.md`, two seeded cases, marker-binding doc, amended plan |
+
+## 2. Required reading (in this order)
+
+1. `AGENTS.md` — the bible, including the **Git & Review Workflow** section (the owner's process preferences — binding).
+2. `docs/plans/initial plan/canvas-hub-spec.md` (§3 pinned cloud contract, §9 non-negotiables) and `planning-doc-house-style.md` (how planning docs are written/amended here).
+3. **The plan**: `docs/plans/canvas-hub/01-canvas-hub-architecture.md` · `02-canvas-hub-implementation-plan.md` · `03-canvas-hub-test-spec.md`. Doc 02's AD table + phase rows are what implementation agents execute; doc 03 is the TDD red line.
+4. `docs/code-reviews/deferred.md` — the living ledger (D1–D18, each with a pick-up trigger; **remove rows when done**). D15 is an M5 **entry criterion**; D16/D17 fire at M3.
+5. `CLAUDE.local.md` (repo root, gitignored) — dev cloud creds, seeded canvass, Mapbox dev token, enrollment payload.
+6. Design: `docs/plans/canvas-hub/design/production-brief.md` (what Claude design is building now) and the binding package at `D:\Work Coding Projects\CCTV Recovery Notes App\design-ui-packages\Desktop app for investigators\design_handoff_canvas_hub` (its `README.md` is the design language: tokens, fonts, per-screen specs).
+7. Review history (all committed): `docs/plan-reviews/*` and `docs/code-reviews/*`. Minimum: **`pr-4-review.md`** (the M2 CRITICAL — this project's best lesson) and **`pr-5-plan-review.md` + its fix-delta** (the port scope for M6's Phase 6.3 was settled there — do not re-derive it).
+8. Before M3 marker code: `MARKER-BINDING-FIX (1).md` in the mobile repo (`D:\Work Coding Projects\CCTV Recovery Notes App\extraction_case_notes_react_native_expo` — search for it). The mobile repo is also the cloud-contract ground truth (`src/features/agency-cloud/services/provisioning-sql.ts` etc.).
+9. Before M6: the port source at `D:\Coding\Agents_and_Skills\timeline-agent-sdk\claude-sdk-timeline-creator\src\features\processTerminal` — but the retained/discarded cut is already pinned in Phase 6.3A; trust it, it was verified file-by-file twice.
+10. Memory: `C:\Users\kriss\.claude\projects\D--Work-Coding-Projects-CCTV-Recovery-Notes-App-cctv-canvas-hub\memory\` (auto-loads; agent-spawning rules live there).
+
+## 3. The operating loop (the machine that made this work — do not improvise around it)
+
+- **Roles.** You orchestrate: write agent briefs, review their output, push, write PR bodies, verify review findings, merge. **Implementation agents** (fresh Fable 5, spawned per milestone/fix-round) build. **Kris runs the external reviews** in another terminal (`/react-tauri-rust-code-review`, `/react-tauri-rust-plan-review`, each with `--fix-delta`) and hands you the review file path. Claude design owns UI authorship.
+- **The milestone loop:** brief agent → TDD build with granular commits → agent stops (never pushes) → you independently re-run `check:all` + targeted-read the load-bearing new code → push → PR with a **review-ready body** (scope, live evidence, deviations-with-justification, "deliberate choices — don't re-flag") → Kris reviews → **you verify every finding against code/source/live-cloud before dispatching fixes** — refute with evidence when wrong (it has happened: the `app_meta` probe claim died to one live HTTP call) → fix agent (or yourself for one-liner rounds) → mapping comment on the PR → `--fix-delta` → **merge only on APPROVE**, always with the owner's specs.
+- **Agent spawning rules:** `model: "fable"` explicit for implementation (inheritance does NOT give subagents Fable), `opus` for app-driving/smoke agents, **never use the `name` parameter**, and **never rely on resuming a completed agent** — briefs must be fully self-contained (docs + git history are the context carrier). Briefs always include: the reading list, scope fence, commit authorization + trailer text, gate rules, CLAUDE.local pointer with a never-leak warning, no-push/no-PR, and a raw-data report format.
+- **Trailers:** every commit ends with the `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` line plus a `Claude-Session:` line — **use YOUR session's URL** (it's in your system prompt), not the old one.
+- **Live-smoke discipline** (`driving-agent-shell` + `live-smoke-testing` skills): every milestone's observable outcome is proven against the running app and the live dev cloud — negative control first, A/B both directions, clean teardown. Simulate investigator activity via throwaway supabase-js scripts signed in as the seeded investigators (fires real RLS + broadcast triggers, exactly like the phones).
+
+## 4. Hard-won lessons (none of these are written anywhere else)
+
+1. **Mirror-drift is THE recurring failure mode.** Four review rounds caught amendments that fixed one document and left doc 02's phase rows / doc 03's tests / the appendices / the brief / the ledger behind. When you amend anything, grep for every mirror before committing. The counts must reconcile three ways (Appendix C ≡ doc 03 summary ≡ actual rows) — it's checked every round.
+2. **Fix rounds introduce defects. Always re-review.** Three separate times a fix pass created the next round's finding (a health-state leftover, a cross-milestone forward reference, an overclaimed port verification). `--fix-delta` after every revision is a standing rule, not a courtesy.
+3. **Installed source beats documentation, every time.** The three best findings of the project (the case-switch CRITICAL, the anon-REST accessToken HIGH, the GoTrue `-user` sibling key) came from reading `node_modules`, not docs. When a finding or a plan claim rests on library behavior, open the installed source. Corollary: the supabase-js storage layer surprised us **three times** — treat any assumption about GoTrue's storage-key behavior as unverified until traced.
+4. **Capture the wire before building on it.** M2's broadcast envelope was live-captured before any cache code consumed it (test #47's fixture is the capture). Keep that discipline for anything M4+ touches (signed-URL responses, storage errors).
+5. **Mutation-check new guard tests** (mutate production, see red, revert) and **measure flake** (the 90-run pattern: background batches of 45 within the 10-min Bash timeout). Two flaky tests were killed by measurement this project; inspection would have passed both.
+6. **Windows facts:** no inline tests in the app crate ever (workspace crates only — `tail_log` lives in `platform-utils` for exactly this); bindings only via `npm run rust:bindings`; `keyring` needs platform features; the LogDir target is un-gated so prod logs land in `%LOCALAPPDATA%\com.tauri-app.app\logs\tauri-app.log`; **IDE diagnostics streaming in mid-agent-flight are stale noise** — trust the gate, not the diagnostics panel.
+7. **The gate is truth.** Re-run `npm run check:all` yourself after every agent round before pushing — agents have never lied about it here, but you verify anyway. `npx prettier --write` every markdown file you touch (the format stage covers md).
+8. **Driving hazards:** WebView2's autofill dropdown steals clicks on the password field (Esc dismisses); the quick-pane window can pop up on app-switch (Esc); port 1420 held by a stale bundler silently eats launches (the skill covers it).
+9. **Owner directives that override instinct:** DVR credentials are ordinary strings — zero secrecy semantics anywhere, ever (no masking, no dots, no reveal affordances); the idle lock alters NO content (interaction-only). Both are pinned in the docs but easy to regress by habit.
+10. **Supabase MCP** is read-only, config-pinned to canvas-hub-dev (`fniyjetrgqsamqvkcrxg`) — correct in your fresh session (verify with `get_project_url` once). Use it for schema inspection only; all mutations/simulation via supabase-js scripts with CLAUDE.local creds.
+11. **Dev cloud facts beyond CLAUDE.local:** there are now TWO cases (case B `24-CANVASS-0522` "Petro-Canada Assault — Davis Dr", owner det.chen, 2 locations — created during the M2 fix round as the permanent case-switch test surface); `cloud_cases`/`cloud_locations` have **no DB default on `id`** — inserts must supply UUIDs; the RPCs return soft-deleted rows (the client filters, always).
+12. **Kris's communication style:** when they ask for "brief thoughts," be brief. "Same approach" means the verify-every-finding-then-fix loop. Offer next steps at the end of a turn; don't ask permission mid-flow for things already authorized. They watch implementation agents' contexts live — write briefs knowing they're read by a human too.
+
+## 5. Immediate next steps (in order)
+
+1. **When the Claude-design production package arrives:** census it (file list, dep check — it is allowed ZERO new dependencies), gate-check a sample, then pour it onto a branch. Recommended shape: land it as the front half of the M3 branch (the M3 agent wires it), with the PR body flagging design-package provenance so reviewers focus on integration, not aesthetics.
+2. **M3 kickoff** (fresh Fable agent, self-contained brief): phases 3.1–3.4 as amended — tokens/fonts (3.1C), map with persistent div + 3.2D hoist + AD15 live check (3.2E in `CanvassRoot`), markers via the design factories + the binding rule, fly-to + D16 single-select a11y (3.4), D17's two test arms, tests #66–76 + the R4/R5 rows tagged 3.x. Live smoke needs the Mapbox token (already in CLAUDE.local) and both seeded cases.
+3. Then M4 (media — remember `mediaPlayerIncluded` D18 fires here), M5 (**D15 entry criterion first**: the health indicator before anything else), M6 (idle lock + the 6.3 panel port — the cut is pinned, read pr-5 fix-delta before briefing), M7 (windows — reread doc 01 §A1/A2 topology).
+4. The production-package prompt Kris hands to Claude design for future rounds follows the two-brief pattern in `design/` — prototype brief first, production brief second.
+
+## 6. Questions
+
+The outgoing session has full context and remains open — route questions through Kris. Otherwise: read §2, deep-dive until comfortable, and take the baton. The bar you inherit: every milestone live-verified, every review round closed with evidence, zero open findings across five PRs.
