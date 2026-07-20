@@ -32,9 +32,10 @@ export const STALE_AFTER_MS = 90_000
 export const RECONCILE_MS = 300_000
 
 /**
- * Query-key prefix for signed-URL queries (M4). Owned here so the M2
- * catch-up exclusion predicate never forward-references M4 — it matches
- * nothing until `useSignedUrl` builds its keys from the same constant.
+ * Query-key prefix for signed-URL queries (M4). Signed URLs refresh on
+ * their own interval and are deliberately OUTSIDE the catch-up
+ * allow-list (useConnectionHealth) — M4's `useSignedUrl` builds its
+ * keys from this constant.
  */
 export const SIGNED_URL_KEY_PREFIX = 'signed-url'
 
@@ -65,8 +66,18 @@ export function evaluate(marks: HealthMarks, now: number): HealthState {
     return 'stale'
   }
   if (marks.channel === 'subscribed') {
-    // SUBSCRIBED alone is not a confirmation — live needs positive proof.
-    return lastConfirm !== null ? 'live' : 'connecting'
+    if (lastConfirm === null) {
+      // SUBSCRIBED alone is not a confirmation — live needs positive proof.
+      return 'connecting'
+    }
+    // A fetch failure NEWER than the last positive confirm means the
+    // data plane is degraded even while the socket delivers — PostgREST
+    // 500ing continuously must not read `live` (review MEDIUM:
+    // lastFetchErrorAt was a write-only mark).
+    if ((marks.lastFetchErrorAt ?? 0) > lastConfirm) {
+      return 'reconnecting'
+    }
+    return 'live'
   }
   if (marks.channel === null) {
     return 'connecting'
