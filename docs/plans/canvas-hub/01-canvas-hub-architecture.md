@@ -101,10 +101,13 @@ src/
 │   │                 mappers, attention)                                           NEW
 │   ├── store/       (canvass-store.ts)                                             NEW
 │   ├── types/ · __tests__/ · index.ts                                              NEW
-├── components/layout/MainWindow.tsx       MODIFIED  drop sidebar panels; render NavRail + active view (A1)
-│   (A1: `LeftSideBar` is repurposed as a slim icon NavRail — navigation chrome
-│    switching Cases / Case dashboard / Map, NOT an info panel; spec §4's
-│    "no edge-docked panels" governs location info, which stays floating.)
+├── components/layout/MainWindow.tsx       MODIFIED  drop sidebar panels; full-bleed content (1.4B); A2: carries the AD15 shell transform (3.2E)
+│   (A1 as-built: the NavRail is a bespoke <nav> in the board tree
+│    (`CanvassRoot`) — NOT a rework of `LeftSideBar.tsx`; neither template
+│    sidebar file renders anywhere. Spec §4's "no edge-docked panels"
+│    governs location info, which stays floating; A2's ProcessPanel is
+│    owner-superseded chrome in the right-edge position — see doc 02
+│    AD9/AD14.)
 ├── components/layout/MainWindowContent.tsx MODIFIED  host CanvassRoot (or session screens)
 ├── lib/commands/feature-commands.ts       MODIFIED  palette entries (per-view go-tos, lock now…)
 └── locales/{en,fr,ar}.json                MODIFIED  cloudSession.* / canvass.* keys
@@ -118,7 +121,10 @@ src-tauri/
 ├── Cargo.toml                             MODIFIED  workspace member + keyring dep
 └── tauri.conf.json                        MODIFIED  CSP for Supabase + Mapbox + blob workers
 
-DELETED: nothing (A1: LeftSideBar is repurposed into the NavRail; A2: RightSideBar's slot is repurposed into the ProcessPanel — both template sidebars now live; see §11)
+DELETED: nothing (A1/A2 as-built: the NavRail and the ProcessPanel are bespoke
+board-tree components in the left/right chrome positions — `LeftSideBar.tsx`
+and `RightSideBar.tsx` render nowhere and stay dormant for a later /cleanup;
+the panel reuses `useUIStore.rightSidebarVisible` as its expanded state; see §11)
 ```
 
 ## 5. Data Contracts
@@ -248,7 +254,7 @@ interface LocationFormData {
     exportMedia?: string
     fileType?: string
     sizeGb?: string
-    mediaPlayerIncluded?: boolean // A2: live rows carry a boolean (contract doc previously said string)
+    mediaPlayerIncluded?: boolean // A2: live rows carry a boolean (contract doc previously said string). ⚠ PENDING CODE CHANGE — shipped `src/lib/supabase/database-types.ts` still declares `string`; correct at first consumption (M4/M5; ledger D18). React renders a stray boolean as NOTHING — the field silently vanishes with a green gate
     mediaProvidedVia?: string
   }
   notes?: string
@@ -264,7 +270,7 @@ interface LocationFormData {
 - Topic **`agency:activity`**, private broadcast channel (`realtime.messages` RLS authorizes authenticated members). Client: `supabase.channel('agency:activity', { config: { private: true } })`, subscribe to `broadcast` events; call `supabase.realtime.setAuth()` after sign-in.
 - Payload from `realtime.broadcast_changes` (trigger `broadcast_agency_activity`): event name = `INSERT`|`UPDATE`|`DELETE`; payload carries `{ operation, table ('cloud_cases'|'cloud_locations'), schema, record, old_record }` — full new+old rows. **A2, live-captured:** the envelope also carries a payload-level `id` and a top-level `meta.id` (harmless; pinned by #47's fixture).
 - **Client partition rule (G6), as-built (A2):** the channel is **mount-scoped** — one subscription per board mount, the selected case read through a thunk at delivery time: `subscribeToCaseActivity(getCaseId: () => string | null, onEvent, onStatus)`. Re-keying the channel per case is forbidden (realtime-js topic reuse + the `isClosed()` gate silently kill resubscription — the M2 CRITICAL). Filtering stays client-side at delivery; two pre-filter side channels keep the **Cases landing live** (any `cloud_locations` envelope invalidates `['location-counts']`; any `cloud_cases` envelope for a non-selected case invalidates `['cases']`) and any well-formed envelope confirms liveness (§5.4).
-- **V2 caveat (A2):** agency-wide consumption is now load-bearing (landing liveness + delivery-time liveness confirmation). A per-case topic swap is NOT a drop-in — V2 must preserve an agency-wide signal before narrowing the topic.
+- **V2 caveat (A2):** agency-wide consumption is now load-bearing (landing liveness + delivery-time liveness confirmation). A per-case topic swap is NOT a drop-in — V2 must preserve an agency-wide signal before narrowing the topic. **And a per-case topic reintroduces the topic-reuse trap:** switching case A → B → A inside the leave window re-hits the same mid-leave channel reuse the mount-scoped design forbids above — the V2 swap must carry the same discipline (fresh channel identity per subscribe), not just a topic-string change.
 - **Type ownership:** `ChannelStatus` (mapped from supabase-js subscribe states) and `HealthState` are defined once, in `src/store/health-store.ts`; `realtimeService` imports them — never re-declares.
 
 ```ts
@@ -334,17 +340,19 @@ interface AppPreferences {
 | `active`        | signed in, gate passed, not locked           | queries + realtime + polling run      | CanvassRoot (board)                  |
 | `locked`        | `active` + idle timer elapsed                | **data keeps flowing** — queries, realtime, and media polling all continue (a wall display is idle by default; only `offline`/`signed-out` stop data); interaction dead | Board visible and **unchanged** under LockOverlay (DVR credentials are ordinary strings — never masked); password re-auth to resume |
 
+**Session-exit purge (as-built M2 — an invariant, per JS context):** leaving `active`/`locked` (board unmount) purges everything session-scoped — the canvass store, the health marks, and every `CASE_DATA_KEY_FAMILIES` entry in the query cache (a cached list inside `staleTime` would suppress the next sign-in's refetch and render operator A's location rows, requester names, and DVR credentials to operator B). M7: **each secondary context owns the same purge** — on `session-ended` it resets its own stores and purges its own QueryClient (doc 02 7.3A; test #117).
+
 **Connection health** (global `src/store/health-store.ts` — cross-cutting by design, see AD11; pure `evaluate()` exported alongside):
 
 | State          | Predicate                                                          | Behavior                                       | UI                                    |
 | -------------- | ------------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------- |
 | `connecting`   | initial channel subscribe in flight                                | queries run; no live badge                     | indicator: "connecting…"              |
 | `live`         | channel `SUBSCRIBED` and last confirm < `STALE_AFTER_MS`           | normal                                         | green dot + "updated HH:MM:SS"        |
-| `reconnecting` | channel dropped/errored; supabase-js retrying — **or (A2)** a fetch error newer than the last confirm while subscribed | on resubscribe: refetch case-data queries       | amber dot + "reconnecting…"           |
+| `reconnecting` | **two causes (A2):** (1) channel dropped/errored, supabase-js retrying; (2) a fetch error newer than the last confirm while still `SUBSCRIBED` (healthy socket, degraded data plane — e.g. PostgREST 500ing) | cause 1: on resubscribe, refetch case-data queries; cause 2: **no resubscribe exists** — recovery is the next successful fetch/reconcile | amber dot + "reconnecting…" — same chip for both causes (the distinction is the recovery path, not the visual; the SYSTEM lane's transition rows tell them apart) |
 | `stale`        | no realtime confirm AND no successful fetch for > `STALE_AFTER_MS` | keep retrying; polling continues               | red banner "STALE since HH:MM" (G4)   |
-
-**Liveness semantics (A2, binding for M5's indicator):** `lastEventAt` means "the channel demonstrably delivers" — it is stamped on ANY well-formed envelope, **before** the case filter (a quiet selected case is not a broken transport). M5 must not re-narrow this to selected-case events. Constants as-built: `STALE_AFTER_MS = 90_000`, `RECONCILE_MS = 60_000` (invariant: reconcile < stale, test-pinned).
 | `offline`      | `navigator.onLine === false`                                       | pause polling; on `online`: refresh + refetch  | red banner "offline"                  |
+
+**Liveness semantics (A2, binding for M5's indicator):** `lastEventAt` means "the channel demonstrably delivers" — it is stamped on ANY well-formed envelope, **before** the case filter (a quiet selected case is not a broken transport). M5 must not re-narrow this to selected-case events. **The indicator's displayed timestamp is `lastConfirm = max(lastEventAt, lastFetchOkAt)`** — on a silent overnight board `lastEventAt` stays `null` while reconciles keep the state `live`; binding "updated HH:MM:SS" to `lastEventAt` alone would render "updated —" beside a green dot. Constants as-built: `STALE_AFTER_MS = 90_000`, `RECONCILE_MS = 60_000` (invariant: reconcile < stale, test-pinned).
 
 **Attention** (`canvass-store`): `ActivityEntry { id, at, caseId, kind: 'location-new' | 'location-status' | 'location-updated' | 'media-new' | 'case-updated', locationId?, summary }` — in-memory ring (cap 200, AD7); `attentionByLocation: Record<string, number>` (a plain record, not a `Map` — Zustand selectors compare references; in-place `Map` mutation would silently skip re-renders) drives marker pulse / card highlight for `ATTENTION_TTL_MS` (~12 s).
 
@@ -352,7 +360,7 @@ interface AppPreferences {
 
 1. `deleted_at !== null` ⇒ row invisible — applied at the mapper, and the mapper runs at **every cache boundary**: initial fetch, the realtime patch (Flow C3), and the media fetch. Raw rows never enter a query cache, so no consumer can forget (verified live: RPCs return soft-deleted rows).
 2. `location` WKB → `{lat,lng}`; parse failure or `(0,0)` ⇒ `coord: null` ⇒ card-only (no marker), counted in a "no fix" chip.
-3. Every `form_data` field optional; latest `arrivalDateTime` across `arrivalDepartures` = "arrived HH:MM"; absent blocks render as absent, never `undefined` text.
+3. Every `form_data` field optional; latest `arrivalDateTime` across `arrivalDepartures` = the displayed arrival, rendered per rule 6 — absolute with seconds and an explicit date (e.g. `arrived 2026-07-20 14:32:07`; a relative age may annotate, never replace); absent blocks render as absent, never `undefined` text.
 4. Investigator display = `requester_name` per location (fallback: shortened `user_id`); roster derives from location rows — auth admin API is not reachable with the publishable key (AD8).
 5. Media: `mime_type` ∈ renderable set (`image/jpeg|png|webp`, `video/mp4`) → inline; else placeholder + open-externally (HEIC/QuickTime, spec §3/§5).
 6. Timestamps (A2, design-bound): every rendered timestamp carries seconds; dates are always explicit `yyyy-mm-dd` — never "today"/relative-only (relative ages may accompany, never replace).
@@ -376,7 +384,7 @@ interface AppPreferences {
 
 1. Investigator's phone updates `cloud_locations` → trigger broadcasts on `agency:activity`.
 2. `subscribeToCaseActivity` filters by active `case_id` → typed `ActivityEvent`.
-3. `useCaseRealtime` maps the payload row through `toCanvassLocation`/`toCanvassCase` (the trap-list choke point — §5.5), then patches the TanStack cache in place (`setQueryData` by row id; INSERT **upserts by id** — broadcast redelivery and races with in-flight refetches must not duplicate a card; DELETE/soft-delete removes), records `lastEventAt`, appends `ActivityEntry`, stamps `attentionByLocation`.
+3. `useCaseRealtime` maps the payload row through `toCanvassLocation`/`toCanvassCase` (the trap-list choke point — §5.5), **cancels any in-flight fetch for that key — only when the entry has data** (as-built `cancelStaleFetch`: a reconcile issued before the broadcast but resolving after the patch would overwrite it with an older snapshot, and A2's 5× faster cadence made that collision real; a data-less first fetch is never cancelled — it would strand the query), then patches the TanStack cache in place (`setQueryData` by row id; INSERT **upserts by id** — broadcast redelivery and races with in-flight refetches must not duplicate a card; DELETE/soft-delete removes), records `lastEventAt`, appends `ActivityEntry`, stamps `attentionByLocation`.
 4. Map marker re-colors + pulses; card highlights; feed prepends — no refetch needed (payload carries the full row).
 
 **Flow D — media arrival (poll, G3).**
@@ -443,7 +451,7 @@ Every row must be resolved in the Implementation Plan's Architecture Decisions t
 | `keyring`                        | Rust | ^3      | OS keychain for the vault key — raw bytes via `set_secret`/`get_secret` (never `set_password` with non-UTF-8 key material). Needs explicit platform features (`windows-native`, `apple-native`, `sync-secret-service`) — bare `keyring = "3"` compiles to a no-op store |
 | `aes-gcm`, `rand`                | Rust | 0.10 / ^0.8 | secure-vault crate (pure)              |
 
-No other new dependencies. Clustering uses Mapbox GL's built-in GeoJSON clustering (no `supercluster` dep).
+No other new dependencies. (Held through A2's ProcessPanel: `react-data-grid` was considered for the ported `TableCard` and **dropped with it** — the panel adds nothing; doc 02 AD14/6.3A.) Clustering uses Mapbox GL's built-in GeoJSON clustering (no `supercluster` dep).
 
 ## 10. Security / Threat Model
 
@@ -465,11 +473,11 @@ Long-lived coordinator session on an always-on host (G5). Enumerated:
 
 ## 11. Net Effect
 
-Additive feature set; nothing deleted in V1. Dormant after this lands (candidates for a later `/cleanup` pass, deliberately out of scope): `RightSideBar` + ui-store visibility state and palette/menu toggles (OD9; **A1: `LeftSideBar` exits dormancy — repurposed as the NavRail**), and the template's `example-feature` demo surface. The `quick-pane` feature is retained as the **reference implementation for secondary windows** (M7 reuses its create-once/show-hide lifecycle and async-command discipline — `AGENTS.md` "Window-Creating Commands Must Be `async`"). The template's recovery, preferences, command-palette, i18n, and quality-gate infrastructure is used as-is.
+Additive feature set; nothing deleted in V1. Dormant after this lands (candidates for a later `/cleanup` pass, deliberately out of scope): both template sidebar **files** — `LeftSideBar.tsx` and `RightSideBar.tsx` render nowhere (A1's NavRail and A2's ProcessPanel are bespoke board-tree components occupying those chrome positions, not reworks of the sidebar files) — plus the **left**-sidebar visibility state and its palette/menu toggles (OD9), and the template's `example-feature` demo surface. **Not dormant from 6.3:** `useUIStore.rightSidebarVisible` and its shortcut/palette commands — the ProcessPanel reuses them as its expanded/collapsed state, default flipped open (AD14 revised). The `quick-pane` feature is retained as the **reference implementation for secondary windows** (M7 reuses its create-once/show-hide lifecycle and async-command discipline — `AGENTS.md` "Window-Creating Commands Must Be `async`"). The template's recovery, preferences, command-palette, i18n, and quality-gate infrastructure is used as-is.
 
 ### A1 — Multi-window topology (M7)
 
-The **case dashboard and map views can pop out as secondary Tauri windows** (two-screen command centre: map on the wall TV, dashboard at the operator desk); the **Cases view stays bound** to the main window; a small **diagnostics window** (health-state detail, log tail, vault status, versions) rides the same machinery. Pinned decisions:
+The **case dashboard and map views can pop out as secondary Tauri windows** (two-screen command centre: map on the wall TV, dashboard at the operator desk); the **Cases view stays bound** to the main window; ~~a small **diagnostics window** (health-state detail, log tail, vault status, versions) rides the same machinery~~ (**A2: superseded** — diagnostics content lives in the in-main ProcessPanel; no diagnostics window exists. AD14 revised, §A2 below). Pinned decisions:
 
 1. **Separate JS contexts are the ground truth** — no shared React/Zustand/Query state, no shared supabase client. Each secondary window runs its own read-only data stack.
 2. **Main window is the sole auth owner** (T9). Secondaries never touch the vault or keyring and never run a refresh ticker: two GoTrueClients on one storage key is a documented concurrency hazard. Token delivery: initial = **handshake** (`secondary-ready` → main replies `session-token` + `view-context {view, caseId}`); ongoing pushes on every `TOKEN_REFRESHED`. Secondaries run clients created with the **`accessToken` callback option** — the mechanism that authenticates PostgREST, storage, AND realtime from the pushed token (their `auth.*` namespace is a throwing proxy by design). **`session-ended` fires on sign-out only**; idle lock emits `session-locked`/`session-unlocked` and secondaries mirror AD6 — seed their own-context session-store `locked`/`active` so interaction locks in step with main while the board keeps flowing unchanged (a wall display is idle by default; lock revokes nothing and alters no content). Secondaries are **refresh-passive**: they never mount the wake-refresh health path (`auth.refreshSession()` throws under the accessToken proxy) — their health display feeds from channel status and query results only. On `session-ended`, secondaries tear down realtime and drop the token before overlaying (the access token outlives sign-out by up to ~1 h).
@@ -478,7 +486,7 @@ The **case dashboard and map views can pop out as secondary Tauri windows** (two
 
 ### A2 — Process panel (replaces the A1 diagnostics window) + design bindings
 
-- **The diagnostics window is dead.** Its content merges into a **right-side collapsible ProcessPanel** (repurposing the RightSideBar slot) that toggles between **ACTIVITY** (the live activity feed — moved out of the dashboard's right column, freeing it for the roster) and **SYSTEM** (the process monitor: health transitions, source-tagged log tail via `read_log_tail`, vault status, uptime/versions). Collapsed it is a slim SYS tab; **default-open on ACTIVITY** for the wall posture, so the attention surface stays visible (spec §6). Implementation ports Kris's `processTerminal` feature (timeline-agent-sdk repo) behind a canvas-hub source adapter — see AD14 (revised) in doc 02.
+- **The diagnostics window is dead.** Its content merges into a **right-side collapsible ProcessPanel** — a bespoke component in the board tree (`CanvassRoot`'s flex row, gated on `active`/`locked`), occupying the right-edge chrome position; no template sidebar is involved, and its expanded/collapsed state reuses `useUIStore.rightSidebarVisible` (default flipped open). It toggles between **ACTIVITY** (the live activity feed — relocated out of the dashboard's right column at 6.3, freeing it for the roster; through M5 the dashboard hosts the feed as interim) and **SYSTEM** (the process monitor: health transitions, source-tagged log tail via `read_log_tail`, vault status, uptime/versions). Collapsed it is a slim SYS tab. **Default-open on ACTIVITY on the `cases`/`case` views** (wall posture — the attention surface stays visible, spec §6); **on the `map` view it auto-collapses to the SYS tab** and, when expanded there, **overlays** the floating card stack — map and stack never reflow. Implementation adapts the **retained surface** of Kris's `processTerminal` feature (timeline-agent-sdk repo) behind a canvas-hub source adapter — a gate-passed adaptation, not a copy; see AD14 (revised) and Phase 6.3 in doc 02.
 - **Design handoff is binding** for M3–M6 UI: `design-ui-packages/Desktop app for investigators/design_handoff_canvas_hub` (Case File design system: tokens, fonts, status visual language, connection chip + escalation banner, modals). Key engineering bindings: the map div persists across views (never unmount; `map.resize()` on switch); default style satellite-night; the Mapbox marker element must never carry its own `position`/`transform`/`transition` (field-app lesson); scale-to-fit strategy per AD15.
 
 **Upstream notes (for the mobile/cloud team, not this app):** the shipped RPCs (`locations_for_case`, `locations_in_view`) return soft-deleted rows and omit `user_id`/`form_data` — verified live. V1 routes around this (AD2); a v2 RPC revision should add a `deleted_at is null` predicate. Putting `cloud_media_files` on the realtime substrate remains the known V2 cloud-side addition (spec §3).
