@@ -53,6 +53,7 @@ function fakeSupabase(overrides?: {
       signOut: vi.fn(() => Promise.resolve({ error: null })),
     },
     realtime: { setAuth: vi.fn(() => Promise.resolve()) },
+    removeAllChannels: vi.fn(() => Promise.resolve([])),
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
@@ -135,6 +136,8 @@ describe('authService', () => {
 
     expect(fake.auth.signOut).toHaveBeenCalled()
     expect(mockCommands.vaultClear).toHaveBeenCalled()
+    // D12: no realtime channel may linger on a revoked token.
+    expect(fake.removeAllChannels).toHaveBeenCalled()
     // The singleton must survive sign-out so the next in-process sign-in
     // can reach getSupabase() — teardown is reserved for re-enrollment.
     expect(mockTeardownSupabase).not.toHaveBeenCalled()

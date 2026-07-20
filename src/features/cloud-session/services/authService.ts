@@ -33,6 +33,14 @@ export async function signIn(email: string, password: string): Promise<void> {
 
 export async function signOut(): Promise<void> {
   const supabase = getSupabase()
+  // Tear down realtime first: no channel may linger on a revoked token
+  // (D12). The active→signed-out unmount removes them too — this makes
+  // the guarantee independent of the component tree.
+  try {
+    await supabase.removeAllChannels()
+  } catch (cause) {
+    logger.warn('Sign-out channel teardown failed; continuing', { cause })
+  }
   try {
     const { error } = await supabase.auth.signOut()
     if (error) {
