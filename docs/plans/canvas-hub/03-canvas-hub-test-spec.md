@@ -51,7 +51,8 @@
 | `src/features/cloud-session/__tests__/idleLock.test.tsx`               | 6.1   | NEW       |
 | `src/features/canvass/__tests__/casesView.test.tsx` (A1, #110–111)     | 2.4   | NEW       |
 | `src/lib/supabase/secondary-client.test.ts` (A1, #114–116)             | 7.2   | NEW       |
-| `src/features/canvass/__tests__/secondaryWindows.test.tsx` (A1, #112–113, #117–121) | 7.1–7.3 | NEW |
+| `src/features/canvass/__tests__/secondaryWindows.test.tsx` (A1, #112–113, #117–119, #121) | 7.1–7.3 | NEW |
+| `src/features/cloud-session/__tests__/diagnostics.test.tsx` (A1, #120)  | 7.3   | NEW       |
 
 No existing test file is deleted or rewritten. One existing file receives **additions** only (`src/lib/commands/commands.test.ts`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
 
@@ -153,7 +154,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 53  | Should cap the activity ring at 200 entries                               | 201st push evicts the oldest                                   |
 | 54  | Should scope activity entries to their case                               | entries carry `caseId`; other-case entries not shown           |
 | 55  | Should stamp and expire attention marks                                   | stamp sets timestamp; `clearExpiredAttention(now+TTL)` removes |
-| 56  | Should toggle view between map and dashboard                              | `setView` round-trips                                          |
+| 56  | Should navigate across the three views (A1)                               | `setView` round-trips `'cases'` / `'case'` / `'map'`           |
 | 57  | Should render card fields from the view-model                             | name, address, status, investigator, arrival visible           |
 | 58  | Should render DVR credentials plainly when unlocked                       | username/password text present (spec §3 requirement)           |
 | 59  | Should reflect status with distinct styling per state                     | started/working/complete map to distinct classes               |
@@ -251,7 +252,7 @@ No existing test file is deleted or rewritten. One existing file receives **addi
 | 96  | Should show status counts for the selected case                      | started/working/complete counts match seed        |
 | 97  | Should derive the roster from location rows (AD8)                    | investigators grouped with their locations/status |
 | 98  | Should embed the activity feed                                       | feed rendered within dashboard                    |
-| 99  | Should register the two M5 palette commands                          | `canvass-toggle-view` + `session-sign-out` in the registry (`session-lock-now` registers in 6.1, with its unlock overlay) |
+| 99  | Should register the M5 palette commands (A1)                         | `canvass-view-cases` / `canvass-view-case` / `canvass-view-map` + `session-sign-out` in the registry (`session-lock-now` registers in 6.1, with its unlock overlay) |
 
 ## Phase 6.1 — idle lock
 
@@ -304,12 +305,12 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | 110 | Should render the Cases landing view with one card per active case         | seeded case ⇒ card with case number, incident address, status counts, last activity |
 | 111 | Should navigate from a case card to the case dashboard                     | selecting a card sets `selectedCaseId` + `view: 'case'`; `case`/`map` rail entries disabled with no selection |
-| 112 | Should open a view window via the async typed command                      | rail pop-out affordance ⇒ `commands.openViewWindow('map' \| 'case')` called    |
+| 112 | Should open a view window with its case context                            | rail pop-out affordance ⇒ `commands.openViewWindow(view, caseId)` called with the selected case's id (the window is unusable without it) |
 | 113 | Should focus, not duplicate, an already-open view window                   | second open call for the same view resolves without creating a second window (service contract) |
-| 114 | Should initialize the secondary client from a pushed token                 | `initSecondaryClient(url, key, token)` ⇒ `persistSession: false`, no refresh ticker, in-memory storage |
+| 114 | Should authenticate secondary REST requests with the pushed user token     | client is created with the `accessToken` callback; a REST request carries the user bearer token, NOT the publishable key (anon REST = RLS-empty board); no refresh ticker |
 | 115 | Should never touch the vault from a secondary context                      | secondary init + reads issue zero `vaultGet`/`vaultSet`/`vaultClear` calls (T9) |
-| 116 | Should update the secondary client when main rebroadcasts a refreshed token | `session-token` event ⇒ `updateSecondaryToken` applied to auth + realtime      |
-| 117 | Should render the terminal session-ended state on `session-ended`          | event ⇒ ended screen; no credential prompt exists in the secondary context     |
+| 116 | Should update the secondary client when main rebroadcasts a refreshed token | `session-token` event ⇒ `updateSecondaryToken` swaps the `accessToken` closure token AND calls `realtime.setAuth` (no `onAuthStateChange` exists in a secondary) |
+| 117 | Should tear down and terminalize on `session-ended` (sign-out only)        | event ⇒ channels removed + realtime disconnected + token discarded BEFORE the ended screen (no broadcast delivered after the event); `session-locked` instead ⇒ board keeps flowing with DVR credentials masked (AD6 parity); no credential prompt exists in the secondary context |
 | 118 | Should host the map or dashboard view by window query param                | `SecondaryRoot` mounts `MapCanvas`/`DashboardView` per `view` param with its own QueryClient |
 | 119 | Should offer pop-out only on case and map rail entries                     | `cases` entry has no pop-out affordance (bound to main)                        |
 | 120 | Should render diagnostics content                                          | health detail, log tail (via `readLogTail`), vault/keyring status, app + schema versions present |

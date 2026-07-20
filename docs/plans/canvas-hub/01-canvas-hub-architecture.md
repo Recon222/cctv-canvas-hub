@@ -94,7 +94,7 @@ src/
 ├── features/canvass/                      NEW   the live board feature
 │   ├── components/  (CanvassRoot, MapCanvas, MarkerLayer, LocationCardStack,
 │   │                 LocationCard, MediaThumb, VideoPlayer, DashboardView,
-│   │                 ActivityFeed, CaseSwitcher)                                   NEW
+│   │                 ActivityFeed, NavRail, CasesView, SecondaryRoot)              NEW
 │   ├── hooks/       (useCases, useCaseLocations, useCaseMedia, useCaseRealtime,
 │   │                 useMediaPolling, useSignedUrl)                                NEW
 │   ├── services/    (canvassService, realtimeService, mediaService, geo,
@@ -118,7 +118,7 @@ src-tauri/
 ├── Cargo.toml                             MODIFIED  workspace member + keyring dep
 └── tauri.conf.json                        MODIFIED  CSP for Supabase + Mapbox + blob workers
 
-DELETED: nothing (LeftSideBar/RightSideBar become unreferenced → flagged for a later /cleanup pass; see §11)
+DELETED: nothing (A1: LeftSideBar is repurposed into the NavRail; RightSideBar stays unreferenced → later /cleanup; see §11)
 ```
 
 ## 5. Data Contracts
@@ -397,7 +397,7 @@ interface AppPreferences {
 | ----------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
 | `src/components/layout/MainWindow.tsx`          | drop sidebar panels/handles; render content full-bleed          | spec §4: map-maximal, no edge-docked panels    |
 | `src/components/layout/MainWindowContent.tsx`   | render session screens / `CanvassRoot` by session state         | single mount point, App.tsx untouched          |
-| `src/lib/commands/feature-commands.ts`          | add palette commands (toggle dashboard, lock now, sign out)     | template command-centric design                |
+| `src/lib/commands/feature-commands.ts`          | add palette commands (per-view go-tos, lock now, sign out)      | template command-centric design                |
 | `src/test/setup.ts`                             | mock new `cloud_session` commands                               | template testing convention                    |
 | `locales/en.json` / `fr.json` / `ar.json`       | `cloudSession.*`, `canvass.*` keys                              | i18n rule: all strings in locales              |
 | `package.json`                                  | `@supabase/supabase-js`, `mapbox-gl`, `react-map-gl`            | §9 Dependencies                                |
@@ -466,7 +466,7 @@ Additive feature set; nothing deleted in V1. Dormant after this lands (candidate
 The **case dashboard and map views can pop out as secondary Tauri windows** (two-screen command centre: map on the wall TV, dashboard at the operator desk); the **Cases view stays bound** to the main window; a small **diagnostics window** (health-state detail, log tail, vault status, versions) rides the same machinery. Pinned decisions:
 
 1. **Separate JS contexts are the ground truth** — no shared React/Zustand/Query state, no shared supabase client. Each secondary window runs its own read-only data stack.
-2. **Main window is the sole auth owner** (T9). Secondaries never touch the vault or keyring and never run a refresh ticker: two GoTrueClients on one storage key is a documented concurrency hazard. Main pushes the access token over Tauri events (`session-token` on window-open and on every `TOKEN_REFRESHED`; `session-ended` on sign-out/lock), and secondaries run `persistSession: false` clients, calling `realtime.setAuth(token)` for their own case-scoped subscriptions.
+2. **Main window is the sole auth owner** (T9). Secondaries never touch the vault or keyring and never run a refresh ticker: two GoTrueClients on one storage key is a documented concurrency hazard. Token delivery: initial = **handshake** (`secondary-ready` → main replies `session-token` + `view-context {view, caseId}`); ongoing pushes on every `TOKEN_REFRESHED`. Secondaries run clients created with the **`accessToken` callback option** — the mechanism that authenticates PostgREST, storage, AND realtime from the pushed token (their `auth.*` namespace is a throwing proxy by design). **`session-ended` fires on sign-out only**; idle lock emits `session-locked`/`session-unlocked` and secondaries mirror AD6 — mask DVR credentials, keep the board flowing (a wall display is idle by default; lock revokes nothing). On `session-ended`, secondaries tear down realtime and drop the token before overlaying (the access token outlives sign-out by up to ~1 h).
 3. **Window lifecycle copies quick-pane**: create-once/show-hide, native-✕ handling, and **async Rust commands only** (sync window commands deadlock WebView2 on Windows — AGENTS.md CRITICAL).
 4. **The Claude-design prototype never sees multi-window** — it designs the three views + rail single-window; pop-out is wiring, not design.
 
