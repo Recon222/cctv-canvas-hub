@@ -201,6 +201,7 @@
   "canvass.viewer.previous": "Photo précédente",
   "canvass.viewer.next": "Photo suivante",
   "canvass.viewer.loading": "Chargement de la photo…",
+  "canvass.viewer.meta": "Prise le {{time}} · {{investigator}}",
 
   "canvass.player.close": "Fermer le lecteur",
   "canvass.player.loading": "Préparation de la vidéo…",
@@ -217,6 +218,8 @@
   "canvass.media.photoCount_other": "{{count}} photos",
   "canvass.media.videoCount_one": "{{count}} vidéo",
   "canvass.media.videoCount_other": "{{count}} vidéos",
+  "canvass.media.audioCount_one": "{{count}} fichier audio",
+  "canvass.media.audioCount_other": "{{count}} fichiers audio",
   "canvass.media.openFailed": "Impossible d'ouvrir le fichier dans une application externe",
 
   "canvass.map.zoomIn": "Zoom avant",

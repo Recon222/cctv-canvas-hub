@@ -126,13 +126,15 @@ export function MediaCountBadge({ count }: { count: number }) {
   )
 }
 
-/** Compact photo/video summary line (e.g. under a thumb row). */
+/** Compact photo/video/audio summary line (e.g. under a thumb row). */
 export function MediaSummary({
   photos,
   videos,
+  audio = 0,
 }: {
   photos: number
   videos: number
+  audio?: number
 }) {
   const { t } = useTranslation()
   const parts: string[] = []
@@ -141,6 +143,10 @@ export function MediaSummary({
   }
   if (videos > 0) {
     parts.push(t('canvass.media.videoCount', { count: videos }))
+  }
+  if (audio > 0) {
+    // Audio has no V1 tile or player — the count keeps it visible (#88).
+    parts.push(t('canvass.media.audioCount', { count: audio }))
   }
   if (parts.length === 0) {
     return null

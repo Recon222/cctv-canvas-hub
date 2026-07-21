@@ -1,4 +1,11 @@
-import { render, screen, act } from '@testing-library/react'
+import {
+  render,
+  screen,
+  act,
+  within,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nextProvider } from 'react-i18next'
@@ -8,11 +15,17 @@ import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { useSessionStore } from '@/features/cloud-session'
 import { LocationCard } from '../components/LocationCard'
 import { LocationCardStack } from '../components/LocationCardStack'
-import { fetchLocations } from '../services/canvassService'
-import { toCanvassLocation } from '../services/mappers'
+import { fetchLocations, fetchMedia } from '../services/canvassService'
+import { createSignedUrl } from '../services/mediaService'
+import { toCanvassLocation, toCanvassMedia } from '../services/mappers'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
-import type { CanvassLocation, LocationRow } from '../types'
-import { locationRow, SEED_CASE_ID } from './fixtures'
+import type {
+  CanvassLocation,
+  CanvassMedia,
+  LocationRow,
+  MediaRow,
+} from '../types'
+import { locationRow, mediaRow, SEED_CASE_ID } from './fixtures'
 
 // Component tests mock the service layer (testing.md convention).
 vi.mock('../services/canvassService', () => ({
@@ -21,6 +34,9 @@ vi.mock('../services/canvassService', () => ({
   fetchLocationCounts: vi.fn(() => Promise.resolve({})),
   fetchMedia: vi.fn(() => Promise.resolve([])),
 }))
+// Spy mode keeps `isInlineRenderable` real (the strip derives
+// renderability from the mime); signing gets per-test implementations.
+vi.mock('../services/mediaService', { spy: true })
 // The realtime seam under CanvassRoot consumers never runs here, but the
 // client module must not be touched by accident either.
 vi.mock('@/lib/supabase/client')
@@ -31,6 +47,14 @@ function mapped(row: LocationRow): CanvassLocation {
     throw new Error('fixture row unexpectedly soft-deleted')
   }
   return location
+}
+
+function mappedMedia(row: MediaRow): CanvassMedia {
+  const media = toCanvassMedia(row)
+  if (media === null) {
+    throw new Error('fixture row unexpectedly soft-deleted')
+  }
+  return media
 }
 
 beforeEach(() => {
@@ -209,5 +233,140 @@ describe('LocationCard', () => {
       0
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('LocationCard media strip (4.3B)', () => {
+  const stripMedia = () => [
+    mappedMedia(mediaRow({ id: 'p1', filename: 'front-door.jpg' })),
+    mappedMedia(
+      mediaRow({ id: 'p2', filename: 'register.png', mime_type: 'image/png' })
+    ),
+    mappedMedia(
+      mediaRow({
+        id: 'v1',
+        type: 'video',
+        filename: 'clip.mp4',
+        mime_type: 'video/mp4',
+        storage_bucket: 'video',
+      })
+    ),
+    mappedMedia(
+      mediaRow({
+        id: 'a1',
+        type: 'audio',
+        filename: 'note.m4a',
+        mime_type: 'audio/mp4',
+        storage_bucket: 'audio',
+      })
+    ),
+    // Another location's row must never surface on this card.
+    mappedMedia(
+      mediaRow({
+        id: 'other-loc',
+        filename: 'elsewhere.jpg',
+        location_id: 'someone-elses-location',
+      })
+    ),
+  ]
+
+  beforeEach(() => {
+    vi.mocked(fetchMedia).mockResolvedValue(stripMedia())
+    vi.mocked(createSignedUrl).mockResolvedValue('https://signed.example/t')
+  })
+
+  // Test #88
+  it('shows media count badges on the card — image/video/audio per location', async () => {
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    expect(
+      await screen.findByText('2 photos · 1 video · 1 audio file')
+    ).toBeInTheDocument()
+    // Scoped to THIS location — the stray row renders nowhere.
+    expect(screen.queryByTitle('View elsewhere.jpg')).not.toBeInTheDocument()
+    // Image thumbs inline + the video tile.
+    expect(await screen.findByTitle('View front-door.jpg')).toBeInTheDocument()
+    expect(screen.getByTitle('View register.png')).toBeInTheDocument()
+    expect(screen.getByTitle('Play video (on demand)')).toBeInTheDocument()
+  })
+
+  it('expands a photo thumb into the ImageViewer at that photo, without selecting the card', async () => {
+    const user = userEvent.setup()
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('View register.png'))
+
+    const dialog = await screen.findByRole('dialog')
+    // Opened AT the clicked photo — second of the two renderable photos.
+    expect(within(dialog).getByText('Photo 2 of 2')).toBeInTheDocument()
+    expect(within(dialog).getByText('register.png')).toBeInTheDocument()
+    // Host-formatted labels: eyebrow context + rule-6 meta (absolute
+    // timestamp with seconds + explicit date, AD8 investigator).
+    expect(
+      within(dialog).getByText(/QuickMart Convenience · 17600 Yonge St/)
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        /Taken 2026-07-17 \d{2}:\d{2}:\d{2} · Det\. A\. Morgan/
+      )
+    ).toBeInTheDocument()
+    // Media interactions never double as card selection (fly-to).
+    expect(useCanvassStore.getState().selectedLocationId).toBeNull()
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('expands the video tile into the on-demand VideoPlayer', async () => {
+    const user = userEvent.setup()
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('Play video (on demand)'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('clip.mp4')).toBeInTheDocument()
+    // The player host signs the video object on demand.
+    await waitFor(() => {
+      expect(dialog.querySelector('video')).not.toBeNull()
+    })
+    const video = dialog.querySelector('video')
+    if (video === null) {
+      throw new Error('video element missing')
+    }
+    expect(video).toHaveAttribute('preload', 'none')
+    expect(video).toHaveAttribute('src', 'https://signed.example/t')
+    expect(createSignedUrl).toHaveBeenCalledWith('video', stripMedia()[2]?.path)
+    expect(useCanvassStore.getState().selectedLocationId).toBeNull()
+  })
+
+  it('caps inline tiles and closes the row with an overflow badge', async () => {
+    vi.mocked(fetchMedia).mockResolvedValue([
+      ...['x1', 'x2', 'x3', 'x4', 'x5'].map(id =>
+        mappedMedia(mediaRow({ id, filename: `${id}.jpg` }))
+      ),
+      mappedMedia(
+        mediaRow({
+          id: 'v9',
+          type: 'video',
+          filename: 'v9.mp4',
+          mime_type: 'video/mp4',
+          storage_bucket: 'video',
+        })
+      ),
+    ])
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // 6 tiles → 4 inline + "+2".
+    expect(await screen.findByTitle('2 more')).toBeInTheDocument()
+    expect(screen.getByTitle('2 more')).toHaveTextContent('+2')
   })
 })

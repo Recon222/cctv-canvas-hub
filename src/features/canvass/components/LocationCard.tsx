@@ -1,9 +1,21 @@
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { MapPinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCanvassStore } from '../store/canvass-store'
-import { formatClockTime } from '../services/format'
-import type { CanvassLocation } from '../types'
+import { formatClockTime, formatBoardTimestamp } from '../services/format'
+import {
+  isInlineRenderable,
+  openMediaExternally,
+} from '../services/mediaService'
+import { useCaseMedia } from '../hooks/useCaseMedia'
+import { useSignedUrl } from '../hooks/useSignedUrl'
+import { SignedMediaThumb, MediaCountBadge, MediaSummary } from './MediaThumb'
+import { ImageViewer } from './ImageViewer'
+import { VideoPlayer } from './VideoPlayer'
+import type { CanvassLocation, CanvassMedia } from '../types'
 
 /**
  * One location on the board (Phase 2.4B). Wall-legible, dark, CSS
@@ -118,6 +130,7 @@ export function LocationCard({ location }: LocationCardProps) {
           </span>
         )}
       </div>
+      <MediaStrip location={location} />
       {dvrRows.length > 0 && (
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-hub-row-divider pt-3">
           <dt className="col-span-2 mb-0.5 font-stmono text-[9.5px] uppercase tracking-[2px] text-hub-faint">
@@ -138,5 +151,203 @@ export function LocationCard({ location }: LocationCardProps) {
         </dl>
       )}
     </article>
+  )
+}
+
+/** Inline tiles per card row — beyond this, the "+N" badge closes the
+ * strip (46px tiles inside a ~370px card). */
+const MAX_STRIP_TILES = 4
+
+type OpenMedia =
+  | { kind: 'viewer'; index: number }
+  | { kind: 'player'; media: CanvassMedia }
+
+/**
+ * The card's media strip (Phase 4.3B, spec §5 media-forward): image
+ * thumbs inline (videos as play tiles), the "+N" overflow badge, and
+ * the photo/video/audio count summary (#88). Thumb ⇒ ImageViewer at
+ * that photo; video tile ⇒ on-demand VideoPlayer. Media comes from the
+ * case-level query (one per case, AD3) filtered to this location.
+ */
+function MediaStrip({ location }: { location: CanvassLocation }) {
+  const { data: media } = useCaseMedia(location.caseId)
+  const [open, setOpen] = useState<OpenMedia | null>(null)
+
+  const rows = (media ?? []).filter(row => row.locationId === location.id)
+  if (rows.length === 0) {
+    return null
+  }
+  const images = rows.filter(row => row.type === 'image')
+  const videos = rows.filter(row => row.type === 'video')
+  const audio = rows.filter(row => row.type === 'audio')
+  /** The viewer pages the location's inline-renderable photos only — a
+   * HEIC thumb opens externally, never a broken viewer image. */
+  const viewerPhotos = images.filter(row => isInlineRenderable(row.mime))
+  const tiles = [...images, ...videos]
+  const visible = tiles.slice(0, MAX_STRIP_TILES)
+  const overflow = tiles.length - visible.length
+  const contextLabel = `${location.name} · ${location.address}`
+
+  const openMedia = (row: CanvassMedia) => {
+    if (row.type === 'video') {
+      setOpen({ kind: 'player', media: row })
+      return
+    }
+    const index = viewerPhotos.findIndex(photo => photo.id === row.id)
+    if (index !== -1) {
+      setOpen({ kind: 'viewer', index })
+    }
+  }
+
+  // Poll refetches can shrink the photo set under an open viewer — an
+  // out-of-range index simply closes it.
+  const viewerPhoto =
+    open?.kind === 'viewer' ? viewerPhotos[open.index] : undefined
+
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-1.5"
+      // The strip lives inside the selectable card (role="option"):
+      // media interactions must not double as selection/fly-to, and a
+      // focused thumb's Enter must activate the thumb, not the card.
+      onClick={event => {
+        event.stopPropagation()
+      }}
+      onKeyDown={event => {
+        event.stopPropagation()
+      }}
+    >
+      {visible.map(row => (
+        <SignedMediaThumb
+          key={row.id}
+          media={row}
+          onOpen={() => {
+            openMedia(row)
+          }}
+        />
+      ))}
+      {overflow > 0 && <MediaCountBadge count={overflow} />}
+      <MediaSummary
+        photos={images.length}
+        videos={videos.length}
+        audio={audio.length}
+      />
+      {open?.kind === 'viewer' &&
+        viewerPhoto !== undefined &&
+        createPortal(
+          <ModalPropagationWall>
+            <PhotoViewerHost
+              photos={viewerPhotos}
+              index={open.index}
+              media={viewerPhoto}
+              contextLabel={contextLabel}
+              investigator={location.investigator}
+              onClose={() => {
+                setOpen(null)
+              }}
+              onNavigate={index => {
+                setOpen({ kind: 'viewer', index })
+              }}
+            />
+          </ModalPropagationWall>,
+          document.body
+        )}
+      {open?.kind === 'player' &&
+        createPortal(
+          <ModalPropagationWall>
+            <PlayerHost
+              media={open.media}
+              contextLabel={contextLabel}
+              onClose={() => {
+                setOpen(null)
+              }}
+            />
+          </ModalPropagationWall>,
+          document.body
+        )}
+    </div>
+  )
+}
+
+/** React portals propagate events through the REACT tree, not the DOM —
+ * without this wall every click inside a modal would bubble into the
+ * card's onClick (re-select + fly-to on the map view). */
+function ModalPropagationWall({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      onClick={event => {
+        event.stopPropagation()
+      }}
+      onKeyDown={event => {
+        event.stopPropagation()
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** Signs the CURRENT photo and pre-formats the viewer's labels (the
+ * poured viewer is dumb — hosts own AD8 fallbacks + rule-6 timestamps). */
+function PhotoViewerHost({
+  photos,
+  index,
+  media,
+  contextLabel,
+  investigator,
+  onClose,
+  onNavigate,
+}: {
+  photos: CanvassMedia[]
+  index: number
+  media: CanvassMedia
+  contextLabel: string
+  investigator: string
+  onClose: () => void
+  onNavigate: (index: number) => void
+}) {
+  const { t } = useTranslation()
+  const { data: signedUrl } = useSignedUrl(media.bucket, media.path)
+  return (
+    <ImageViewer
+      media={photos}
+      index={index}
+      signedUrl={signedUrl ?? null}
+      contextLabel={contextLabel}
+      metaLabel={t('canvass.viewer.meta', {
+        // Rule 6: absolute with seconds, explicit yyyy-mm-dd date.
+        time: formatBoardTimestamp(media.createdAt),
+        investigator,
+      })}
+      onClose={onClose}
+      onNavigate={onNavigate}
+    />
+  )
+}
+
+/** Signs the video on open (the player itself preloads nothing). */
+function PlayerHost({
+  media,
+  contextLabel,
+  onClose,
+}: {
+  media: CanvassMedia
+  contextLabel: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const { data: signedUrl } = useSignedUrl(media.bucket, media.path)
+  return (
+    <VideoPlayer
+      media={media}
+      signedUrl={signedUrl ?? null}
+      contextLabel={contextLabel}
+      onClose={onClose}
+      onOpenExternally={() => {
+        void openMediaExternally(media.bucket, media.path).catch(() => {
+          toast.error(t('canvass.media.openFailed'))
+        })
+      }}
+    />
   )
 }

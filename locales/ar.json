@@ -201,6 +201,7 @@
   "canvass.viewer.previous": "الصورة السابقة",
   "canvass.viewer.next": "الصورة التالية",
   "canvass.viewer.loading": "جارٍ تحميل الصورة…",
+  "canvass.viewer.meta": "التُقطت {{time}} · {{investigator}}",
 
   "canvass.player.close": "إغلاق المشغّل",
   "canvass.player.loading": "جارٍ تجهيز الفيديو…",
@@ -225,6 +226,12 @@
   "canvass.media.videoCount_few": "{{count}} فيديوهات",
   "canvass.media.videoCount_many": "{{count}} فيديو",
   "canvass.media.videoCount_other": "{{count}} فيديو",
+  "canvass.media.audioCount_zero": "{{count}} ملف صوتي",
+  "canvass.media.audioCount_one": "ملف صوتي واحد",
+  "canvass.media.audioCount_two": "ملفان صوتيان",
+  "canvass.media.audioCount_few": "{{count}} ملفات صوتية",
+  "canvass.media.audioCount_many": "{{count}} ملفًا صوتيًا",
+  "canvass.media.audioCount_other": "{{count}} ملف صوتي",
   "canvass.media.openFailed": "تعذّر فتح الملف في تطبيق خارجي",
 
   "canvass.map.zoomIn": "تكبير",
