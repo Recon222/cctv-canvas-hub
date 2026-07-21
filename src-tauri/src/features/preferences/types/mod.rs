@@ -12,6 +12,15 @@ pub struct AppPreferences {
     /// User's preferred language (e.g., "en", "es", "de")
     /// If None, uses system locale detection
     pub language: Option<String>,
+    /// Mapbox access token for the map view (M3).
+    /// If None, the map renders its token-gate designed state.
+    pub mapbox_token: Option<String>,
+    /// Map style id: "standard-satellite" | "standard" | "dark-v11".
+    /// If None, uses the satellite-night default.
+    pub map_style: Option<String>,
+    /// Minutes of inactivity before the board locks (M6).
+    /// If None, uses the default of 15.
+    pub idle_lock_minutes: Option<u32>,
 }
 
 impl Default for AppPreferences {
@@ -20,6 +29,9 @@ impl Default for AppPreferences {
             theme: "system".to_string(),
             quick_pane_shortcut: None, // None means use default
             language: None,            // None means use system locale
+            mapbox_token: None,        // None means token-gate state
+            map_style: None,           // None means satellite-night default
+            idle_lock_minutes: None,   // None means default 15
         }
     }
 }
