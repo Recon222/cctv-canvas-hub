@@ -57,11 +57,20 @@ export interface CanvassLocation {
   updatedAt: string
 }
 
+/**
+ * Consumer-side media kind (PR #6 L2 hardening, adopted at PR #7 M1):
+ * the RAW `MediaRow.type` stays an open `string` (forward-tolerance);
+ * the mapper narrows to this union at the boundary. `'unknown'` is the
+ * explicit drift bucket — such rows render as non-renderable-but-visible
+ * fallback tiles (sign-on-demand open), never a silent never-sign.
+ */
+export type MediaKind = 'image' | 'video' | 'audio' | 'unknown'
+
 export interface CanvassMedia {
   id: string
   caseId: string
   locationId: string
-  type: MediaRow['type']
+  type: MediaKind
   category: string | null
   filename: string
   mime: string

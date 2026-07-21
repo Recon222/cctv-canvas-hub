@@ -180,6 +180,10 @@ function MediaStrip({ location }: { location: CanvassLocation }) {
   const images = rows.filter(row => row.type === 'image')
   const videos = rows.filter(row => row.type === 'video')
   const audio = rows.filter(row => row.type === 'audio')
+  // PR #7 M1 drift posture: unknown kinds stay VISIBLE (fallback tiles,
+  // sign-on-demand open) — the mapper bucketed them; the strip must not
+  // re-drop them from its fixed grouping.
+  const unknownKinds = rows.filter(row => row.type === 'unknown')
   /** The viewer pages the location's inline-renderable photos only — a
    * HEIC thumb opens externally, never a broken viewer image. */
   const viewerPhotos = images.filter(row => isInlineRenderable(row.mime))
@@ -187,7 +191,7 @@ function MediaStrip({ location }: { location: CanvassLocation }) {
   // exposes a playable affordance — images-first let 4 photos push the
   // .mp4 into the non-clickable +N badge on the realistic seeded shape
   // (spec §5: video on demand). Photos keep every remaining slot.
-  const tiles = [...videos, ...images]
+  const tiles = [...videos, ...images, ...unknownKinds]
   const visible = tiles.slice(0, MAX_STRIP_TILES)
   const overflow = tiles.length - visible.length
   const contextLabel = `${location.name} · ${location.address}`

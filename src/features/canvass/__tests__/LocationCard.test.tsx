@@ -506,6 +506,40 @@ describe('LocationCard media strip (4.3B)', () => {
     expect(within(dialog).getByText('dvr.mp4')).toBeInTheDocument()
   })
 
+  // PR #7 M1 (strip surface): an unknown-kind row stays VISIBLE on the
+  // card — a fallback tile among the others, never silently dropped
+  // from the fixed image/video/audio grouping.
+  it('renders an unknown-kind row as a visible tile, never dropped', async () => {
+    vi.mocked(fetchMedia).mockResolvedValue([
+      mappedMedia(
+        mediaRow({
+          id: 'p1',
+          filename: 'front-door.jpg',
+          storage_path: path('front-door.jpg'),
+        })
+      ),
+      mappedMedia(
+        mediaRow({
+          id: 'd1',
+          type: 'document',
+          filename: 'export-report.pdf',
+          mime_type: 'application/pdf',
+          storage_path: path('export-report.pdf'),
+        })
+      ),
+    ])
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // The photo thumb AND the drifted row's fallback tile both render.
+    expect(await screen.findByTitle('View front-door.jpg')).toBeInTheDocument()
+    expect(
+      screen.getByTitle('Open export-report.pdf externally')
+    ).toBeInTheDocument()
+  })
+
   it('caps inline tiles and closes the row with an overflow badge', async () => {
     vi.mocked(fetchMedia).mockResolvedValue([
       ...['x1', 'x2', 'x3', 'x4', 'x5'].map(id =>

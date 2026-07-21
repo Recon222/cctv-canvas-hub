@@ -185,7 +185,12 @@ export function SignedMediaThumb({
   durationLabel?: string
 }) {
   const { t } = useTranslation()
-  const renderable = isInlineRenderable(media.mime)
+  // An unknown KIND is non-renderable regardless of mime (PR #7 M1):
+  // the strip cannot route it to a viewer or player, so it takes the
+  // fallback-tile posture — visible, and openable via sign-on-demand —
+  // instead of a renderable-looking placeholder that silently never
+  // signs (the review's sharpest drift path).
+  const renderable = media.type !== 'unknown' && isInlineRenderable(media.mime)
   // Only a renderable IMAGE displays bytes in the tile — a video tile is
   // a play glyph (bytes load on demand in the player) and a
   // non-renderable row is the fallback tile: neither holds a standing

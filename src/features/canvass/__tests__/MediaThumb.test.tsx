@@ -116,6 +116,31 @@ describe('SignedMediaThumb', () => {
     expect(createSignedUrl).toHaveBeenCalledTimes(3)
   })
 
+  // PR #7 M1: the sharpest drift path — a drifted `type` on a row whose
+  // MIME is renderable must not silently never-sign into a permanent
+  // empty placeholder. Unknown kind ⇒ non-renderable-but-visible: the
+  // fallback tile, whose click signs on demand and opens externally.
+  it('renders a drifted media kind as the visible fallback tile, never a dead placeholder', async () => {
+    const user = userEvent.setup()
+    vi.mocked(openMediaExternally).mockResolvedValue(undefined)
+    const drifted = media({
+      filename: 'drifted.jpg',
+      mime_type: 'image/jpeg',
+      type: 'document',
+    })
+
+    renderWithFeatureProviders(<SignedMediaThumb media={drifted} />)
+
+    const tile = screen.getByTitle('Open drifted.jpg externally')
+    expect(tile).toHaveTextContent('JPG')
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    // No standing display query for a kind we cannot route.
+    expect(createSignedUrl).not.toHaveBeenCalled()
+    // …but the row is never sign-dead: opening signs on demand.
+    await user.click(tile)
+    expect(openMediaExternally).toHaveBeenCalledWith('images', drifted.path)
+  })
+
   it('shows the fallback with retry when signing itself fails', async () => {
     vi.mocked(createSignedUrl).mockRejectedValue(new Error('storage down'))
 
