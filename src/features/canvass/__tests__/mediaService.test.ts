@@ -1,10 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import React from 'react'
+import { renderHook, act } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { getSupabase } from '@/lib/supabase/client'
+import { SIGNED_URL_KEY_PREFIX } from '@/store/health-store'
 import {
   createSignedUrl,
   isInlineRenderable,
   SIGNED_URL_TTL_S,
+  SIGNED_URL_REFRESH_MS,
 } from '../services/mediaService'
+import { useSignedUrl } from '../hooks/useSignedUrl'
 
 // The single supabase-js seam (test spec preamble) — the fake covers
 // `storage.from().createSignedUrl`.
@@ -26,8 +32,28 @@ function installStorage(result: SignResult) {
   return { from, sign }
 }
 
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+}
+
+function wrapperFor(queryClient: QueryClient) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      children
+    )
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('mediaService', () => {
@@ -67,5 +93,52 @@ describe('mediaService', () => {
     expect(isInlineRenderable('image/heic')).toBe(false)
     expect(isInlineRenderable('video/quicktime')).toBe(false)
     expect(isInlineRenderable('')).toBe(false)
+  })
+})
+
+describe('useSignedUrl', () => {
+  // Test #78
+  it('proactively re-signs a continuously-mounted thumbnail before TTL', async () => {
+    vi.useFakeTimers()
+    const { sign } = installStorage({
+      data: { signedUrl: 'https://cloud.example/sign/first' },
+      error: null,
+    })
+    const queryClient = makeQueryClient()
+
+    const first = renderHook(() => useSignedUrl('images', 'u1/c1/l1/a.jpg'), {
+      wrapper: wrapperFor(queryClient),
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(sign).toHaveBeenCalledTimes(1)
+    expect(first.result.current.data).toBe('https://cloud.example/sign/first')
+    // The key is built from the health-store prefix — deliberately NOT a
+    // CASE_DATA_KEY_FAMILIES member, so reconnect catch-up skips it (AD11).
+    expect(
+      queryClient.getQueryData([
+        SIGNED_URL_KEY_PREFIX,
+        'images',
+        'u1/c1/l1/a.jpg',
+      ])
+    ).toBe('https://cloud.example/sign/first')
+
+    // A second render within staleTime hits the cache — no extra signing.
+    const second = renderHook(() => useSignedUrl('images', 'u1/c1/l1/a.jpg'), {
+      wrapper: wrapperFor(queryClient),
+    })
+    expect(second.result.current.data).toBe('https://cloud.example/sign/first')
+    expect(sign).toHaveBeenCalledTimes(1)
+
+    // The interval IS what re-signs a mounted wall thumbnail: no focus,
+    // no reconnect — one refresh cycle re-signs on its own.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SIGNED_URL_REFRESH_MS + 1_000)
+    })
+    expect(sign.mock.calls.length).toBeGreaterThanOrEqual(2)
+
+    // Tripwire: the refresh interval must stay inside the URL's lifetime.
+    expect(SIGNED_URL_REFRESH_MS).toBeLessThan(SIGNED_URL_TTL_S * 1_000)
   })
 })
