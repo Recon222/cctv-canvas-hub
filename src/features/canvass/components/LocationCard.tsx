@@ -47,10 +47,12 @@ export function LocationCard({ location }: LocationCardProps) {
 
   // Selecting a location is the case view's primary interaction (and the
   // M3 fly-to trigger) — it must work from the keyboard and read as a
-  // control to assistive tech. A native <button> can't wrap this block
-  // content, so the article carries the button contract itself. No
-  // aria-pressed: selection is set-only, and a pressed state the card
-  // cannot un-press is a broken promise to AT (review LOW).
+  // control to assistive tech. D16 (resolved 3.4A): the accurate model
+  // is SINGLE-SELECT — the card is a `role="option"` with
+  // `aria-selected`, owned by the stack's `role="listbox"` (one DOM
+  // subtree owns the whole model). No aria-pressed: selection is
+  // set-only, and a pressed state the card cannot un-press is a broken
+  // promise to AT (review LOW).
   const select = () => {
     useCanvassStore.getState().selectLocation(location.id)
   }
@@ -59,7 +61,8 @@ export function LocationCard({ location }: LocationCardProps) {
       data-location-id={location.id}
       data-status={location.status}
       data-attention={attentionAt !== undefined || undefined}
-      role="button"
+      role="option"
+      aria-selected={selected}
       tabIndex={0}
       onClick={select}
       onKeyDown={event => {

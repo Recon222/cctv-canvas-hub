@@ -63,6 +63,19 @@ export function CanvassRoot() {
     }
   }, [queryClient])
 
+  // Attention TTL sweep (doc 01 §5.4): stamps expire ON THE STORE, so
+  // presence ≡ fresh for every consumer — the stack's attention-first
+  // sort (#76), the card flash, the marker ping — without each surface
+  // running its own clock.
+  useEffect(() => {
+    const id = setInterval(() => {
+      useCanvassStore.getState().clearExpiredAttention()
+    }, 1_000)
+    return () => {
+      clearInterval(id)
+    }
+  }, [])
+
   // Board size drives the AD15 scale. jsdom has no ResizeObserver — the
   // guard leaves tests (and any exotic webview) at scale 1.
   const rootRef = useRef<HTMLDivElement>(null)
@@ -129,6 +142,14 @@ export function CanvassRoot() {
       <main className="relative min-w-0 flex-1 overflow-hidden">
         {view === 'cases' && <CasesView />}
         {view === 'case' && <LocationCardStack />}
+        {view === 'map' && (
+          // 3.4A: the floating stack over the map — clear of every edge,
+          // transparent column (never a full-height rail, spec §4). It
+          // overlays the unscaled map from inside the scaled chrome.
+          <div className="pointer-events-auto absolute inset-y-4 end-4 w-[408px]">
+            <LocationCardStack floating />
+          </div>
+        )}
       </main>
     </div>
   )

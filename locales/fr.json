@@ -223,6 +223,8 @@
   "canvass.map.fitAll": "Cadrer tous les lieux",
   "canvass.map.legend.incident": "Incident",
   "canvass.map.incidentLabel": "Incident · {{name}}",
+  "canvass.stack.listLabel": "Lieux du dossier",
+  "canvass.stack.noFixCount": "{{count}} sans position GPS",
   "canvass.map.tokenRejected": "Erreur de carte — jeton refusé · vérifiez les Préférences",
   "canvass.map.tokenMissing.eyebrow": "Carte indisponible — jeton manquant",
   "canvass.map.tokenMissing.title": "Aucun jeton Mapbox n'a été configuré",

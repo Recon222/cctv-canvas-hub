@@ -223,6 +223,8 @@
   "canvass.map.fitAll": "Fit all locations",
   "canvass.map.legend.incident": "Incident",
   "canvass.map.incidentLabel": "Incident · {{name}}",
+  "canvass.stack.listLabel": "Canvass locations",
+  "canvass.stack.noFixCount": "{{count}} no GPS fix",
   "canvass.map.tokenRejected": "Map error — token rejected · check Preferences",
   "canvass.map.tokenMissing.eyebrow": "Map unavailable — token missing",
   "canvass.map.tokenMissing.title": "A Mapbox token hasn't been set",
