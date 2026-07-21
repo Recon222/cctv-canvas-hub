@@ -35,7 +35,8 @@
 | `src/features/canvass/__tests__/realtime.test.ts`                      | 2.3, (R6 #130–131 — ledger D17) | NEW + additions |
 | `src/features/canvass/__tests__/canvass-store.test.ts`                 | 2.4   | NEW       |
 | `src/features/canvass/__tests__/LocationCard.test.tsx`                 | 2.4, 5.1 (pulse additions — #91–92) | NEW |
-| `src/features/canvass/__tests__/useFlyTo.test.ts`                      | 3.3 (#73–74) | NEW |
+| `src/features/canvass/__tests__/useFlyTo.test.ts`                      | 3.3 (#73–74, R7 #135) | NEW + additions |
+| `src/features/canvass/__tests__/markers.test.ts` (R7 #132–134 — PR #6 review M3) | 3.3 | NEW |
 | `src/store/health-store.test.ts` (next-to-store, `ui-store.test.ts` precedent) | 2.5, 6.2 | NEW (6.2 additions) |
 | `src/features/preferences/__tests__/preferences-additions.test.tsx`    | 3.1   | NEW (the preferences feature currently has no tests) |
 | `src/features/canvass/__tests__/MapCanvas.test.tsx`                    | 3.2   | NEW       |
@@ -344,6 +345,17 @@ Belongs to **Phase 2.3** (counted there in the summary). D17's two untested-guar
 | 130 | Should survive an `updated_at: null` case event through `toCanvassCase`    | with a ≥2-entry cases cache, a `cloud_cases` broadcast carrying `updated_at: null` still patches the list (guard maps null → `''`, sorts last) and no `realtime: event dispatch failed` is logged — reverting `wireString(row.updated_at)` kills the patch inside the dispatch containment |
 | 131 | Should invalidate the landing families with `cancelRefetch: false`         | an options spy pins BOTH pre-filter invalidations — `['location-counts']` and `['cases']` — called with `{ cancelRefetch: false }` (a bulk re-sync burst must not cancel-and-restart the in-flight landing fetches); dropping the options argument fails |
 
+## Revision R7 additions (PR #6 code-review fixes)
+
+#132–135 belong to **Phase 3.3** (counted there in the summary): the review's M3 (untested pure marker factories) and its optional L4 (RTL camera padding). All four pin behavior that already shipped; #134's binding pin was mutation-verified (a `transition` on the root fails it).
+
+| #   | Test Description                                                          | Key Assertion                                                                 |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 132 | Should dispatch `onSelect` from a marker click                             | `createLocationMarker` root click ⇒ the onSelect spy fires (the marker half of #74's two-way contract, previously exercised only via `selectLocation`) |
+| 133 | Should flip selection/attention/status datasets idempotently on update     | `updateLocationMarker` sets/removes `data-selected`/`data-attention`, updates `data-status` + the COMPLETE ✓ glyph and label text; a repeated identical update changes nothing |
+| 134 | Should never put position/transform/transition on the marker ROOT          | MARKER-BINDING rule: `root.style.{position,transform,transition}` all empty after create AND after update, for location and incident factories — Mapbox owns the root transform per frame |
+| 135 | Should flip the camera-padding sides under RTL                             | `cameraPadding()` mirrors: `rtl.left === ltr.right` and `rtl.right === ltr.left` (stack clearance follows inline-end) |
+
 ---
 
 ## Test Count Summary
@@ -353,11 +365,11 @@ Belongs to **Phase 2.3** (counted there in the summary). D17's two untested-guar
 | 1.1   | 6     | 2.5   | 5     | 4.3   | 4     |
 | 1.2   | 14    | 3.1   | 2     | 5.1   | 4     |
 | 1.3   | 5     | 3.2   | 2     | 5.2   | 3     |
-| 1.4   | 4     | 3.3   | 5     | 5.3   | 4     |
+| 1.4   | 4     | 3.3   | 9     | 5.3   | 4     |
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
 | 2.3   | 8     | 4.2   | 4     | 6.3   | 8 (5 TS + 3 Rust) |
 | 2.4   | 11    | 7.1   | 2     | 6.4   | 0     |
 | 7.2   | 4     | 7.3   | 3     |       |       |
 
-**Total: 131** (Rust 9 — 6 `secure-vault` + 3 `platform-utils` · TypeScript 122; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–129 → R5/A2 with #127–129 the Phase 6.3B′ Rust tests, #130–131 → R6/2.3 (ledger D17, added at M3); ported 6.3A test files are excluded — this count is canvas-hub-authored tests only) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 135** (Rust 9 — 6 `secure-vault` + 3 `platform-utils` · TypeScript 126; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–129 → R5/A2 with #127–129 the Phase 6.3B′ Rust tests, #130–131 → R6/2.3 (ledger D17, added at M3), #132–135 → R7/3.3 (PR #6 review M3 + L4); ported 6.3A test files are excluded — this count is canvas-hub-authored tests only) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
