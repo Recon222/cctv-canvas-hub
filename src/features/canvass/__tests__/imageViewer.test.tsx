@@ -90,6 +90,22 @@ describe('ImageViewer', () => {
     ).not.toBeInTheDocument()
   })
 
+  // M4 live-smoke F2 parity: the viewer's Esc also lived only on the
+  // dialog div — same vulnerability once focus leaves the dialog.
+  it('closes on Escape even when focus is outside the dialog', () => {
+    const onClose = vi.fn()
+    const { unmount } = renderWithFeatureProviders(
+      <ViewerHost onClose={onClose} />
+    )
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    unmount()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('takes focus on mount so Esc and arrows work without a prior click', () => {
     const onClose = vi.fn()
     renderWithFeatureProviders(<ViewerHost onClose={onClose} />)

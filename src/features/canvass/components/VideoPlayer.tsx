@@ -37,6 +37,23 @@ export function VideoPlayer({
   useEffect(() => {
     dialogRef.current?.focus()
   }, [])
+  // F2 (live-smoke): focus inside the native <video> transport (shadow
+  // DOM) keeps keydowns from ever reaching this dialog — Esc listens at
+  // the document for the modal's lifetime instead. Capture phase on
+  // purpose: it fires before any bubbling handler can stop propagation
+  // (the host's portal wall guards the React tree; this bypasses it by
+  // design).
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape, true)
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape, true)
+    }
+  }, [onClose])
 
   return (
     <div
@@ -46,11 +63,6 @@ export function VideoPlayer({
       aria-label={media.filename}
       className="absolute inset-0 z-40 flex items-center justify-center bg-hub-ground/70 backdrop-blur"
       onClick={onClose}
-      onKeyDown={event => {
-        if (event.key === 'Escape') {
-          onClose()
-        }
-      }}
       tabIndex={-1}
     >
       <div

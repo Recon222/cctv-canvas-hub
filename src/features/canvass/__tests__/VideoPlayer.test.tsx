@@ -87,6 +87,31 @@ describe('VideoPlayer', () => {
     expect(document.querySelector('video')).toBeNull()
   })
 
+  // M4 live-smoke F2: focus inside the native <video> transport (shadow
+  // DOM) stops keydowns from reaching the dialog's handler — Esc must
+  // close from ANYWHERE while the modal lives, and stop the moment it
+  // unmounts.
+  it('closes on Escape even when focus is outside the dialog', () => {
+    const onClose = vi.fn()
+    const { unmount } = renderWithFeatureProviders(
+      <VideoPlayer
+        media={videoMedia()}
+        signedUrl="https://signed.example/v.mp4"
+        contextLabel="QUICKMART"
+        onClose={onClose}
+      />
+    )
+
+    // Focus anywhere but the dialog — the live repro's shape.
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    // Listener lives and dies with the modal.
+    unmount()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('takes focus on mount so Escape closes without a prior click', () => {
     const onClose = vi.fn()
     renderWithFeatureProviders(

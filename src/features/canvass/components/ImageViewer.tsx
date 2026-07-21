@@ -40,6 +40,20 @@ export function ImageViewer({
   useEffect(() => {
     dialogRef.current?.focus()
   }, [])
+  // F2 parity with VideoPlayer (live-smoke): Esc must close from
+  // anywhere — document-level, capture phase, scoped to the modal's
+  // lifetime. Arrows stay dialog-scoped below.
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape, true)
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape, true)
+    }
+  }, [onClose])
   const current = media[index]
   if (current === undefined) {
     return null
@@ -56,9 +70,7 @@ export function ImageViewer({
       className="absolute inset-0 z-40 flex items-center justify-center bg-hub-ground/70 backdrop-blur"
       onClick={onClose}
       onKeyDown={event => {
-        if (event.key === 'Escape') {
-          onClose()
-        } else if (event.key === 'ArrowLeft') {
+        if (event.key === 'ArrowLeft') {
           onNavigate(wrap(index - 1))
         } else if (event.key === 'ArrowRight') {
           onNavigate(wrap(index + 1))
