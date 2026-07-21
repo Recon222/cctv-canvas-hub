@@ -39,7 +39,7 @@
 | `src/features/canvass/__tests__/markers.test.ts` (R7 #132–134 — PR #6 review M3) | 3.3 | NEW |
 | `src/store/health-store.test.ts` (next-to-store, `ui-store.test.ts` precedent) | 2.5, 6.2 | NEW (6.2 additions) |
 | `src/features/preferences/__tests__/preferences-additions.test.tsx`    | 3.1   | NEW (the preferences feature currently has no tests) |
-| `src/features/canvass/__tests__/MapCanvas.test.tsx`                    | 3.2   | NEW       |
+| `src/features/canvass/__tests__/MapCanvas.test.tsx`                    | 3.2, (R7 #136–137 — PR #6 review M4) | NEW + additions |
 | `src/features/canvass/__tests__/mapData.test.ts`                       | 3.3   | NEW       |
 | `src/features/canvass/__tests__/cardStack.test.tsx`                    | 3.4   | NEW       |
 | `src/features/canvass/__tests__/mediaService.test.ts`                  | 4.1   | NEW       |
@@ -347,7 +347,7 @@ Belongs to **Phase 2.3** (counted there in the summary). D17's two untested-guar
 
 ## Revision R7 additions (PR #6 code-review fixes)
 
-#132–135 belong to **Phase 3.3** (counted there in the summary): the review's M3 (untested pure marker factories) and its optional L4 (RTL camera padding). All four pin behavior that already shipped; #134's binding pin was mutation-verified (a `transition` on the root fails it).
+#132–135 belong to **Phase 3.3** (counted there in the summary): the review's M3 (untested pure marker factories) and its optional L4 (RTL camera padding). #136–137 belong to **Phase 3.2**: the review's M4 (untested token-rejection path). All six pin behavior that already shipped; #134 and #137 were mutation-verified (a `transition` on the marker root fails #134; dropping the toast dedup guard fails #137).
 
 | #   | Test Description                                                          | Key Assertion                                                                 |
 | --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -355,6 +355,8 @@ Belongs to **Phase 2.3** (counted there in the summary). D17's two untested-guar
 | 133 | Should flip selection/attention/status datasets idempotently on update     | `updateLocationMarker` sets/removes `data-selected`/`data-attention`, updates `data-status` + the COMPLETE ✓ glyph and label text; a repeated identical update changes nothing |
 | 134 | Should never put position/transform/transition on the marker ROOT          | MARKER-BINDING rule: `root.style.{position,transform,transition}` all empty after create AND after update, for location and incident factories — Mapbox owns the root transform per frame |
 | 135 | Should flip the camera-padding sides under RTL                             | `cameraPadding()` mirrors: `rtl.left === ltr.right` and `rtl.right === ltr.left` (stack clearance follows inline-end) |
+| 136 | Should render the rejected gate and resolve the tokenRejected key on 401   | captured `onError({error:{status:401}})` ⇒ the rejected banner renders the RESOLVED `canvass.map.tokenRejected` string, and the same resolved string reaches `toast.error` (a broken key would render its raw name) |
+| 137 | Should toast once per rejected token, re-arming on a new token             | double-firing the same 401 ⇒ exactly ONE toast (no per-render storm); a different token failing afterward toasts again (rejection state is token-keyed) |
 
 ---
 
@@ -364,7 +366,7 @@ Belongs to **Phase 2.3** (counted there in the summary). D17's two untested-guar
 | ----- | ----- | ----- | ----- | ----- | ----- |
 | 1.1   | 6     | 2.5   | 5     | 4.3   | 4     |
 | 1.2   | 14    | 3.1   | 2     | 5.1   | 4     |
-| 1.3   | 5     | 3.2   | 2     | 5.2   | 3     |
+| 1.3   | 5     | 3.2   | 4     | 5.2   | 3     |
 | 1.4   | 4     | 3.3   | 9     | 5.3   | 4     |
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
@@ -372,4 +374,4 @@ Belongs to **Phase 2.3** (counted there in the summary). D17's two untested-guar
 | 2.4   | 11    | 7.1   | 2     | 6.4   | 0     |
 | 7.2   | 4     | 7.3   | 3     |       |       |
 
-**Total: 135** (Rust 9 — 6 `secure-vault` + 3 `platform-utils` · TypeScript 126; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–129 → R5/A2 with #127–129 the Phase 6.3B′ Rust tests, #130–131 → R6/2.3 (ledger D17, added at M3), #132–135 → R7/3.3 (PR #6 review M3 + L4); ported 6.3A test files are excluded — this count is canvas-hub-authored tests only) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 137** (Rust 9 — 6 `secure-vault` + 3 `platform-utils` · TypeScript 128; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–129 → R5/A2 with #127–129 the Phase 6.3B′ Rust tests, #130–131 → R6/2.3 (ledger D17, added at M3), #132–135 → R7/3.3 and #136–137 → R7/3.2 (PR #6 review M3 + L4 + M4); ported 6.3A test files are excluded — this count is canvas-hub-authored tests only) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.

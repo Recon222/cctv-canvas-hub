@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { toast } from 'sonner'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { UseQueryResult } from '@tanstack/react-query'
 import Map, { useMap } from 'react-map-gl/mapbox'
@@ -34,6 +35,7 @@ vi.mock('react-map-gl/mapbox', () => ({
   Layer: () => null,
 }))
 vi.mock('mapbox-gl', () => ({ default: { Marker: vi.fn() } }))
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 vi.mock('@/features/preferences', () => ({ usePreferences: vi.fn() }))
 vi.mock('@/lib/supabase/client')
 vi.mock('../services/canvassService', () => ({
@@ -202,32 +204,36 @@ describe('map furniture (M3 live-smoke fix round)', () => {
   })
 })
 
+/** Fire the mocked `<Map>`'s captured onError with an AJAXError-shaped
+ * status (shared by the H1 and M4 suites). */
+function fireMapError(status: number) {
+  const onError = mapProps().at(-1)?.onError
+  if (onError === undefined) {
+    throw new Error('mock <Map> captured no onError prop')
+  }
+  act(() => {
+    onError({
+      error: Object.assign(new Error('style fetch failed'), { status }),
+    } as never)
+  })
+}
+
+/** Fire the mocked `<Map>`'s captured onLoad. */
+function fireMapLoad() {
+  const onLoad = mapProps().at(-1)?.onLoad
+  if (onLoad === undefined) {
+    throw new Error('mock <Map> captured no onLoad prop')
+  }
+  act(() => {
+    onLoad({} as never)
+  })
+}
+
 describe('style-load failure state (PR #6 H1)', () => {
   // mapbox-gl 3.26 fetches the style DOCUMENT once, with no retry (only
   // tiles retry) — a terminal style failure used to leave a permanently
   // blank map with live-looking furniture and one log line. The fix
   // surfaces a persistent designed state and pulls the instruments.
-  const fireMapError = (status: number) => {
-    const onError = mapProps().at(-1)?.onError
-    if (onError === undefined) {
-      throw new Error('mock <Map> captured no onError prop')
-    }
-    act(() => {
-      onError({
-        error: Object.assign(new Error('style fetch failed'), { status }),
-      } as never)
-    })
-  }
-  const fireMapLoad = () => {
-    const onLoad = mapProps().at(-1)?.onLoad
-    if (onLoad === undefined) {
-      throw new Error('mock <Map> captured no onLoad prop')
-    }
-    act(() => {
-      onLoad({} as never)
-    })
-  }
-
   it('surfaces the style-error state and pulls the furniture on a pre-load failure', async () => {
     mockUsePreferences.mockReturnValue(
       preferencesResult({ mapbox_token: 'pk.test-fake-token' })
@@ -288,5 +294,51 @@ describe('style-load failure state (PR #6 H1)', () => {
         'Map error — style failed to load · board stays live in the card list'
       )
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('token rejection (PR #6 review M4, tests #136-137)', () => {
+  // The 401/403 path shipped verified-working but untested: a
+  // toast-per-render storm or a never-showing gate would have gone
+  // green. The mock captures onError as a prop - invoke it directly.
+
+  // Test #136
+  it('renders the rejected gate and resolves the tokenRejected key on 401', () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    renderWithFeatureProviders(<MapCanvas />)
+
+    fireMapError(401)
+
+    // The resolved en string in BOTH surfaces proves the i18n key
+    // resolves (a broken key would render its raw name).
+    expect(
+      screen.getByText('Map error — token rejected · check Preferences')
+    ).toBeInTheDocument()
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      'Map error — token rejected · check Preferences'
+    )
+  })
+
+  // Test #137
+  it('toasts once per rejected token, re-arming on a new token', () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    const rendered = renderWithFeatureProviders(<MapCanvas />)
+
+    // mapbox fires error events repeatedly - the toast must not storm.
+    fireMapError(401)
+    fireMapError(401)
+    expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(1)
+
+    // A NEW token that also fails is fresh news - toast re-armed.
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-other-fake-token' })
+    )
+    rendered.rerender(<MapCanvas />)
+    fireMapError(401)
+    expect(vi.mocked(toast.error)).toHaveBeenCalledTimes(2)
   })
 })
