@@ -19,6 +19,11 @@ export interface ImageViewerProps {
    * the honest failed state; "loading" is reserved for genuinely
    * pending. */
   signFailed?: boolean
+  /** The `<img>` failed to load (expired/broken URL) — the host owns
+   * the self-heal ladder (PR #7 L2). */
+  onImageError?: () => void
+  /** Manual retry from the failed state (PR #7 L2). */
+  onRetry?: () => void
   /** Eyebrow line, e.g. "QUICKMART CONVENIENCE · 481 YONGE ST". */
   contextLabel: string
   /** Metadata footer, e.g. "TAKEN 10:12:47 · DET. A. MORGAN · 2.1 MB". */
@@ -36,6 +41,8 @@ export function ImageViewer({
   metaLabel,
   onClose,
   onNavigate,
+  onImageError,
+  onRetry,
 }: ImageViewerProps) {
   const { t } = useTranslation()
   // Own the keyboard the moment the modal opens (M4 wiring): the Esc and
@@ -116,12 +123,22 @@ export function ImageViewer({
               <span className="font-stmono text-[10px] uppercase tracking-[2.5px] text-hub-working">
                 {t('canvass.viewer.loadFailed')}
               </span>
+              {onRetry !== undefined && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-1 rounded border border-hub-accent/40 bg-hub-accent/10 px-4 py-2 font-stmono text-[11px] uppercase tracking-[2px] text-hub-heading transition-colors hover:bg-hub-accent/20"
+                >
+                  {t('canvass.viewer.retry')}
+                </button>
+              )}
             </div>
           ) : signedUrl !== null ? (
             <img
               src={signedUrl}
               alt={current.filename}
               className="max-h-full max-w-full object-contain"
+              onError={onImageError}
             />
           ) : (
             <div className="flex flex-col items-center gap-3 text-hub-ghost">

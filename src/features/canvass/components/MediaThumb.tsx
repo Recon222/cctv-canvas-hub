@@ -1,15 +1,12 @@
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Image as ImageIcon, Play, FileQuestion, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SIGNED_URL_KEY_PREFIX } from '@/store/health-store'
 import {
   isInlineRenderable,
   openMediaExternally,
 } from '../services/mediaService'
-import { useSignedUrl } from '../hooks/useSignedUrl'
+import { useSelfHealingSignedUrl } from '../hooks/useSignedUrl'
 import type { CanvassMedia } from '../types'
 
 /**
@@ -188,36 +185,23 @@ export function SignedMediaThumb({
   durationLabel?: string
 }) {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const renderable = isInlineRenderable(media.mime)
   // Only a renderable IMAGE displays bytes in the tile — a video tile is
   // a play glyph (bytes load on demand in the player) and a
   // non-renderable row is the fallback tile: neither holds a standing
   // signed URL (D8 discipline, T5).
   const wantsUrl = renderable && media.type === 'image'
-  const query = useSignedUrl(media.bucket, media.path, wantsUrl)
-  const signedUrl = query.data ?? null
-  /** The exact URL the <img> last failed on — same URL back from the
-   * cache means still broken (fallback), a new one means try again. */
-  const [failedUrl, setFailedUrl] = useState<string | null>(null)
-  const [autoRetried, setAutoRetried] = useState(false)
-
-  const reSign = () => {
-    void queryClient.invalidateQueries({
-      queryKey: [SIGNED_URL_KEY_PREFIX, media.bucket, media.path],
-    })
-  }
-  const errored =
-    wantsUrl &&
-    (query.isError || (signedUrl !== null && signedUrl === failedUrl))
+  // The one-auto-re-sign-then-manual-retry ladder, shared with the
+  // photo viewer host (PR #7 L2).
+  const heal = useSelfHealingSignedUrl(media.bucket, media.path, wantsUrl)
 
   return (
     <MediaThumb
       media={media}
-      signedUrl={errored ? null : signedUrl}
+      signedUrl={heal.signedUrl}
       renderable={renderable}
       durationLabel={durationLabel}
-      errored={errored}
+      errored={heal.errored}
       onOpen={() => {
         if (renderable) {
           onOpen?.()
@@ -228,19 +212,8 @@ export function SignedMediaThumb({
           toast.error(t('canvass.media.openFailed'))
         })
       }}
-      onRetry={() => {
-        setFailedUrl(null)
-        reSign()
-      }}
-      onMediaError={() => {
-        setFailedUrl(signedUrl)
-        if (!autoRetried) {
-          // ONE automatic re-sign per thumb (4.1 error handling) — after
-          // that the fallback tile owns recovery.
-          setAutoRetried(true)
-          reSign()
-        }
-      }}
+      onRetry={heal.onRetry}
+      onMediaError={heal.onMediaError}
     />
   )
 }

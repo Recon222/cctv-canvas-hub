@@ -202,6 +202,7 @@
   "canvass.viewer.next": "Next photo",
   "canvass.viewer.loading": "Loading photo…",
   "canvass.viewer.loadFailed": "The photo could not be loaded",
+  "canvass.viewer.retry": "Try again",
   "canvass.viewer.meta": "Taken {{time}} · {{investigator}}",
 
   "canvass.player.close": "Close player",

@@ -202,6 +202,7 @@
   "canvass.viewer.next": "الصورة التالية",
   "canvass.viewer.loading": "جارٍ تحميل الصورة…",
   "canvass.viewer.loadFailed": "تعذّر تحميل الصورة",
+  "canvass.viewer.retry": "إعادة المحاولة",
   "canvass.viewer.meta": "التُقطت {{time}} · {{investigator}}",
 
   "canvass.player.close": "إغلاق المشغّل",

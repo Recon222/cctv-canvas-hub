@@ -390,6 +390,64 @@ describe('LocationCard media strip (4.3B)', () => {
     expect(dialog.querySelector('video')).toBeNull()
   })
 
+  // PR #7 L2: the viewer mirrors the thumb's ladder — one automatic
+  // re-sign on <img> error, then the honest failed state with retry.
+  it('self-heals a broken viewer image once, then fails honestly with retry', async () => {
+    const user = userEvent.setup()
+    // One photo only: thumb and viewer share the path-keyed sign query,
+    // so the call sequence stays unambiguous.
+    vi.mocked(fetchMedia).mockResolvedValue([
+      mappedMedia(
+        mediaRow({
+          id: 'p1',
+          filename: 'front-door.jpg',
+          storage_path: path('front-door.jpg'),
+        })
+      ),
+    ])
+    vi.mocked(createSignedUrl)
+      .mockResolvedValueOnce('https://signed.example/expired')
+      .mockResolvedValueOnce('https://signed.example/fresh')
+      .mockResolvedValue('https://signed.example/manual')
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+    await user.click(await screen.findByTitle('View front-door.jpg'))
+    const dialog = await screen.findByRole('dialog')
+    const img = await within(dialog).findByRole('img')
+    expect(img).toHaveAttribute('src', 'https://signed.example/expired')
+
+    // First byte-failure: ONE automatic re-sign of that specific query.
+    fireEvent.error(img)
+    await waitFor(() => {
+      expect(within(dialog).getByRole('img')).toHaveAttribute(
+        'src',
+        'https://signed.example/fresh'
+      )
+    })
+
+    // Second failure: no more auto re-signs — honest failed state.
+    fireEvent.error(within(dialog).getByRole('img'))
+    expect(
+      await within(dialog).findByText('The photo could not be loaded')
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByRole('img')).not.toBeInTheDocument()
+    const callsBeforeRetry = vi.mocked(createSignedUrl).mock.calls.length
+
+    // Manual retry re-signs and restores the photo.
+    await user.click(within(dialog).getByRole('button', { name: 'Try again' }))
+    await waitFor(() => {
+      expect(within(dialog).getByRole('img')).toHaveAttribute(
+        'src',
+        'https://signed.example/manual'
+      )
+    })
+    expect(vi.mocked(createSignedUrl).mock.calls.length).toBeGreaterThan(
+      callsBeforeRetry
+    )
+  })
+
   it('shows the honest failed state when paging to a photo whose signing fails', async () => {
     const user = userEvent.setup()
     // First photo signs fine (its thumb is clickable); the second
@@ -409,10 +467,12 @@ describe('LocationCard media strip (4.3B)', () => {
     expect(within(dialog).getByText('Photo 1 of 2')).toBeInTheDocument()
 
     await user.click(within(dialog).getByRole('button', { name: 'Next photo' }))
+    // The viewer host remounts per photo (the self-heal ladder is
+    // per-photo state), replacing the dialog node — query via screen.
     expect(
-      await within(dialog).findByText('The photo could not be loaded')
+      await screen.findByText('The photo could not be loaded')
     ).toBeInTheDocument()
-    expect(within(dialog).queryByText('Loading photo…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading photo…')).not.toBeInTheDocument()
   })
 
   // M4 live-smoke F1: 4 photos + 1 video is the REALISTIC seeded shape —

@@ -11,7 +11,7 @@ import {
   openMediaExternally,
 } from '../services/mediaService'
 import { useCaseMedia } from '../hooks/useCaseMedia'
-import { useSignedUrl } from '../hooks/useSignedUrl'
+import { useSelfHealingSignedUrl, useSignedUrl } from '../hooks/useSignedUrl'
 import { SignedMediaThumb, MediaCountBadge, MediaSummary } from './MediaThumb'
 import { ImageViewer } from './ImageViewer'
 import { VideoPlayer } from './VideoPlayer'
@@ -241,6 +241,10 @@ function MediaStrip({ location }: { location: CanvassLocation }) {
         createPortal(
           <ModalPropagationWall>
             <PhotoViewerHost
+              // Keyed per photo: the self-heal ladder is per-instance
+              // state — paging must reset it, not inherit a spent
+              // auto-retry from the previous photo (PR #7 L2).
+              key={viewerPhoto.id}
               photos={viewerPhotos}
               index={open.index}
               media={viewerPhoto}
@@ -311,15 +315,18 @@ function PhotoViewerHost({
   onNavigate: (index: number) => void
 }) {
   const { t } = useTranslation()
-  // PR #7 H1: isError must reach the modal — a failed sign query is an
-  // honest failed state, never an eternal "Loading photo…".
-  const { data: signedUrl, isError } = useSignedUrl(media.bucket, media.path)
+  // PR #7 H1 + L2: the shared self-heal ladder — a failed sign query or
+  // a broken <img> is an honest failed state with retry, never an
+  // eternal "Loading photo…" or a raw broken-image glyph.
+  const heal = useSelfHealingSignedUrl(media.bucket, media.path)
   return (
     <ImageViewer
       media={photos}
       index={index}
-      signedUrl={signedUrl ?? null}
-      signFailed={isError}
+      signedUrl={heal.signedUrl}
+      signFailed={heal.errored}
+      onImageError={heal.onMediaError}
+      onRetry={heal.onRetry}
       contextLabel={contextLabel}
       metaLabel={t('canvass.viewer.meta', {
         // Rule 6: absolute with seconds, explicit yyyy-mm-dd date.

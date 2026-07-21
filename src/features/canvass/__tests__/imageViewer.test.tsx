@@ -91,6 +91,50 @@ describe('ImageViewer', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 
+  // PR #7 L2: the viewer's <img> was the only media element without
+  // onError — a byte-fetch failure showed the browser's raw broken-image
+  // glyph. The host owns the self-heal ladder; the viewer reports the
+  // error up and offers retry from the failed state.
+  it('reports image byte-failures and offers retry from the failed state', async () => {
+    const user = userEvent.setup()
+    const onImageError = vi.fn()
+    const onRetry = vi.fn()
+    const { rerender } = renderWithFeatureProviders(
+      <ImageViewer
+        media={PHOTOS}
+        index={0}
+        signedUrl="https://signed.example/m-1"
+        contextLabel="QUICKMART"
+        metaLabel="Taken 2026-07-17 14:00:00 · Det. A. Morgan"
+        onClose={vi.fn()}
+        onNavigate={vi.fn()}
+        onImageError={onImageError}
+        onRetry={onRetry}
+      />
+    )
+
+    fireEvent.error(screen.getByRole('img'))
+    expect(onImageError).toHaveBeenCalledTimes(1)
+
+    // The failed state carries a manual retry affordance.
+    rerender(
+      <ImageViewer
+        media={PHOTOS}
+        index={0}
+        signedUrl={null}
+        signFailed
+        contextLabel="QUICKMART"
+        metaLabel="Taken 2026-07-17 14:00:00 · Det. A. Morgan"
+        onClose={vi.fn()}
+        onNavigate={vi.fn()}
+        onImageError={onImageError}
+        onRetry={onRetry}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
   it('hides the ‹ › navigation for a single photo', () => {
     renderWithFeatureProviders(
       <ImageViewer
