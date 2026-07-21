@@ -32,7 +32,7 @@
 | `src/features/canvass/__tests__/geo.test.ts`                           | 2.1   | NEW       |
 | `src/features/canvass/__tests__/mappers.test.ts`                       | 2.1   | NEW       |
 | `src/features/canvass/__tests__/queries.test.ts`                       | 2.2   | NEW       |
-| `src/features/canvass/__tests__/realtime.test.ts`                      | 2.3   | NEW       |
+| `src/features/canvass/__tests__/realtime.test.ts`                      | 2.3, (R6 #130–131 — ledger D17) | NEW + additions |
 | `src/features/canvass/__tests__/canvass-store.test.ts`                 | 2.4   | NEW       |
 | `src/features/canvass/__tests__/LocationCard.test.tsx`                 | 2.4, 5.1 (pulse additions — #91–92) | NEW |
 | `src/features/canvass/__tests__/useFlyTo.test.ts`                      | 3.3 (#73–74) | NEW |
@@ -58,7 +58,7 @@
 | `src/features/canvass/__tests__/imageViewer.test.tsx` (A2, #126)        | 4.3   | NEW       |
 | `src-tauri/crates/platform-utils/src/lib.rs` (inline `#[cfg(test)]`, A2 fix round, #127–129) | 6.3 | additions |
 
-No existing test file is deleted or rewritten, with one sanctioned exception: **#98 is amended in place at Phase 6.3C** (the feed relocates to the panel — the test flips to assert the recomposed dashboard). Two existing files receive **additions** only (`src/lib/commands/commands.test.ts`, `src-tauri/crates/platform-utils/src/lib.rs`). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
+No existing test file is deleted or rewritten, with two sanctioned exceptions: **#98 is amended in place at Phase 6.3C** (the feed relocates to the panel — the test flips to assert the recomposed dashboard), and **`LocationCard.test.tsx`'s selection-a11y test is amended in place at Phase 3.4A** (ledger D16 migrates the card from `role="button"` to the single-select `role="option"`/`aria-selected` model — the old role query is the exact thing D16 changes). Three existing files receive **additions** only (`src/lib/commands/commands.test.ts`, `src-tauri/crates/platform-utils/src/lib.rs`, `src/features/canvass/__tests__/realtime.test.ts` — R6). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
 
 ---
 
@@ -335,6 +335,15 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | 128 | Should clamp to the last `max_lines` lines (Rust)                          | input above the clamp returns exactly the newest `max_lines` lines             |
 | 129 | Should return the whole input when shorter than the window (Rust)          | `tail_log(bytes, n, partial_first_line: false)` ⇒ all lines intact, first line included — the caller passes `false` because it never seeked (fix-delta 2: the flag is the caller's knowledge, not inferable from bytes) |
 
+## Revision R6 additions (M3 implementation — ledger D17)
+
+Belongs to **Phase 2.3** (counted there in the summary). D17's two untested-guard arms, added at M3's first touch of `realtime.test.ts` per the ledger trigger; both mutation-verified during M3 (reverting each guard fails its arm).
+
+| #   | Test Description                                                          | Key Assertion                                                                 |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 130 | Should survive an `updated_at: null` case event through `toCanvassCase`    | with a ≥2-entry cases cache, a `cloud_cases` broadcast carrying `updated_at: null` still patches the list (guard maps null → `''`, sorts last) and no `realtime: event dispatch failed` is logged — reverting `wireString(row.updated_at)` kills the patch inside the dispatch containment |
+| 131 | Should invalidate the landing families with `cancelRefetch: false`         | an options spy pins BOTH pre-filter invalidations — `['location-counts']` and `['cases']` — called with `{ cancelRefetch: false }` (a bulk re-sync burst must not cancel-and-restart the in-flight landing fetches); dropping the options argument fails |
+
 ---
 
 ## Test Count Summary
@@ -347,8 +356,8 @@ Belongs to **Phase 1.2** (counted there in the summary). Written during M1 as ch
 | 1.4   | 4     | 3.3   | 5     | 5.3   | 4     |
 | 2.1   | 12    | 3.4   | 2     | 6.1   | 5     |
 | 2.2   | 6     | 4.1   | 5     | 6.2   | 3     |
-| 2.3   | 6     | 4.2   | 4     | 6.3   | 8 (5 TS + 3 Rust) |
+| 2.3   | 8     | 4.2   | 4     | 6.3   | 8 (5 TS + 3 Rust) |
 | 2.4   | 11    | 7.1   | 2     | 6.4   | 0     |
 | 7.2   | 4     | 7.3   | 3     |       |       |
 
-**Total: 129** (Rust 9 — 6 `secure-vault` + 3 `platform-utils` · TypeScript 120; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–129 → R5/A2 with #127–129 the Phase 6.3B′ Rust tests; ported 6.3A test files are excluded — this count is canvas-hub-authored tests only) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
+**Total: 131** (Rust 9 — 6 `secure-vault` + 3 `platform-utils` · TypeScript 122; #107 → R1/2.2, #108 → R2/6.1, #109 → R3/1.2, #110–121 → R4/A1 with #120 reassigned to 6.3 by A2, #122–129 → R5/A2 with #127–129 the Phase 6.3B′ Rust tests, #130–131 → R6/2.3 (ledger D17, added at M3); ported 6.3A test files are excluded — this count is canvas-hub-authored tests only) — reconciles with the Implementation Plan, Appendix C. **Rule:** if counts drift during implementation, reconcile both documents before proceeding to the next phase.
