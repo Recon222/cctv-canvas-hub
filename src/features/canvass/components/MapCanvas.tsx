@@ -61,7 +61,7 @@ export function MapCanvas({
 }) {
   const { t } = useTranslation()
   const mapRef = useRef<MapRef>(null)
-  const { data: preferences, isPending } = usePreferences()
+  const { data: preferences, isPending, isError } = usePreferences()
   const view = useCanvassStore(state => state.view)
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   const { data: cases } = useCases()
@@ -191,6 +191,16 @@ export function MapCanvas({
   if (isPending) {
     // Preferences still loading — calm ground, never a flash of the gate.
     return <div className="hub-grid-paper h-full" />
+  }
+  if (isError) {
+    // PR #6 M2: an unreadable settings file is NOT "token missing" —
+    // the token may be set and fine; sending the operator to a greyed
+    // MapPane would be a dead end. Tell the truth instead.
+    return (
+      <div className="relative h-full">
+        <MapTokenGate variant="preferencesError" />
+      </div>
+    )
   }
   if (token === null) {
     return (

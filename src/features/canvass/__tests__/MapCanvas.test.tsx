@@ -132,6 +132,28 @@ describe('MapCanvas (Phase 3.2)', () => {
     ).not.toBeInTheDocument()
   })
 
+  // PR #6 review M2: an errored preferences query used to fall through
+  // to `token === null` and render the token-MISSING gate — "add a
+  // token in Preferences" is a lie when the settings file couldn't be
+  // read (the token may be fine), and MapPane's disabled empty field is
+  // a dead end.
+  it('renders the preferences-unreadable state — not the token gate — when preferences fail to load', () => {
+    mockUsePreferences.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+    } as UseQueryResult<AppPreferences>)
+
+    renderWithFeatureProviders(<MapCanvas />)
+
+    expect(screen.getByText('Settings could not be read')).toBeInTheDocument()
+    // The truth, not the token lie:
+    expect(
+      screen.queryByText("A Mapbox token hasn't been set")
+    ).not.toBeInTheDocument()
+    expect(MockMap).not.toHaveBeenCalled()
+  })
+
   it('honors the map_style preference', () => {
     mockUsePreferences.mockReturnValue(
       preferencesResult({
