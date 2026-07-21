@@ -295,6 +295,65 @@ describe('style-load failure state (PR #6 H1)', () => {
       )
     ).not.toBeInTheDocument()
   })
+
+  // Fix-delta N1 facet 1: the post-load exemption must be scoped to the
+  // (token + style) pair that actually loaded. A runtime style SWITCH
+  // fires style.load but never map load — with token-only keying, a
+  // failing NEW style document (fetched once, no retry) was
+  // misclassified as a post-load tile error → silent blank map again.
+  it('surfaces styleError when a runtime style SWITCH fails to load', () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    const rendered = renderWithFeatureProviders(<MapCanvas />)
+    fireMapLoad() // the initial (default) style loaded fine
+
+    // Preferences switch to dark-v11 — a fresh style document fetch.
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({
+        mapbox_token: 'pk.test-fake-token',
+        map_style: 'dark-v11',
+      })
+    )
+    rendered.rerender(<MapCanvas />)
+    fireMapError(500)
+
+    expect(
+      screen.getByText(
+        'Map error — style failed to load · board stays live in the card list'
+      )
+    ).toBeInTheDocument()
+  })
+
+  // Fix-delta N1 facet 2: the failure verdict must carry its key like
+  // its siblings. A token swap while a failure banner is showing used
+  // to leave the stale wrong-token banner over the new token's loading
+  // map until its own load/deadline resolved.
+  it('clears a stale failure banner when the token changes', () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    const rendered = renderWithFeatureProviders(<MapCanvas />)
+    fireMapError(500) // pre-load terminal failure for THIS token
+    expect(
+      screen.getByText(
+        'Map error — style failed to load · board stays live in the card list'
+      )
+    ).toBeInTheDocument()
+
+    // A fresh token is a fresh verdict: not-failed until its own
+    // load/error/deadline says otherwise.
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-other-fake-token' })
+    )
+    rendered.rerender(<MapCanvas />)
+
+    expect(
+      screen.queryByText(
+        'Map error — style failed to load · board stays live in the card list'
+      )
+    ).not.toBeInTheDocument()
+  })
 })
 
 describe('token rejection (PR #6 review M4, tests #136-137)', () => {

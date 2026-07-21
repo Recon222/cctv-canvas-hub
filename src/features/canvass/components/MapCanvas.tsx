@@ -70,11 +70,15 @@ export function MapCanvas({
   // toast fires once per rejected token.
   const [rejectedToken, setRejectedToken] = useState<string | null>(null)
   const rejectionToastFor = useRef<string | null>(null)
-  // Style-load tracking (H1), keyed by token like the rejection state:
-  // a token swap remounts <Map>, and a stale "loaded" from the previous
-  // instance must not exempt the new style fetch from failure detection.
-  const [loadedForToken, setLoadedForToken] = useState<string | null>(null)
-  const [styleFailed, setStyleFailed] = useState(false)
+  // Style-load tracking (H1; keying fixed per fix-delta N1): loaded and
+  // failed verdicts are keyed by the (token + styleId) COMPOSITE they
+  // were issued for, exactly the rejectedToken pattern — derived
+  // booleans by comparison, no reset effects. Token-only keying let a
+  // runtime style SWITCH (style.load fires, map load does not) inherit
+  // a stale "loaded" exemption, and a bare-boolean failure left a stale
+  // wrong-token banner over a fresh token's loading map.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const [failedFor, setFailedFor] = useState<string | null>(null)
   useFlyTo(mapRef)
 
   const selectedCase = cases?.find(c => c.id === selectedCaseId) ?? null
@@ -85,34 +89,42 @@ export function MapCanvas({
   const token =
     rawToken == null || rawToken.trim() === '' ? null : rawToken.trim()
   const styleId = preferences?.map_style ?? DEFAULT_MAP_STYLE
+  /** The composite the load/failure verdicts key on. */
+  const styleKey = token === null ? null : `${token}|${styleId}`
   const styleIdRef = useRef(styleId)
+  const styleKeyRef = useRef(styleKey)
   useEffect(() => {
     styleIdRef.current = styleId
-  }, [styleId])
+    styleKeyRef.current = styleKey
+  }, [styleId, styleKey])
 
   const tokenRejected = rejectedToken !== null && rejectedToken === token
-  const styleLoaded = loadedForToken !== null && loadedForToken === token
+  const styleLoaded = styleKey !== null && loadedFor === styleKey
+  const styleFailed = styleKey !== null && failedFor === styleKey
 
-  const reportStyleFailed = (failed: boolean) => {
-    setStyleFailed(failed)
-    onStyleFailedChange?.(failed)
-  }
+  // CanvassRoot's furniture-hide copy follows the DERIVED value — a
+  // key change (new token/style) must un-hide without waiting for the
+  // next verdict, exactly like the banner (N1 facet 2, one level up).
+  useEffect(() => {
+    onStyleFailedChange?.(styleFailed)
+  }, [styleFailed, onStyleFailedChange])
 
   // H1 deadline arm: the style document is fetched once with no retry —
   // if it neither loads nor errors inside the deadline (hung fetch),
-  // surface the failure state anyway.
+  // surface the failure state anyway. Re-arms whenever the composite
+  // changes (token swap OR style switch): styleLoaded derives false for
+  // the new key.
   useEffect(() => {
-    if (token === null || styleLoaded) {
+    if (styleKey === null || styleLoaded) {
       return
     }
     const id = setTimeout(() => {
-      setStyleFailed(true)
-      onStyleFailedChange?.(true)
+      setFailedFor(styleKey)
     }, STYLE_LOAD_DEADLINE_MS)
     return () => {
       clearTimeout(id)
     }
-  }, [token, styleLoaded, onStyleFailedChange])
+  }, [styleKey, styleLoaded])
 
   // Viewport from the incident coord (plan 3.2B). Keyed on the case id
   // and the coordinate VALUES — a reconcile refetch returns equal
@@ -144,25 +156,32 @@ export function MapCanvas({
   }, [])
 
   const handleMapLoad = () => {
-    // The style (and first render) made it — clear any failure verdict,
-    // including a late recovery after the deadline fired.
-    setLoadedForToken(token)
-    reportStyleFailed(false)
+    // The style (and first render) made it — stamp the current composite
+    // as loaded and void any failure verdict (late recovery after the
+    // deadline fired included).
+    setLoadedFor(styleKey)
+    setFailedFor(null)
     const map = mapRef.current?.getMap()
     if (map === undefined) {
       return
     }
-    const applyNightPreset = () => {
+    const handleStyleLoad = () => {
+      // A later style SWITCH (Preferences) fires style.load, never map
+      // load — the new composite gets its loaded stamp HERE (N1), read
+      // through the ref (this listener registers once).
+      setLoadedFor(styleKeyRef.current)
+      setFailedFor(null)
       // Standard-family styles only — classic styles (dark-v11) have no
-      // basemap config and would log an error.
+      // basemap config and would log an error. The switch also drops
+      // the night preset — reapply on every style load.
       if (styleIdRef.current.startsWith('standard')) {
         map.setConfigProperty('basemap', 'lightPreset', 'night')
       }
     }
-    applyNightPreset()
-    // A later style switch (Preferences) reloads the style and drops the
-    // config — reapply on every style load.
-    map.on('style.load', applyNightPreset)
+    if (styleIdRef.current.startsWith('standard')) {
+      map.setConfigProperty('basemap', 'lightPreset', 'night')
+    }
+    map.on('style.load', handleStyleLoad)
   }
 
   const handleMapError = (event: { error?: { message?: string } }) => {
@@ -180,8 +199,10 @@ export function MapCanvas({
       // Pre-load failure is TERMINAL (H1): mapbox-gl 3.26 fetches the
       // style document once, no retry — offline at launch, 402/429, or
       // a bad style id passthrough would blank the map forever. Surface
-      // it as a persistent designed state.
-      reportStyleFailed(true)
+      // it as a persistent designed state, keyed to THIS composite (N1:
+      // a style switch that fails must not hide behind the previous
+      // style's loaded exemption).
+      setFailedFor(styleKey)
     }
     // Post-load errors stay silent on screen: those are tiles, and
     // mapbox retries tiles on its own; the card list keeps working.
