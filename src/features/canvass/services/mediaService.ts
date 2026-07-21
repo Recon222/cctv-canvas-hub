@@ -19,6 +19,14 @@ export const SIGNED_URL_TTL_S = 3600
  */
 export const SIGNED_URL_REFRESH_MS = 50 * 60_000
 
+/**
+ * Media freshness poll cadence (AD3-pinned 20 s, Flow D): media rows
+ * ride no realtime event (G3), so the poll manufactures freshness. The
+ * per-location event accelerator already shipped in M2's
+ * useCaseRealtime — this is the safety net under it.
+ */
+export const MEDIA_POLL_MS = 20_000
+
 /** §5.5.5 — the inline-renderable set. Everything else (HEIC, QuickTime,
  * …) gets the designed fallback tile + open-externally. */
 const INLINE_RENDERABLE_MIMES = new Set([

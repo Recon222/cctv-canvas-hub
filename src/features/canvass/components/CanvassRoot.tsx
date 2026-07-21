@@ -8,6 +8,7 @@ import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
 import { useCases } from '../hooks/useCases'
 import { useCaseLocations } from '../hooks/useCaseLocations'
+import { useMediaPolling } from '../hooks/useMediaPolling'
 import { cameraPadding } from '../hooks/useFlyTo'
 import { NavRail } from './NavRail'
 import { CasesView } from './CasesView'
@@ -50,6 +51,9 @@ export function CanvassRoot() {
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   const queryClient = useQueryClient()
   useCaseRealtime(selectedCaseId)
+  // Flow D: the 20 s media freshness poll rides the board lifecycle —
+  // the hook itself gates on session (active/locked) + health (canPoll).
+  useMediaPolling(selectedCaseId)
   useConnectionHealth()
   // Module-scoped state outlives sign-out; unmount IS the session exit
   // (active/locked → anything else), so reset EVERYTHING session-scoped
