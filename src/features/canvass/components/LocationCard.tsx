@@ -183,7 +183,11 @@ function MediaStrip({ location }: { location: CanvassLocation }) {
   /** The viewer pages the location's inline-renderable photos only — a
    * HEIC thumb opens externally, never a broken viewer image. */
   const viewerPhotos = images.filter(row => isInlineRenderable(row.mime))
-  const tiles = [...images, ...videos]
+  // Videos FIRST (live-smoke F1): a location that has video always
+  // exposes a playable affordance — images-first let 4 photos push the
+  // .mp4 into the non-clickable +N badge on the realistic seeded shape
+  // (spec §5: video on demand). Photos keep every remaining slot.
+  const tiles = [...videos, ...images]
   const visible = tiles.slice(0, MAX_STRIP_TILES)
   const overflow = tiles.length - visible.length
   const contextLabel = `${location.name} · ${location.address}`

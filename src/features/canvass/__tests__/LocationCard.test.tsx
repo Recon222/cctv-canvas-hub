@@ -345,6 +345,37 @@ describe('LocationCard media strip (4.3B)', () => {
     expect(useCanvassStore.getState().selectedLocationId).toBeNull()
   })
 
+  // M4 live-smoke F1: 4 photos + 1 video is the REALISTIC seeded shape —
+  // images must never push the video into the non-clickable overflow
+  // badge (spec §5: video on demand means a reachable play affordance).
+  it('keeps video reachable when images fill every tile slot', async () => {
+    const user = userEvent.setup()
+    vi.mocked(fetchMedia).mockResolvedValue([
+      ...['q1', 'q2', 'q3', 'q4'].map(id =>
+        mappedMedia(mediaRow({ id, filename: `${id}.jpg` }))
+      ),
+      mappedMedia(
+        mediaRow({
+          id: 'v-crowded',
+          type: 'video',
+          filename: 'dvr.mp4',
+          mime_type: 'video/mp4',
+          storage_bucket: 'video',
+        })
+      ),
+    ])
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // A location that has video always exposes a playable affordance.
+    const play = await screen.findByTitle('Play video (on demand)')
+    await user.click(play)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('dvr.mp4')).toBeInTheDocument()
+  })
+
   it('caps inline tiles and closes the row with an overflow badge', async () => {
     vi.mocked(fetchMedia).mockResolvedValue([
       ...['x1', 'x2', 'x3', 'x4', 'x5'].map(id =>
