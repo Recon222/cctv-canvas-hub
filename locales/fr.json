@@ -188,8 +188,6 @@
   "canvass.dvr.brand": "Type / Marque",
   "canvass.dvr.username": "Nom d'utilisateur",
   "canvass.dvr.password": "Mot de passe",
-  "canvass.map.placeholder.title": "La carte arrive au jalon M3",
-  "canvass.map.placeholder.description": "La carte des lieux en direct arrive au prochain jalon. La vue du dossier est pleinement active d'ici là.",
 
   "canvass.nav.needsCase": "Sélectionnez d'abord un dossier",
   "canvass.cases.empty.listening": "À l'écoute du canal de l'agence",

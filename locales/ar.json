@@ -188,8 +188,6 @@
   "canvass.dvr.brand": "النوع / العلامة",
   "canvass.dvr.username": "اسم المستخدم",
   "canvass.dvr.password": "كلمة المرور",
-  "canvass.map.placeholder.title": "الخريطة تصل في المرحلة M3",
-  "canvass.map.placeholder.description": "خريطة المواقع المباشرة تصل في المرحلة القادمة. عرض القضية يعمل بالكامل حتى ذلك الحين.",
 
   "canvass.nav.needsCase": "اختر قضية أولاً",
   "canvass.cases.empty.listening": "الاستماع إلى قناة الوكالة",

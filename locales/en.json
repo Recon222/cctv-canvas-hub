@@ -188,8 +188,6 @@
   "canvass.dvr.brand": "Type / Brand",
   "canvass.dvr.username": "Username",
   "canvass.dvr.password": "Password",
-  "canvass.map.placeholder.title": "Map view lands in M3",
-  "canvass.map.placeholder.description": "The live location map arrives in the next milestone. The case view is fully live meanwhile.",
 
   "canvass.nav.needsCase": "Select a case first",
   "canvass.cases.empty.listening": "Listening on agency channel",
