@@ -506,6 +506,45 @@ describe('LocationCard media strip (4.3B)', () => {
     expect(within(dialog).getByText('dvr.mp4')).toBeInTheDocument()
   })
 
+  // PR #7 L1: the open viewer is keyed by photo id — a mid-view
+  // soft-delete of an EARLIER photo must not shift the displayed photo.
+  it('keeps the open photo when an earlier photo disappears mid-view', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createSignedUrl).mockResolvedValue('https://signed.example/t')
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <LocationCard location={mapped(locationRow())} />
+        </I18nextProvider>
+      </QueryClientProvider>
+    )
+
+    await user.click(await screen.findByTitle('View register.png'))
+    expect(await screen.findByText('Photo 2 of 2')).toBeInTheDocument()
+
+    // The earlier photo is soft-deleted; the 20 s poll refetches.
+    vi.mocked(fetchMedia).mockResolvedValue(
+      stripMedia().filter(row => row.id !== 'p1')
+    )
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+
+    // The observer notification lands on the next tick — wait for the
+    // strip to repaint off the new list before judging the viewer.
+    await waitFor(() => {
+      expect(screen.queryByTitle('View front-door.jpg')).not.toBeInTheDocument()
+    })
+
+    // Still register.png — now the only photo; never a silent shift.
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('register.png')).toBeInTheDocument()
+    expect(within(dialog).getByText('Photo 1 of 1')).toBeInTheDocument()
+  })
+
   // PR #7 M1 (strip surface): an unknown-kind row stays VISIBLE on the
   // card — a fallback tile among the others, never silently dropped
   // from the fixed image/video/audio grouping.

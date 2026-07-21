@@ -159,8 +159,11 @@ export function LocationCard({ location }: LocationCardProps) {
 const MAX_STRIP_TILES = 4
 
 type OpenMedia =
-  | { kind: 'viewer'; index: number }
-  | { kind: 'player'; media: CanvassMedia }
+  // Keyed by media id, not index (PR #7 L1): the 20 s poll can remove
+  // an EARLIER photo mid-view — an index would silently shift the
+  // displayed photo; the id keeps it (or closes cleanly if the open
+  // photo itself vanished).
+  { kind: 'viewer'; id: string } | { kind: 'player'; media: CanvassMedia }
 
 /**
  * The card's media strip (Phase 4.3B, spec §5 media-forward): image
@@ -201,16 +204,19 @@ function MediaStrip({ location }: { location: CanvassLocation }) {
       setOpen({ kind: 'player', media: row })
       return
     }
-    const index = viewerPhotos.findIndex(photo => photo.id === row.id)
-    if (index !== -1) {
-      setOpen({ kind: 'viewer', index })
+    if (viewerPhotos.some(photo => photo.id === row.id)) {
+      setOpen({ kind: 'viewer', id: row.id })
     }
   }
 
-  // Poll refetches can shrink the photo set under an open viewer — an
-  // out-of-range index simply closes it.
-  const viewerPhoto =
-    open?.kind === 'viewer' ? viewerPhotos[open.index] : undefined
+  // Poll refetches can mutate the photo set under an open viewer: the
+  // id keeps the displayed photo stable across removals of its
+  // neighbours; if the open photo itself vanished, -1 closes cleanly.
+  const viewerIndex =
+    open?.kind === 'viewer'
+      ? viewerPhotos.findIndex(photo => photo.id === open.id)
+      : -1
+  const viewerPhoto = viewerIndex === -1 ? undefined : viewerPhotos[viewerIndex]
 
   return (
     <div
@@ -250,7 +256,7 @@ function MediaStrip({ location }: { location: CanvassLocation }) {
               // auto-retry from the previous photo (PR #7 L2).
               key={viewerPhoto.id}
               photos={viewerPhotos}
-              index={open.index}
+              index={viewerIndex}
               media={viewerPhoto}
               contextLabel={contextLabel}
               investigator={location.investigator}
@@ -258,7 +264,12 @@ function MediaStrip({ location }: { location: CanvassLocation }) {
                 setOpen(null)
               }}
               onNavigate={index => {
-                setOpen({ kind: 'viewer', index })
+                // The viewer's wrap math hands back an index into the
+                // CURRENT photos array — translate to the id.
+                const next = viewerPhotos[index]
+                if (next !== undefined) {
+                  setOpen({ kind: 'viewer', id: next.id })
+                }
               }}
             />
           </ModalPropagationWall>,
