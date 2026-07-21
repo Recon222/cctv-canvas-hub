@@ -6,7 +6,7 @@
 
 | Done | State |
 | --- | --- |
-| Planning set (PR #1) + Amendments A1 (PR #3) and A2 (PR #5) | Merged. The three docs in `docs/plans/canvas-hub/` are the single source of truth — **129 tests pinned** (9 Rust + 120 TS), 7 milestones, AD1–AD15 |
+| Planning set (PR #1) + Amendments A1 (PR #3) and A2 (PR #5) | Merged. The three docs in `docs/plans/canvas-hub/` are the single source of truth — **131 tests pinned** (9 Rust + 122 TS; R6 added the D17 arms at M3), 7 milestones, AD1–AD15 |
 | **M1** — session foundation (PR #2) | Shipped + live-verified: encrypted vault (AES-GCM, key in OS keychain), enrollment, sign-in, schema gate, relaunch-restore |
 | **M2** — live data plane (PR #4) | Shipped + live-verified: three-view board (Cases/Case/Map-placeholder + NavRail), realtime at **13 ms** broadcast-to-board on the pure patch path, health machine, 135-test suite |
 | Design | Locked: the handoff package (§2) is the **binding design**. Claude design is **currently authoring the production components** per `design/production-brief.md` — that package arrives next |
