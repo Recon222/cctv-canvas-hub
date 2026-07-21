@@ -1,9 +1,21 @@
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { MapPinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCanvassStore } from '../store/canvass-store'
-import { formatClockTime } from '../services/format'
-import type { CanvassLocation } from '../types'
+import { formatClockTime, formatBoardTimestamp } from '../services/format'
+import {
+  isInlineRenderable,
+  openMediaExternally,
+} from '../services/mediaService'
+import { useCaseMedia } from '../hooks/useCaseMedia'
+import { useSelfHealingSignedUrl, useSignedUrl } from '../hooks/useSignedUrl'
+import { SignedMediaThumb, MediaCountBadge, MediaSummary } from './MediaThumb'
+import { ImageViewer } from './ImageViewer'
+import { VideoPlayer } from './VideoPlayer'
+import type { CanvassLocation, CanvassMedia } from '../types'
 
 /**
  * One location on the board (Phase 2.4B). Wall-legible, dark, CSS
@@ -118,6 +130,7 @@ export function LocationCard({ location }: LocationCardProps) {
           </span>
         )}
       </div>
+      <MediaStrip location={location} />
       {dvrRows.length > 0 && (
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-hub-row-divider pt-3">
           <dt className="col-span-2 mb-0.5 font-stmono text-[9.5px] uppercase tracking-[2px] text-hub-faint">
@@ -138,5 +151,236 @@ export function LocationCard({ location }: LocationCardProps) {
         </dl>
       )}
     </article>
+  )
+}
+
+/** Inline tiles per card row — beyond this, the "+N" badge closes the
+ * strip (46px tiles inside a ~370px card). */
+const MAX_STRIP_TILES = 4
+
+type OpenMedia =
+  // Keyed by media id, not index (PR #7 L1): the 20 s poll can remove
+  // an EARLIER photo mid-view — an index would silently shift the
+  // displayed photo; the id keeps it (or closes cleanly if the open
+  // photo itself vanished).
+  { kind: 'viewer'; id: string } | { kind: 'player'; media: CanvassMedia }
+
+/**
+ * The card's media strip (Phase 4.3B, spec §5 media-forward): image
+ * thumbs inline (videos as play tiles), the "+N" overflow badge, and
+ * the photo/video/audio count summary (#88). Thumb ⇒ ImageViewer at
+ * that photo; video tile ⇒ on-demand VideoPlayer. Media comes from the
+ * case-level query (one per case, AD3) filtered to this location.
+ */
+function MediaStrip({ location }: { location: CanvassLocation }) {
+  const { data: media } = useCaseMedia(location.caseId)
+  const [open, setOpen] = useState<OpenMedia | null>(null)
+
+  const rows = (media ?? []).filter(row => row.locationId === location.id)
+  if (rows.length === 0) {
+    return null
+  }
+  const images = rows.filter(row => row.type === 'image')
+  const videos = rows.filter(row => row.type === 'video')
+  const audio = rows.filter(row => row.type === 'audio')
+  // PR #7 M1 drift posture: unknown kinds stay VISIBLE (fallback tiles,
+  // sign-on-demand open) — the mapper bucketed them; the strip must not
+  // re-drop them from its fixed grouping.
+  const unknownKinds = rows.filter(row => row.type === 'unknown')
+  /** The viewer pages the location's inline-renderable photos only — a
+   * HEIC thumb opens externally, never a broken viewer image. */
+  const viewerPhotos = images.filter(row => isInlineRenderable(row.mime))
+  // Videos FIRST (live-smoke F1): a location that has video always
+  // exposes a playable affordance — images-first let 4 photos push the
+  // .mp4 into the non-clickable +N badge on the realistic seeded shape
+  // (spec §5: video on demand). Photos keep every remaining slot.
+  const tiles = [...videos, ...images, ...unknownKinds]
+  const visible = tiles.slice(0, MAX_STRIP_TILES)
+  const overflow = tiles.length - visible.length
+  const contextLabel = `${location.name} · ${location.address}`
+
+  const openMedia = (row: CanvassMedia) => {
+    if (row.type === 'video') {
+      setOpen({ kind: 'player', media: row })
+      return
+    }
+    if (viewerPhotos.some(photo => photo.id === row.id)) {
+      setOpen({ kind: 'viewer', id: row.id })
+    }
+  }
+
+  // Poll refetches can mutate the photo set under an open viewer: the
+  // id keeps the displayed photo stable across removals of its
+  // neighbours; if the open photo itself vanished, -1 closes cleanly.
+  const viewerIndex =
+    open?.kind === 'viewer'
+      ? viewerPhotos.findIndex(photo => photo.id === open.id)
+      : -1
+  const viewerPhoto = viewerIndex === -1 ? undefined : viewerPhotos[viewerIndex]
+
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-1.5"
+      // The strip lives inside the selectable card (role="option"):
+      // media interactions must not double as selection/fly-to, and a
+      // focused thumb's Enter must activate the thumb, not the card.
+      onClick={event => {
+        event.stopPropagation()
+      }}
+      onKeyDown={event => {
+        event.stopPropagation()
+      }}
+    >
+      {visible.map(row => (
+        <SignedMediaThumb
+          key={row.id}
+          media={row}
+          onOpen={() => {
+            openMedia(row)
+          }}
+        />
+      ))}
+      {overflow > 0 && <MediaCountBadge count={overflow} />}
+      <MediaSummary
+        photos={images.length}
+        videos={videos.length}
+        audio={audio.length}
+      />
+      {open?.kind === 'viewer' &&
+        viewerPhoto !== undefined &&
+        createPortal(
+          <ModalPropagationWall>
+            <PhotoViewerHost
+              // Keyed per photo: the self-heal ladder is per-instance
+              // state — paging must reset it, not inherit a spent
+              // auto-retry from the previous photo (PR #7 L2).
+              key={viewerPhoto.id}
+              photos={viewerPhotos}
+              index={viewerIndex}
+              media={viewerPhoto}
+              contextLabel={contextLabel}
+              investigator={location.investigator}
+              onClose={() => {
+                setOpen(null)
+              }}
+              onNavigate={index => {
+                // The viewer's wrap math hands back an index into the
+                // CURRENT photos array — translate to the id.
+                const next = viewerPhotos[index]
+                if (next !== undefined) {
+                  setOpen({ kind: 'viewer', id: next.id })
+                }
+              }}
+            />
+          </ModalPropagationWall>,
+          document.body
+        )}
+      {open?.kind === 'player' &&
+        createPortal(
+          <ModalPropagationWall>
+            <PlayerHost
+              media={open.media}
+              contextLabel={contextLabel}
+              onClose={() => {
+                setOpen(null)
+              }}
+            />
+          </ModalPropagationWall>,
+          document.body
+        )}
+    </div>
+  )
+}
+
+/** React portals propagate events through the REACT tree, not the DOM —
+ * without this wall every click inside a modal would bubble into the
+ * card's onClick (re-select + fly-to on the map view). */
+function ModalPropagationWall({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      onClick={event => {
+        event.stopPropagation()
+      }}
+      onKeyDown={event => {
+        event.stopPropagation()
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** Signs the CURRENT photo and pre-formats the viewer's labels (the
+ * poured viewer is dumb — hosts own AD8 fallbacks + rule-6 timestamps). */
+function PhotoViewerHost({
+  photos,
+  index,
+  media,
+  contextLabel,
+  investigator,
+  onClose,
+  onNavigate,
+}: {
+  photos: CanvassMedia[]
+  index: number
+  media: CanvassMedia
+  contextLabel: string
+  investigator: string
+  onClose: () => void
+  onNavigate: (index: number) => void
+}) {
+  const { t } = useTranslation()
+  // PR #7 H1 + L2: the shared self-heal ladder — a failed sign query or
+  // a broken <img> is an honest failed state with retry, never an
+  // eternal "Loading photo…" or a raw broken-image glyph.
+  const heal = useSelfHealingSignedUrl(media.bucket, media.path)
+  return (
+    <ImageViewer
+      media={photos}
+      index={index}
+      signedUrl={heal.signedUrl}
+      signFailed={heal.errored}
+      onImageError={heal.onMediaError}
+      onRetry={heal.onRetry}
+      contextLabel={contextLabel}
+      metaLabel={t('canvass.viewer.meta', {
+        // Rule 6: absolute with seconds, explicit yyyy-mm-dd date.
+        time: formatBoardTimestamp(media.createdAt),
+        investigator,
+      })}
+      onClose={onClose}
+      onNavigate={onNavigate}
+    />
+  )
+}
+
+/** Signs the video on open (the player itself preloads nothing). */
+function PlayerHost({
+  media,
+  contextLabel,
+  onClose,
+}: {
+  media: CanvassMedia
+  contextLabel: string
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  // PR #7 H1: without isError a failed sign query stranded the player
+  // on "Preparing video…" with open-externally structurally unreachable
+  // (it was gated on <video onError>, and the <video> never mounts).
+  const { data: signedUrl, isError } = useSignedUrl(media.bucket, media.path)
+  return (
+    <VideoPlayer
+      media={media}
+      signedUrl={signedUrl ?? null}
+      signFailed={isError}
+      contextLabel={contextLabel}
+      onClose={onClose}
+      onOpenExternally={() => {
+        void openMediaExternally(media.bucket, media.path).catch(() => {
+          toast.error(t('canvass.media.openFailed'))
+        })
+      }}
+    />
   )
 }

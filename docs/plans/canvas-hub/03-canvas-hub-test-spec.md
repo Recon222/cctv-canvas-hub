@@ -34,7 +34,7 @@
 | `src/features/canvass/__tests__/queries.test.ts`                       | 2.2   | NEW       |
 | `src/features/canvass/__tests__/realtime.test.ts`                      | 2.3, (R6 #130–131 — ledger D17) | NEW + additions |
 | `src/features/canvass/__tests__/canvass-store.test.ts`                 | 2.4   | NEW       |
-| `src/features/canvass/__tests__/LocationCard.test.tsx`                 | 2.4, 5.1 (pulse additions — #91–92) | NEW |
+| `src/features/canvass/__tests__/LocationCard.test.tsx`                 | 2.4, 4.3 (#88 — media strip, M4), 5.1 (pulse additions — #91–92) | NEW |
 | `src/features/canvass/__tests__/useFlyTo.test.ts`                      | 3.3 (#73–74, R7 #135) | NEW + additions |
 | `src/features/canvass/__tests__/markers.test.ts` (R7 #132–134 — PR #6 review M3) | 3.3 | NEW |
 | `src/store/health-store.test.ts` (next-to-store, `ui-store.test.ts` precedent) | 2.5, 6.2 | NEW (6.2 additions) |
@@ -59,7 +59,7 @@
 | `src/features/canvass/__tests__/imageViewer.test.tsx` (A2, #126)        | 4.3   | NEW       |
 | `src-tauri/crates/platform-utils/src/lib.rs` (inline `#[cfg(test)]`, A2 fix round, #127–129) | 6.3 | additions |
 
-No existing test file is deleted or rewritten, with two sanctioned exceptions: **#98 is amended in place at Phase 6.3C** (the feed relocates to the panel — the test flips to assert the recomposed dashboard), and **`LocationCard.test.tsx`'s selection-a11y test is amended in place at Phase 3.4A** (ledger D16 migrates the card from `role="button"` to the single-select `role="option"`/`aria-selected` model — the old role query is the exact thing D16 changes). Three existing files receive **additions** only (`src/lib/commands/commands.test.ts`, `src-tauri/crates/platform-utils/src/lib.rs`, `src/features/canvass/__tests__/realtime.test.ts` — R6). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
+No existing test file is deleted or rewritten, with two sanctioned exceptions: **#98 is amended in place at Phase 6.3C** (the feed relocates to the panel — the test flips to assert the recomposed dashboard), and **`LocationCard.test.tsx`'s selection-a11y test is amended in place at Phase 3.4A** (ledger D16 migrates the card from `role="button"` to the single-select `role="option"`/`aria-selected` model — the old role query is the exact thing D16 changes). Four existing files receive **additions** only (`src/lib/commands/commands.test.ts`, `src-tauri/crates/platform-utils/src/lib.rs`, `src/features/canvass/__tests__/realtime.test.ts` — R6, `src/features/canvass/__tests__/LocationCard.test.tsx` — #88 at 4.3, M4). Before Phase 1.4 removes the sidebar panels, audit existing component/hook tests for assertions pinned to that layout and re-home them in the same commit — nothing pinned may silently disappear.
 
 ---
 

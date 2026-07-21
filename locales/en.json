@@ -201,9 +201,13 @@
   "canvass.viewer.previous": "Previous photo",
   "canvass.viewer.next": "Next photo",
   "canvass.viewer.loading": "Loading photo…",
+  "canvass.viewer.loadFailed": "The photo could not be loaded",
+  "canvass.viewer.retry": "Try again",
+  "canvass.viewer.meta": "Taken {{time}} · {{investigator}}",
 
   "canvass.player.close": "Close player",
   "canvass.player.loading": "Preparing video…",
+  "canvass.player.signFailed": "The video could not be loaded from the cloud",
   "canvass.player.unplayable": "This video can't play here",
   "canvass.player.unplayableDetail": "The format ({{mime}}) is not playable on the board. Open it externally to view.",
   "canvass.player.openExternally": "Open externally",
@@ -217,6 +221,9 @@
   "canvass.media.photoCount_other": "{{count}} photos",
   "canvass.media.videoCount_one": "{{count}} video",
   "canvass.media.videoCount_other": "{{count}} videos",
+  "canvass.media.audioCount_one": "{{count}} audio file",
+  "canvass.media.audioCount_other": "{{count}} audio files",
+  "canvass.media.openFailed": "Could not open the file externally",
 
   "canvass.map.zoomIn": "Zoom in",
   "canvass.map.zoomOut": "Zoom out",

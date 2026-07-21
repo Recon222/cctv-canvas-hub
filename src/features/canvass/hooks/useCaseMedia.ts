@@ -3,16 +3,17 @@ import { MEDIA_KEY, useHealthStore } from '@/store/health-store'
 import { fetchMedia } from '../services/canvassService'
 
 /**
- * Case-partitioned media list (G6). The 20 s freshness poll arrives with
- * M4 (`useMediaPolling`, Flow D) — until then this is fetch-on-mount
- * plus realtime-triggered invalidation.
+ * The single definition of the case-media query — `useCaseMedia`
+ * (read-only observers: media strips, dashboard) and `useMediaPolling`
+ * (the 20 s freshness interval, Flow D) share it so the key and the
+ * health-feeding fetch can never drift apart.
  */
-export function useCaseMedia(caseId: string | null) {
-  return useQuery({
+export function caseMediaQueryOptions(caseId: string | null) {
+  return {
     queryKey: [MEDIA_KEY, caseId],
     queryFn: async () => {
       if (caseId === null) {
-        throw new Error('useCaseMedia requires a selected case')
+        throw new Error('case media query requires a selected case')
       }
       try {
         const media = await fetchMedia(caseId)
@@ -23,6 +24,14 @@ export function useCaseMedia(caseId: string | null) {
         throw cause
       }
     },
+  }
+}
+
+/** Case-partitioned media list (G6) — fetch-on-mount + realtime-triggered
+ * invalidation; the poll interval lives in `useMediaPolling`. */
+export function useCaseMedia(caseId: string | null) {
+  return useQuery({
+    ...caseMediaQueryOptions(caseId),
     enabled: caseId !== null,
   })
 }

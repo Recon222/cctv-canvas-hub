@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react'
 import type { CanvassMedia } from '../types'
@@ -14,6 +15,15 @@ export interface ImageViewerProps {
   index: number
   /** Signed URL for media[index]; null while resolving. */
   signedUrl: string | null
+  /** The host's sign query FAILED for media[index] (PR #7 H1) — renders
+   * the honest failed state; "loading" is reserved for genuinely
+   * pending. */
+  signFailed?: boolean
+  /** The `<img>` failed to load (expired/broken URL) — the host owns
+   * the self-heal ladder (PR #7 L2). */
+  onImageError?: () => void
+  /** Manual retry from the failed state (PR #7 L2). */
+  onRetry?: () => void
   /** Eyebrow line, e.g. "QUICKMART CONVENIENCE · 481 YONGE ST". */
   contextLabel: string
   /** Metadata footer, e.g. "TAKEN 10:12:47 · DET. A. MORGAN · 2.1 MB". */
@@ -26,12 +36,36 @@ export function ImageViewer({
   media,
   index,
   signedUrl,
+  signFailed = false,
   contextLabel,
   metaLabel,
   onClose,
   onNavigate,
+  onImageError,
+  onRetry,
 }: ImageViewerProps) {
   const { t } = useTranslation()
+  // Own the keyboard the moment the modal opens (M4 wiring): the Esc and
+  // arrow handlers live on this div — without focus they never fire on a
+  // mouse-driven wall board.
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    dialogRef.current?.focus()
+  }, [])
+  // F2 parity with VideoPlayer (live-smoke): Esc must close from
+  // anywhere — document-level, capture phase, scoped to the modal's
+  // lifetime. Arrows stay dialog-scoped below.
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape, true)
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape, true)
+    }
+  }, [onClose])
   const current = media[index]
   if (current === undefined) {
     return null
@@ -41,15 +75,14 @@ export function ImageViewer({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={current.filename}
       className="absolute inset-0 z-40 flex items-center justify-center bg-hub-ground/70 backdrop-blur"
       onClick={onClose}
       onKeyDown={event => {
-        if (event.key === 'Escape') {
-          onClose()
-        } else if (event.key === 'ArrowLeft') {
+        if (event.key === 'ArrowLeft') {
           onNavigate(wrap(index - 1))
         } else if (event.key === 'ArrowRight') {
           onNavigate(wrap(index + 1))
@@ -84,11 +117,28 @@ export function ImageViewer({
           </button>
         </div>
         <div className="relative flex h-[460px] items-center justify-center bg-gradient-to-br from-[#060d18] to-[#0b1626]">
-          {signedUrl !== null ? (
+          {signFailed ? (
+            <div className="flex flex-col items-center gap-3 text-hub-ghost">
+              <ImageIcon className="size-16" strokeWidth={1.2} aria-hidden />
+              <span className="font-stmono text-[10px] uppercase tracking-[2.5px] text-hub-working">
+                {t('canvass.viewer.loadFailed')}
+              </span>
+              {onRetry !== undefined && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-1 rounded border border-hub-accent/40 bg-hub-accent/10 px-4 py-2 font-stmono text-[11px] uppercase tracking-[2px] text-hub-heading transition-colors hover:bg-hub-accent/20"
+                >
+                  {t('canvass.viewer.retry')}
+                </button>
+              )}
+            </div>
+          ) : signedUrl !== null ? (
             <img
               src={signedUrl}
               alt={current.filename}
               className="max-h-full max-w-full object-contain"
+              onError={onImageError}
             />
           ) : (
             <div className="flex flex-col items-center gap-3 text-hub-ghost">

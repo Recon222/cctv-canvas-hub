@@ -1,4 +1,11 @@
-import { render, screen, act } from '@testing-library/react'
+import {
+  render,
+  screen,
+  act,
+  within,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nextProvider } from 'react-i18next'
@@ -8,11 +15,17 @@ import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { useSessionStore } from '@/features/cloud-session'
 import { LocationCard } from '../components/LocationCard'
 import { LocationCardStack } from '../components/LocationCardStack'
-import { fetchLocations } from '../services/canvassService'
-import { toCanvassLocation } from '../services/mappers'
+import { fetchLocations, fetchMedia } from '../services/canvassService'
+import { createSignedUrl } from '../services/mediaService'
+import { toCanvassLocation, toCanvassMedia } from '../services/mappers'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
-import type { CanvassLocation, LocationRow } from '../types'
-import { locationRow, SEED_CASE_ID } from './fixtures'
+import type {
+  CanvassLocation,
+  CanvassMedia,
+  LocationRow,
+  MediaRow,
+} from '../types'
+import { locationRow, mediaRow, SEED_CASE_ID } from './fixtures'
 
 // Component tests mock the service layer (testing.md convention).
 vi.mock('../services/canvassService', () => ({
@@ -21,6 +34,9 @@ vi.mock('../services/canvassService', () => ({
   fetchLocationCounts: vi.fn(() => Promise.resolve({})),
   fetchMedia: vi.fn(() => Promise.resolve([])),
 }))
+// Spy mode keeps `isInlineRenderable` real (the strip derives
+// renderability from the mime); signing gets per-test implementations.
+vi.mock('../services/mediaService', { spy: true })
 // The realtime seam under CanvassRoot consumers never runs here, but the
 // client module must not be touched by accident either.
 vi.mock('@/lib/supabase/client')
@@ -31,6 +47,14 @@ function mapped(row: LocationRow): CanvassLocation {
     throw new Error('fixture row unexpectedly soft-deleted')
   }
   return location
+}
+
+function mappedMedia(row: MediaRow): CanvassMedia {
+  const media = toCanvassMedia(row)
+  if (media === null) {
+    throw new Error('fixture row unexpectedly soft-deleted')
+  }
+  return media
 }
 
 beforeEach(() => {
@@ -209,5 +233,374 @@ describe('LocationCard', () => {
       0
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('LocationCard media strip (4.3B)', () => {
+  // Distinct storage paths per row — the signed-url query is keyed on
+  // [prefix, bucket, path], and the real rows never share a path.
+  const path = (filename: string) =>
+    `u1/${SEED_CASE_ID}/${locationRow().id}/${filename}`
+  const stripMedia = () => [
+    mappedMedia(
+      mediaRow({
+        id: 'p1',
+        filename: 'front-door.jpg',
+        storage_path: path('front-door.jpg'),
+      })
+    ),
+    mappedMedia(
+      mediaRow({
+        id: 'p2',
+        filename: 'register.png',
+        mime_type: 'image/png',
+        storage_path: path('register.png'),
+      })
+    ),
+    mappedMedia(
+      mediaRow({
+        id: 'v1',
+        type: 'video',
+        filename: 'clip.mp4',
+        mime_type: 'video/mp4',
+        storage_bucket: 'video',
+        storage_path: path('clip.mp4'),
+      })
+    ),
+    mappedMedia(
+      mediaRow({
+        id: 'a1',
+        type: 'audio',
+        filename: 'note.m4a',
+        mime_type: 'audio/mp4',
+        storage_bucket: 'audio',
+        storage_path: path('note.m4a'),
+      })
+    ),
+    // Another location's row must never surface on this card.
+    mappedMedia(
+      mediaRow({
+        id: 'other-loc',
+        filename: 'elsewhere.jpg',
+        location_id: 'someone-elses-location',
+      })
+    ),
+  ]
+
+  beforeEach(() => {
+    vi.mocked(fetchMedia).mockResolvedValue(stripMedia())
+    vi.mocked(createSignedUrl).mockResolvedValue('https://signed.example/t')
+  })
+
+  // Test #88
+  it('shows media count badges on the card — image/video/audio per location', async () => {
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    expect(
+      await screen.findByText('2 photos · 1 video · 1 audio file')
+    ).toBeInTheDocument()
+    // Scoped to THIS location — the stray row renders nowhere.
+    expect(screen.queryByTitle('View elsewhere.jpg')).not.toBeInTheDocument()
+    // Image thumbs inline + the video tile.
+    expect(await screen.findByTitle('View front-door.jpg')).toBeInTheDocument()
+    expect(screen.getByTitle('View register.png')).toBeInTheDocument()
+    expect(screen.getByTitle('Play video (on demand)')).toBeInTheDocument()
+  })
+
+  it('expands a photo thumb into the ImageViewer at that photo, without selecting the card', async () => {
+    const user = userEvent.setup()
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('View register.png'))
+
+    const dialog = await screen.findByRole('dialog')
+    // Opened AT the clicked photo — second of the two renderable photos.
+    expect(within(dialog).getByText('Photo 2 of 2')).toBeInTheDocument()
+    expect(within(dialog).getByText('register.png')).toBeInTheDocument()
+    // Host-formatted labels: eyebrow context + rule-6 meta (absolute
+    // timestamp with seconds + explicit date, AD8 investigator).
+    expect(
+      within(dialog).getByText(/QuickMart Convenience · 17600 Yonge St/)
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        /Taken 2026-07-17 \d{2}:\d{2}:\d{2} · Det\. A\. Morgan/
+      )
+    ).toBeInTheDocument()
+    // Media interactions never double as card selection (fly-to).
+    expect(useCanvassStore.getState().selectedLocationId).toBeNull()
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('expands the video tile into the on-demand VideoPlayer', async () => {
+    const user = userEvent.setup()
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('Play video (on demand)'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('clip.mp4')).toBeInTheDocument()
+    // The player host signs the video object on demand.
+    await waitFor(() => {
+      expect(dialog.querySelector('video')).not.toBeNull()
+    })
+    const video = dialog.querySelector('video')
+    if (video === null) {
+      throw new Error('video element missing')
+    }
+    expect(video).toHaveAttribute('preload', 'none')
+    expect(video).toHaveAttribute('src', 'https://signed.example/t')
+    expect(createSignedUrl).toHaveBeenCalledWith('video', stripMedia()[2]?.path)
+    expect(useCanvassStore.getState().selectedLocationId).toBeNull()
+  })
+
+  // PR #7 H1: both modal hosts must surface a failed sign query — a
+  // storage blip on modal open previously stranded the player on
+  // "Preparing video…" with the escape hatch structurally unreachable.
+  it('shows the honest failed panel when the player sign query fails', async () => {
+    const user = userEvent.setup()
+    // The video tile renders without a URL, so the player is reachable
+    // even while signing is down — exactly the stranding scenario.
+    vi.mocked(createSignedUrl).mockRejectedValue(new Error('storage 503'))
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('Play video (on demand)'))
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      await within(dialog).findByText(
+        'The video could not be loaded from the cloud'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText('Preparing video…')
+    ).not.toBeInTheDocument()
+    // The escape hatch is reachable with no <video> ever mounted.
+    expect(within(dialog).getByText('Open externally')).toBeInTheDocument()
+    expect(dialog.querySelector('video')).toBeNull()
+  })
+
+  // PR #7 L2: the viewer mirrors the thumb's ladder — one automatic
+  // re-sign on <img> error, then the honest failed state with retry.
+  it('self-heals a broken viewer image once, then fails honestly with retry', async () => {
+    const user = userEvent.setup()
+    // One photo only: thumb and viewer share the path-keyed sign query,
+    // so the call sequence stays unambiguous.
+    vi.mocked(fetchMedia).mockResolvedValue([
+      mappedMedia(
+        mediaRow({
+          id: 'p1',
+          filename: 'front-door.jpg',
+          storage_path: path('front-door.jpg'),
+        })
+      ),
+    ])
+    vi.mocked(createSignedUrl)
+      .mockResolvedValueOnce('https://signed.example/expired')
+      .mockResolvedValueOnce('https://signed.example/fresh')
+      .mockResolvedValue('https://signed.example/manual')
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+    await user.click(await screen.findByTitle('View front-door.jpg'))
+    const dialog = await screen.findByRole('dialog')
+    const img = await within(dialog).findByRole('img')
+    expect(img).toHaveAttribute('src', 'https://signed.example/expired')
+
+    // First byte-failure: ONE automatic re-sign of that specific query.
+    fireEvent.error(img)
+    await waitFor(() => {
+      expect(within(dialog).getByRole('img')).toHaveAttribute(
+        'src',
+        'https://signed.example/fresh'
+      )
+    })
+
+    // Second failure: no more auto re-signs — honest failed state.
+    fireEvent.error(within(dialog).getByRole('img'))
+    expect(
+      await within(dialog).findByText('The photo could not be loaded')
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByRole('img')).not.toBeInTheDocument()
+    const callsBeforeRetry = vi.mocked(createSignedUrl).mock.calls.length
+
+    // Manual retry re-signs and restores the photo.
+    await user.click(within(dialog).getByRole('button', { name: 'Try again' }))
+    await waitFor(() => {
+      expect(within(dialog).getByRole('img')).toHaveAttribute(
+        'src',
+        'https://signed.example/manual'
+      )
+    })
+    expect(vi.mocked(createSignedUrl).mock.calls.length).toBeGreaterThan(
+      callsBeforeRetry
+    )
+  })
+
+  it('shows the honest failed state when paging to a photo whose signing fails', async () => {
+    const user = userEvent.setup()
+    // First photo signs fine (its thumb is clickable); the second
+    // photo's object fails to sign once the viewer pages to it.
+    vi.mocked(createSignedUrl).mockImplementation((_bucket, path) =>
+      path.includes('register.png')
+        ? Promise.reject(new Error('storage 503'))
+        : Promise.resolve('https://signed.example/ok')
+    )
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('View front-door.jpg'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Photo 1 of 2')).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Next photo' }))
+    // The viewer host remounts per photo (the self-heal ladder is
+    // per-photo state), replacing the dialog node — query via screen.
+    expect(
+      await screen.findByText('The photo could not be loaded')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Loading photo…')).not.toBeInTheDocument()
+  })
+
+  // M4 live-smoke F1: 4 photos + 1 video is the REALISTIC seeded shape —
+  // images must never push the video into the non-clickable overflow
+  // badge (spec §5: video on demand means a reachable play affordance).
+  it('keeps video reachable when images fill every tile slot', async () => {
+    const user = userEvent.setup()
+    vi.mocked(fetchMedia).mockResolvedValue([
+      ...['q1', 'q2', 'q3', 'q4'].map(id =>
+        mappedMedia(mediaRow({ id, filename: `${id}.jpg` }))
+      ),
+      mappedMedia(
+        mediaRow({
+          id: 'v-crowded',
+          type: 'video',
+          filename: 'dvr.mp4',
+          mime_type: 'video/mp4',
+          storage_bucket: 'video',
+        })
+      ),
+    ])
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // A location that has video always exposes a playable affordance.
+    const play = await screen.findByTitle('Play video (on demand)')
+    await user.click(play)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('dvr.mp4')).toBeInTheDocument()
+  })
+
+  // PR #7 L1: the open viewer is keyed by photo id — a mid-view
+  // soft-delete of an EARLIER photo must not shift the displayed photo.
+  it('keeps the open photo when an earlier photo disappears mid-view', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createSignedUrl).mockResolvedValue('https://signed.example/t')
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <LocationCard location={mapped(locationRow())} />
+        </I18nextProvider>
+      </QueryClientProvider>
+    )
+
+    await user.click(await screen.findByTitle('View register.png'))
+    expect(await screen.findByText('Photo 2 of 2')).toBeInTheDocument()
+
+    // The earlier photo is soft-deleted; the 20 s poll refetches.
+    vi.mocked(fetchMedia).mockResolvedValue(
+      stripMedia().filter(row => row.id !== 'p1')
+    )
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+
+    // The observer notification lands on the next tick — wait for the
+    // strip to repaint off the new list before judging the viewer.
+    await waitFor(() => {
+      expect(screen.queryByTitle('View front-door.jpg')).not.toBeInTheDocument()
+    })
+
+    // Still register.png — now the only photo; never a silent shift.
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('register.png')).toBeInTheDocument()
+    expect(within(dialog).getByText('Photo 1 of 1')).toBeInTheDocument()
+  })
+
+  // PR #7 M1 (strip surface): an unknown-kind row stays VISIBLE on the
+  // card — a fallback tile among the others, never silently dropped
+  // from the fixed image/video/audio grouping.
+  it('renders an unknown-kind row as a visible tile, never dropped', async () => {
+    vi.mocked(fetchMedia).mockResolvedValue([
+      mappedMedia(
+        mediaRow({
+          id: 'p1',
+          filename: 'front-door.jpg',
+          storage_path: path('front-door.jpg'),
+        })
+      ),
+      mappedMedia(
+        mediaRow({
+          id: 'd1',
+          type: 'document',
+          filename: 'export-report.pdf',
+          mime_type: 'application/pdf',
+          storage_path: path('export-report.pdf'),
+        })
+      ),
+    ])
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // The photo thumb AND the drifted row's fallback tile both render.
+    expect(await screen.findByTitle('View front-door.jpg')).toBeInTheDocument()
+    expect(
+      screen.getByTitle('Open export-report.pdf externally')
+    ).toBeInTheDocument()
+  })
+
+  it('caps inline tiles and closes the row with an overflow badge', async () => {
+    vi.mocked(fetchMedia).mockResolvedValue([
+      ...['x1', 'x2', 'x3', 'x4', 'x5'].map(id =>
+        mappedMedia(mediaRow({ id, filename: `${id}.jpg` }))
+      ),
+      mappedMedia(
+        mediaRow({
+          id: 'v9',
+          type: 'video',
+          filename: 'v9.mp4',
+          mime_type: 'video/mp4',
+          storage_bucket: 'video',
+        })
+      ),
+    ])
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // 6 tiles → 4 inline + "+2".
+    expect(await screen.findByTitle('2 more')).toBeInTheDocument()
+    expect(screen.getByTitle('2 more')).toHaveTextContent('+2')
   })
 })

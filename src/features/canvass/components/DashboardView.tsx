@@ -60,8 +60,8 @@ export function DashboardView({
 
   const roster = buildRoster(locations)
   const noFix = locations.filter(location => location.coord === null).length
-  // Wire contract: type is 'image' | 'video' | 'audio' (drift-open
-  // string in the row type — a wrong literal here compiles silently).
+  // `type` is the MediaKind union (PR #7 M1) — a wrong literal here is
+  // now a compile error, and drifted wire values arrive as 'unknown'.
   const photos = media.filter(item => item.type === 'image').length
   const videos = media.filter(item => item.type === 'video').length
   const total = locations.length

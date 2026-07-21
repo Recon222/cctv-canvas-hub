@@ -6,6 +6,7 @@ import type {
   Coordinate,
   LocationFormData,
   LocationRow,
+  MediaKind,
   MediaRow,
 } from '../types'
 import { parseWkbPoint } from './geo'
@@ -121,6 +122,14 @@ export function toCanvassLocation(row: LocationRow): CanvassLocation | null {
   }
 }
 
+/** PR #7 M1 — the wire's open `type` narrows to the MediaKind union
+ * here, at the choke point; drift lands in the explicit bucket. */
+function toMediaKind(value: string): MediaKind {
+  return value === 'image' || value === 'video' || value === 'audio'
+    ? value
+    : 'unknown'
+}
+
 export function toCanvassMedia(row: MediaRow): CanvassMedia | null {
   if (row.deleted_at != null) {
     return null
@@ -129,7 +138,7 @@ export function toCanvassMedia(row: MediaRow): CanvassMedia | null {
     id: row.id,
     caseId: row.case_id,
     locationId: row.location_id,
-    type: row.type,
+    type: toMediaKind(row.type),
     category: row.category,
     filename: row.filename,
     mime: row.mime_type,

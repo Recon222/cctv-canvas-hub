@@ -1,6 +1,12 @@
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Image as ImageIcon, Play, FileQuestion, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  isInlineRenderable,
+  openMediaExternally,
+} from '../services/mediaService'
+import { useSelfHealingSignedUrl } from '../hooks/useSignedUrl'
 import type { CanvassMedia } from '../types'
 
 /**
@@ -23,6 +29,8 @@ export interface MediaThumbProps {
   onRetry?: () => void
   /** Signed-URL fetch failed (shows the fallback + retry). */
   errored?: boolean
+  /** The `<img>` failed to load (expired/broken URL) — host self-heals. */
+  onMediaError?: () => void
 }
 
 export function MediaThumb({
@@ -33,6 +41,7 @@ export function MediaThumb({
   onOpen,
   onRetry,
   errored = false,
+  onMediaError,
 }: MediaThumbProps) {
   const { t } = useTranslation()
 
@@ -80,6 +89,7 @@ export function MediaThumb({
           alt={media.filename}
           className="size-full object-cover"
           loading="lazy"
+          onError={onMediaError}
         />
       ) : isVideo ? (
         <span className="flex flex-col items-center gap-0.5">
@@ -113,13 +123,15 @@ export function MediaCountBadge({ count }: { count: number }) {
   )
 }
 
-/** Compact photo/video summary line (e.g. under a thumb row). */
+/** Compact photo/video/audio summary line (e.g. under a thumb row). */
 export function MediaSummary({
   photos,
   videos,
+  audio = 0,
 }: {
   photos: number
   videos: number
+  audio?: number
 }) {
   const { t } = useTranslation()
   const parts: string[] = []
@@ -128,6 +140,10 @@ export function MediaSummary({
   }
   if (videos > 0) {
     parts.push(t('canvass.media.videoCount', { count: videos }))
+  }
+  if (audio > 0) {
+    // Audio has no V1 tile or player — the count keeps it visible (#88).
+    parts.push(t('canvass.media.audioCount', { count: audio }))
   }
   if (parts.length === 0) {
     return null
@@ -146,4 +162,63 @@ export function MediaSummary({
 function mediaExtension(filename: string): string {
   const dot = filename.lastIndexOf('.')
   return dot === -1 ? '?' : filename.slice(dot + 1).toUpperCase()
+}
+
+/**
+ * The wired thumbnail (Phase 4.1C): derives `renderable` from the mime
+ * (§5.5.5), owns the signed-URL query, and runs the self-heal ladder —
+ * an `<img>` error invalidates that specific signed-URL query ONCE
+ * (auto re-sign: after an outage longer than the 60-min TTL an
+ * operator-less wall board heals on reconnect instead of waiting for
+ * the next 50-min tick), then the fallback tile with manual retry.
+ * Never a broken image.
+ */
+export function SignedMediaThumb({
+  media,
+  onOpen,
+  durationLabel,
+}: {
+  media: CanvassMedia
+  /** Open the viewer/player for an inline-renderable row. Non-renderable
+   * rows open externally — the thumb owns that path itself. */
+  onOpen?: () => void
+  durationLabel?: string
+}) {
+  const { t } = useTranslation()
+  // An unknown KIND is non-renderable regardless of mime (PR #7 M1):
+  // the strip cannot route it to a viewer or player, so it takes the
+  // fallback-tile posture — visible, and openable via sign-on-demand —
+  // instead of a renderable-looking placeholder that silently never
+  // signs (the review's sharpest drift path).
+  const renderable = media.type !== 'unknown' && isInlineRenderable(media.mime)
+  // Only a renderable IMAGE displays bytes in the tile — a video tile is
+  // a play glyph (bytes load on demand in the player) and a
+  // non-renderable row is the fallback tile: neither holds a standing
+  // signed URL (D8 discipline, T5).
+  const wantsUrl = renderable && media.type === 'image'
+  // The one-auto-re-sign-then-manual-retry ladder, shared with the
+  // photo viewer host (PR #7 L2).
+  const heal = useSelfHealingSignedUrl(media.bucket, media.path, wantsUrl)
+
+  return (
+    <MediaThumb
+      media={media}
+      signedUrl={heal.signedUrl}
+      renderable={renderable}
+      durationLabel={durationLabel}
+      errored={heal.errored}
+      onOpen={() => {
+        if (renderable) {
+          onOpen?.()
+          return
+        }
+        // HEIC/QuickTime etc.: sign on demand, hand to the OS (spec §5).
+        void openMediaExternally(media.bucket, media.path).catch(() => {
+          toast.error(t('canvass.media.openFailed'))
+        })
+      }}
+      onRetry={heal.onRetry}
+      onMediaError={heal.onMediaError}
+    />
+  )
 }

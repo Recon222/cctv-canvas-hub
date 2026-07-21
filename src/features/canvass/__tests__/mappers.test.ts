@@ -32,6 +32,17 @@ describe('mappers', () => {
     expect(toCanvassMedia(mediaRow({ deleted_at: deletedAt }))).toBeNull()
   })
 
+  // PR #7 M1: the wire's `type` stays open string (forward-tolerance);
+  // the view-model narrows to MediaKind at this boundary, with drifted
+  // values bucketed explicitly — never silently carried.
+  it('normalizes media type to the MediaKind union, bucketing unknowns', () => {
+    expect(toCanvassMedia(mediaRow())?.type).toBe('image')
+    expect(toCanvassMedia(mediaRow({ type: 'video' }))?.type).toBe('video')
+    expect(toCanvassMedia(mediaRow({ type: 'audio' }))?.type).toBe('audio')
+    expect(toCanvassMedia(mediaRow({ type: 'document' }))?.type).toBe('unknown')
+    expect(toCanvassMedia(mediaRow({ type: '' }))?.type).toBe('unknown')
+  })
+
   it('treats a partial row MISSING deleted_at as alive, never tombstoned', () => {
     // The absence of a tombstone marker means the row is alive — strict
     // `!== null` read `undefined` as deleted, so a partial broadcast row
