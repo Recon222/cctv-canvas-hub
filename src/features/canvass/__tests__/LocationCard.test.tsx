@@ -92,17 +92,20 @@ describe('LocationCard', () => {
 
     // The card is a reachable, labelled control — not a mouse-only
     // <article> (review MEDIUM: primary interaction was keyboard-dead).
-    // No aria-pressed: selection is set-only, so the card never
-    // announces a toggle it cannot perform (fix-delta review LOW).
-    const card = screen.getByRole('button', {
+    // D16 (resolved 3.4A): the accurate model is single-select —
+    // role="option" + aria-selected under the stack's listbox; still no
+    // aria-pressed (selection is set-only, fix-delta review LOW).
+    const card = screen.getByRole('option', {
       name: /QuickMart Convenience/,
     })
     expect(card).not.toHaveAttribute('aria-pressed')
+    expect(card).toHaveAttribute('aria-selected', 'false')
 
     await user.tab()
     expect(card).toHaveFocus()
     await user.keyboard('{Enter}')
     expect(useCanvassStore.getState().selectedLocationId).toBe(locationRow().id)
+    expect(card).toHaveAttribute('aria-selected', 'true')
 
     act(() => {
       useCanvassStore.getState().selectLocation(null)

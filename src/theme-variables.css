@@ -1,10 +1,62 @@
 /*
- * Theme Variables (shadcn/ui compatible)
+ * Theme Variables (shadcn/ui compatible) + Canvas Hub "Case File" token layer
  *
- * To customize the theme, visit https://ui.shadcn.com/themes and use the
- * theme builder. You can copy and paste the generated CSS blocks directly
- * into this file, replacing the @theme inline, :root, and .dark sections.
+ * shadcn section: visit https://ui.shadcn.com/themes to regenerate.
+ * Case File section (bottom): the Canvas Hub design language — dark
+ * evidence-dossier board. Tokens mirror design_handoff_canvas_hub/README.md
+ * §Design Language exactly; do not invent values outside this file.
  */
+
+/* ---- Vendored fonts (Case File family — design_handoff §Fonts) ---- */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/inter.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('./assets/fonts/jetbrains-mono.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Share Tech Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/share-tech-mono.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nacelle';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/nacelle-regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nacelle';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./assets/fonts/nacelle-semibold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nacelle';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/nacelle-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nacelle';
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./assets/fonts/nacelle-semibolditalic.woff2') format('woff2');
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -47,6 +99,42 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* ==================== Case File / Canvas Hub ====================
+   * Utility names: bg-hub-*, text-hub-*, border-hub-*, font-nacelle,
+   * font-stmono, font-jbmono (family names match the Case File DS).
+   * Status trio is THE visual system: started=hollow blue ring,
+   * working=solid gold, complete=solid cyan + ✓ (never re-map).
+   */
+  --color-hub-ground: var(--hub-ground);
+  --color-hub-chrome: var(--hub-chrome);
+  --color-hub-panel: var(--hub-panel);
+  --color-hub-panel-solid: var(--hub-panel-solid);
+  --color-hub-overlay: var(--hub-overlay);
+  --color-hub-hairline: var(--hub-hairline);
+  --color-hub-hairline-bright: var(--hub-hairline-bright);
+  --color-hub-row-divider: var(--hub-row-divider);
+  --color-hub-input: var(--hub-input);
+  --color-hub-input-border: var(--hub-input-border);
+  --color-hub-heading: var(--hub-heading);
+  --color-hub-body: var(--hub-body);
+  --color-hub-body-2: var(--hub-body-2);
+  --color-hub-muted: var(--hub-muted);
+  --color-hub-faint: var(--hub-faint);
+  --color-hub-ghost: var(--hub-ghost);
+  --color-hub-accent: var(--hub-accent);
+  --color-hub-chip: var(--hub-chip);
+  --color-hub-started: var(--hub-started);
+  --color-hub-working: var(--hub-working);
+  --color-hub-complete: var(--hub-complete);
+  --color-hub-danger: var(--hub-danger);
+  --color-hub-danger-text: var(--hub-danger-text);
+  --color-hub-danger-panel: var(--hub-danger-panel);
+
+  --font-nacelle: 'Nacelle', var(--font-sans, sans-serif);
+  --font-inter: 'Inter', var(--font-sans, sans-serif);
+  --font-stmono: 'Share Tech Mono', monospace;
+  --font-jbmono: 'JetBrains Mono', monospace;
 }
 
 :root {
@@ -82,6 +170,40 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Case File tokens are theme-invariant: the board is dark by design
+   * (wall-legibility), independent of the shadcn light/dark toggle. */
+  --hub-ground: #03060b;
+  --hub-chrome: #04070d;
+  --hub-panel: rgb(8 16 28 / 55%);
+  --hub-panel-solid: #081120;
+  --hub-overlay: rgb(4 7 13 / 88%);
+  --hub-hairline: rgb(30 58 95 / 55%);
+  --hub-hairline-bright: rgb(153 186 221 / 55%);
+  --hub-row-divider: rgb(22 40 63 / 60%);
+  --hub-input: #060d18;
+  --hub-input-border: #2a4a6f;
+  --hub-heading: #f0f4f8;
+  --hub-body: #bcccde;
+  --hub-body-2: #a9bdd3;
+  --hub-muted: #7a9fc4;
+  --hub-faint: #5d7a9a;
+  --hub-ghost: #445e7d;
+  --hub-accent: #99badd;
+  --hub-chip: #1a2d44;
+  --hub-started: #2b8cc1;
+  --hub-working: #ffd93d;
+  --hub-complete: #4ecdc4;
+  --hub-danger: #f87171;
+  --hub-danger-text: #fecaca;
+  --hub-danger-panel: rgb(24 7 10 / 88%);
+
+  /* Glows (box-shadow values, not colors — consumed via var()) */
+  --hub-glow-started: 0 0 8px rgb(43 140 193 / 70%);
+  --hub-glow-working: 0 0 8px rgb(255 217 61 / 60%);
+  --hub-glow-complete: 0 0 8px rgb(78 205 196 / 60%);
+  --hub-glow-danger: 0 0 12px rgb(248 113 113 / 80%);
+  --hub-glow-accent: 0 0 8px rgb(153 186 221 / 60%);
 }
 
 .dark {

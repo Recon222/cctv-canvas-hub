@@ -1,21 +1,50 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
-import { Map as MapIcon } from 'lucide-react'
+import { MapProvider, useMap } from 'react-map-gl/mapbox'
 import { useConnectionHealth } from '@/hooks/useConnectionHealth'
 import { isCaseDataKey, resetHealthStore } from '@/store/health-store'
+import { cn } from '@/lib/utils'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
+import { useCases } from '../hooks/useCases'
+import { useCaseLocations } from '../hooks/useCaseLocations'
+import { cameraPadding } from '../hooks/useFlyTo'
 import { NavRail } from './NavRail'
 import { CasesView } from './CasesView'
 import { LocationCardStack } from './LocationCardStack'
+import { MapCanvas, CANVASS_MAP_ID } from './MapCanvas'
+import { MapLegend } from './map/MapLegend'
+import { MapZoomControls } from './map/MapZoomControls'
+import './canvass.css'
 
 /**
  * The live board (Phase 2.4B): NavRail + the active A1 view. Mounted by
  * MainWindowContent only while the session is active/locked — so the
  * realtime subscription lives and dies with the session (D12), and a
  * locked board keeps flowing unchanged (doc 01 §5.4).
+ *
+ * 3.2D — the map div persists: `MapCanvas` is hoisted ABOVE the view
+ * switch, mounted once for the life of the board and hidden with
+ * `visibility: hidden` when `view ≠ 'map'` (the container keeps real
+ * dimensions; `display: none` would make a later `map.resize()` measure
+ * 0×0 and collapse the canvas).
+ *
+ * 3.2E — AD15 scale-to-fit: the 1920-wide design canvas scales by
+ * `boardWidth / 1920` on the CHROME children only; the hoisted map div
+ * is their sibling, outside every transformed ancestor (Mapbox GL under
+ * a CSS transform has pointer-math and tile-crispness pitfalls). Chrome
+ * height is compensated (`height / scale`) so the scaled canvas still
+ * fills the window on non-16:9 displays. The whole-shell fallback stays
+ * one switch away (AD15_MODE) — the M3 live check owns the final call.
  */
+
+/** AD15 mechanics switch: 'chrome-scaled' (as-built default) or the
+ * 'whole-shell' fallback (everything, map included, under one scaled
+ * wrapper) — flip only from the live check's verdict. */
+const AD15_MODE: 'chrome-scaled' | 'whole-shell' = 'chrome-scaled'
+/** The design canvas width (design_handoff: 1920×1080, origin 0 0). */
+const DESIGN_WIDTH = 1920
+
 export function CanvassRoot() {
   const view = useCanvassStore(state => state.view)
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
@@ -40,30 +69,203 @@ export function CanvassRoot() {
     }
   }, [queryClient])
 
-  return (
-    <div className="flex h-full bg-zinc-950 text-zinc-100">
-      <NavRail />
-      <main className="min-w-0 flex-1 overflow-hidden">
+  // Attention TTL sweep (doc 01 §5.4): stamps expire ON THE STORE, so
+  // presence ≡ fresh for every consumer — the stack's attention-first
+  // sort (#76), the card flash, the marker ping — without each surface
+  // running its own clock.
+  useEffect(() => {
+    const id = setInterval(() => {
+      useCanvassStore.getState().clearExpiredAttention()
+    }, 1_000)
+    return () => {
+      clearInterval(id)
+    }
+  }, [])
+
+  // Board size drives the AD15 scale. jsdom has no ResizeObserver — the
+  // guard leaves tests (and any exotic webview) at scale 1.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [boardSize, setBoardSize] = useState<{
+    width: number
+    height: number
+  } | null>(null)
+  useEffect(() => {
+    const node = rootRef.current
+    if (node === null || typeof ResizeObserver === 'undefined') {
+      return
+    }
+    const measure = () => {
+      setBoardSize({ width: node.clientWidth, height: node.clientHeight })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  const scale =
+    boardSize === null || boardSize.width === 0
+      ? 1
+      : boardSize.width / DESIGN_WIDTH
+  const scaleStyle =
+    boardSize === null
+      ? undefined
+      : {
+          width: DESIGN_WIDTH,
+          height: boardSize.height / scale,
+          transform: `scale(${String(scale)})`,
+          // Physical corner on purpose: with width scaled to exactly fit,
+          // origin left/right is equivalent — and transforms are physical.
+          transformOrigin: '0 0',
+        }
+
+  // H1: MapCanvas reports a terminal style-load failure up here — the
+  // chrome-side furniture must not render live-looking instruments over
+  // a dead map (the two live in sibling layers; this is their parent).
+  const [mapStyleFailed, setMapStyleFailed] = useState(false)
+
+  // 3.2D: laid-out-but-invisible off the map view — NEVER display:none.
+  const mapLayer = (
+    <div
+      className="absolute inset-0"
+      style={{ visibility: view === 'map' ? 'visible' : 'hidden' }}
+    >
+      <MapCanvas onStyleFailedChange={setMapStyleFailed} />
+    </div>
+  )
+
+  // On the map view the chrome is a transparent overlay: the wrapper
+  // drops pointer events so the map underneath pans/zooms; interactive
+  // chrome (rail, floating stack) re-enables its own.
+  const chromeLayer = (
+    <div
+      className={cn(
+        'absolute top-0 left-0 flex h-full w-full',
+        view === 'map' && 'pointer-events-none'
+      )}
+      style={AD15_MODE === 'chrome-scaled' ? scaleStyle : undefined}
+    >
+      <div className={cn(view === 'map' && 'pointer-events-auto')}>
+        <NavRail />
+      </div>
+      <main className="relative min-w-0 flex-1 overflow-hidden">
         {view === 'cases' && <CasesView />}
         {view === 'case' && <LocationCardStack />}
-        {view === 'map' && <MapPlaceholder />}
+        {view === 'map' && (
+          <>
+            {!mapStyleFailed && <MapFurniture />}
+            {/* 3.4A: the floating stack over the map — clear of every
+                edge, transparent column (never a full-height rail, spec
+                §4). It overlays the unscaled map from inside the scaled
+                chrome. */}
+            <div className="pointer-events-auto absolute inset-y-4 end-4 w-[408px]">
+              <LocationCardStack floating />
+            </div>
+          </>
+        )}
       </main>
     </div>
   )
+
+  if (AD15_MODE === 'whole-shell') {
+    // Fallback mechanics: one scaled wrapper around everything, map
+    // included (the simpler option if the live check shows no pointer or
+    // crispness issues on the target display).
+    return (
+      <MapProvider>
+        <div
+          ref={rootRef}
+          className="relative h-full overflow-hidden bg-hub-ground font-inter text-hub-body"
+        >
+          <div
+            className="absolute top-0 left-0 h-full w-full"
+            style={scaleStyle}
+          >
+            {mapLayer}
+            {chromeLayer}
+          </div>
+        </div>
+      </MapProvider>
+    )
+  }
+
+  return (
+    // MapProvider: the chrome-side furniture reaches the map (which
+    // lives in the sibling unscaled layer) via useMap()[CANVASS_MAP_ID].
+    <MapProvider>
+      <div
+        ref={rootRef}
+        className="relative h-full overflow-hidden bg-hub-ground font-inter text-hub-body"
+      >
+        {mapLayer}
+        {chromeLayer}
+      </div>
+    </MapProvider>
+  )
 }
 
-/** The `'map'` view is M3 — a designed placeholder, never a blank pane. */
-function MapPlaceholder() {
-  const { t } = useTranslation()
+/**
+ * Map furniture (legend + zoom instruments) — CHROME, not map layer
+ * (M3 live-smoke finding): in the unscaled full-window map layer the
+ * furniture sat in the exact inline-start band the scaled opaque
+ * NavRail paints over (rail visual width = 86 × scale while the
+ * furniture was unscaled — no static offset can track that), leaving it
+ * obscured and click-dead. Hosted here in the chrome layer's <main> it
+ * is laid out AFTER the rail in the flex row (the rail can never cover
+ * it) and scales with the shell like the rest of the design.
+ */
+function MapFurniture() {
+  const maps = useMap()
+  const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
+  const { data: cases } = useCases()
+  const { data: locations } = useCaseLocations(selectedCaseId)
+  const map = maps[CANVASS_MAP_ID]
+
+  if (map === undefined) {
+    // Token gate showing (no Map mounted) — no instruments to offer.
+    return null
+  }
+
+  const handleFitAll = () => {
+    const selectedCase = cases?.find(c => c.id === selectedCaseId) ?? null
+    const coords = (locations ?? []).map(l => l.coord).filter(c => c !== null)
+    if (selectedCase?.incidentCoord) {
+      coords.push(selectedCase.incidentCoord)
+    }
+    if (coords.length === 0) {
+      return
+    }
+    let minLng = Infinity
+    let minLat = Infinity
+    let maxLng = -Infinity
+    let maxLat = -Infinity
+    for (const c of coords) {
+      minLng = Math.min(minLng, c.lng)
+      minLat = Math.min(minLat, c.lat)
+      maxLng = Math.max(maxLng, c.lng)
+      maxLat = Math.max(maxLat, c.lat)
+    }
+    map.fitBounds(
+      [
+        [minLng, minLat],
+        [maxLng, maxLat],
+      ],
+      { padding: cameraPadding(), maxZoom: 16.5 }
+    )
+  }
+
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <MapIcon className="size-10 text-zinc-600" aria-hidden />
-      <p className="text-3xl font-semibold text-zinc-300">
-        {t('canvass.map.placeholder.title')}
-      </p>
-      <p className="max-w-md text-lg text-zinc-500">
-        {t('canvass.map.placeholder.description')}
-      </p>
+    // The chrome wrapper is pointer-events-none on the map view — the
+    // instruments re-enable their own subtree.
+    <div className="pointer-events-auto">
+      <MapLegend />
+      <MapZoomControls
+        onZoomIn={() => map.zoomIn()}
+        onZoomOut={() => map.zoomOut()}
+        onFitAll={handleFitAll}
+      />
     </div>
   )
 }

@@ -936,4 +936,106 @@ describe('useCaseRealtime', () => {
     // The absent ['cases'] entry was NOT cancelled (nothing to protect).
     expect(cancelSpy).not.toHaveBeenCalledWith({ queryKey: ['cases'] })
   })
+
+  // Test #130 (R6 — ledger D17 arm a)
+  it('survives an updated_at: null case event through toCanvassCase', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    const olderCase = mappedCase(
+      caseRow({
+        id: 'c-2',
+        case_number: '24-CANVASS-0001',
+        display_name: 'Older case',
+        updated_at: '2026-07-01T00:00:00+00:00',
+      })
+    )
+    // Two entries so the sort's comparator actually runs with the
+    // null-stamped row on the deref'd side.
+    queryClient.setQueryData(['cases'], [olderCase, mappedCase(caseRow())])
+    const errorSpy = vi
+      .spyOn(logger, 'error')
+      .mockImplementation(() => undefined)
+
+    renderHook(() => useCaseRealtime(SEED_CASE_ID), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    act(() => {
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          // The wire admits null despite the contract (doc 01 §5.1's own
+          // form_data lesson): without toCanvassCase's null-guard
+          // (updatedAt: wireString), the sort's localeCompare throws
+          // inside the contained dispatch and the patch silently dies.
+          caseRow({
+            display_name: 'Null-stamped rename',
+            updated_at: null as unknown as string,
+          }) as unknown as Record<string, unknown>,
+          null,
+          'cloud_cases'
+        )
+      )
+    })
+
+    const cached = queryClient.getQueryData<CanvassCase[]>(['cases'])
+    // The patch LANDED — the guard mapped null to '' (sorts last)…
+    expect(cached?.some(c => c.displayName === 'Null-stamped rename')).toBe(
+      true
+    )
+    expect(cached?.at(-1)?.displayName).toBe('Null-stamped rename')
+    // …instead of dying in the dispatch containment.
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      'realtime: event dispatch failed',
+      expect.anything()
+    )
+    errorSpy.mockRestore()
+  })
+
+  // Test #131 (R6 — ledger D17 arm b)
+  it('invalidates the landing families with cancelRefetch: false', () => {
+    const rt = fakeRealtime()
+    const queryClient = makeQueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    renderHook(() => useCaseRealtime(null), {
+      wrapper: wrapperFor(queryClient),
+    })
+
+    act(() => {
+      // Any location envelope → counts; any non-selected case envelope
+      // → cases list (the two landing pre-filter side channels).
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          locationRow() as unknown as Record<string, unknown>,
+          null
+        )
+      )
+      rt.fire(
+        'UPDATE',
+        broadcastMessage(
+          'UPDATE',
+          caseRow() as unknown as Record<string, unknown>,
+          null,
+          'cloud_cases'
+        )
+      )
+    })
+
+    // The option is load-bearing: a phone's bulk re-sync fires a burst
+    // of envelopes, and the default cancel-and-restart would keep the
+    // in-flight landing fetches from ever resolving until the burst
+    // ends. Dropping the second argument must fail here.
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      { queryKey: ['location-counts'] },
+      { cancelRefetch: false }
+    )
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      { queryKey: ['cases'] },
+      { cancelRefetch: false }
+    )
+  })
 })

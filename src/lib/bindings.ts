@@ -243,7 +243,22 @@ quick_pane_shortcut: string | null;
  * User's preferred language (e.g., "en", "es", "de")
  * If None, uses system locale detection
  */
-language: string | null }
+language: string | null; 
+/**
+ * Mapbox access token for the map view (M3).
+ * If None, the map renders its token-gate designed state.
+ */
+mapbox_token: string | null; 
+/**
+ * Map style id: "standard-satellite" | "standard" | "dark-v11".
+ * If None, uses the satellite-night default.
+ */
+map_style: string | null; 
+/**
+ * Minutes of inactivity before the board locks (M6).
+ * If None, uses the default of 15.
+ */
+idle_lock_minutes: number | null }
 /**
  * Cloud connection config — designed-public values (project URL +
  * RLS-bounded publishable key), stored as plain JSON in app data (T4).

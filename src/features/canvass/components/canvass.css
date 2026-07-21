@@ -1,0 +1,245 @@
+/*
+ * Canvass board CSS that Tailwind utilities genuinely can't express
+ * (gate rule 7): attention keyframes, marker element visuals (raw DOM
+ * handed to mapboxgl.Marker — no React classes there), grid-paper
+ * ground. Import once from the feature root (agents: add
+ * `import './canvass.css'` to CanvassRoot or the barrel side-effect).
+ *
+ * ⚠ Marker binding rule (MARKER-BINDING-FIX): .hub-marker / .hub-incident
+ * are handed to `new mapboxgl.Marker({ element })` — Mapbox owns their
+ * `position` and `transform`. NEVER set position/transform/transition
+ * on those roots; every visual lives on child elements.
+ */
+
+@keyframes hub-attention-flash {
+  0% {
+    box-shadow:
+      0 0 0 1px rgb(255 217 61 / 90%),
+      0 0 28px rgb(255 217 61 / 28%);
+  }
+  80% {
+    box-shadow:
+      0 0 0 1px rgb(255 217 61 / 45%),
+      0 0 16px rgb(255 217 61 / 12%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 217 61 / 0%);
+  }
+}
+
+/* Applied via data-attention (set from attentionByLocation within
+ * ATTENTION_TTL_MS) — the 12 s gold pulse (doc 01 §5.4). */
+.hub-attention-flash[data-attention] {
+  animation: hub-attention-flash 12s ease-out forwards;
+}
+
+@keyframes hub-marker-ping {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.9;
+  }
+  80% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes hub-incident-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.65;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes hub-dot-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* Grid-paper ground for map-less states (token gate, M3 placeholder). */
+.hub-grid-paper {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 39px,
+      rgb(30 58 95 / 14%) 39px,
+      rgb(30 58 95 / 14%) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 39px,
+      rgb(30 58 95 / 14%) 39px,
+      rgb(30 58 95 / 14%) 40px
+    ),
+    var(--hub-ground);
+}
+
+/* ---------------- Map marker elements (factories in map/markers.ts) ---- */
+
+.hub-marker {
+  cursor: pointer;
+}
+.hub-marker .hub-marker-dot {
+  width: 24px;
+  height: 24px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--marker-color);
+  border: 3px solid var(--hub-chrome);
+  box-shadow:
+    0 0 0 2px rgb(3 6 11 / 65%),
+    0 0 16px var(--marker-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hub-chrome);
+  font:
+    700 13px 'JetBrains Mono',
+    monospace;
+  transition: transform 0.25s ease;
+}
+/* STARTED renders hollow: dark fill, colored ring (the trio language). */
+.hub-marker[data-status='started'] .hub-marker-dot {
+  background: #0a1422;
+  border: 3px solid var(--marker-color);
+  color: var(--marker-color);
+  box-shadow:
+    0 0 0 2px rgb(3 6 11 / 65%),
+    0 0 14px var(--marker-glow);
+}
+.hub-marker .hub-marker-label {
+  position: absolute;
+  top: 29px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  text-transform: uppercase;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  color: #cfe0f2;
+  background: rgb(3 8 15 / 85%);
+  border: 1px solid var(--hub-hairline);
+  padding: 2px 7px 1px;
+  border-radius: 3px;
+}
+.hub-marker[data-selected] .hub-marker-dot {
+  transform: scale(1.25);
+  box-shadow:
+    0 0 0 2px var(--hub-heading),
+    0 0 22px var(--marker-glow);
+}
+.hub-marker[data-selected] .hub-marker-label {
+  color: var(--hub-heading);
+  border-color: rgb(153 186 221 / 70%);
+}
+.hub-marker .hub-marker-ping {
+  display: none;
+}
+.hub-marker[data-attention] .hub-marker-ping {
+  display: block;
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  margin-left: -24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--hub-working);
+  animation: hub-marker-ping 1.6s ease-out infinite;
+  pointer-events: none;
+}
+
+.hub-incident {
+  pointer-events: none;
+}
+.hub-incident .hub-incident-x {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 2.5px solid var(--hub-danger);
+  background: rgb(248 113 113 / 14%);
+  position: relative;
+  box-shadow: 0 0 18px rgb(248 113 113 / 45%);
+}
+.hub-incident .hub-incident-x::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -7px;
+  bottom: -7px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--hub-danger);
+}
+.hub-incident .hub-incident-x::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -7px;
+  right: -7px;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--hub-danger);
+}
+.hub-incident .hub-incident-core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--hub-danger);
+}
+.hub-incident .hub-incident-halo {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  margin-left: -27px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgb(248 113 113 / 80%);
+  animation: hub-incident-pulse 3.2s ease-out infinite;
+}
+.hub-incident .hub-incident-label {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  text-transform: uppercase;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: var(--hub-danger-text);
+  background: var(--hub-danger-panel);
+  border: 1px solid rgb(248 113 113 / 50%);
+  padding: 2px 8px 1px;
+  border-radius: 3px;
+}
+
+/* Physical left/right here is CORRECT: marker geometry is map-anchored
+ * (screen coordinates), not text-direction-relative — RTL must not
+ * mirror a map pin. Text/spacing elsewhere uses logical properties. */

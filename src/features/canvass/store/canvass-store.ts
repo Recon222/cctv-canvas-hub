@@ -22,6 +22,12 @@ export const ATTENTION_TTL_MS = 12_000
 interface CanvassStore {
   selectedCaseId: string | null
   selectedLocationId: string | null
+  /**
+   * Monotonic nonce bumped by EVERY `selectLocation` call — including
+   * same-id re-selects, which are otherwise a Zustand no-op (PR #6
+   * review M1: click marker A, pan away, click A again must re-fly).
+   */
+  selectionTick: number
   /** `'cases'` is the landing view; `'case'`/`'map'` need a selection (AD12). */
   view: CanvassView
   /** Newest first. */
@@ -41,6 +47,7 @@ export const useCanvassStore = create<CanvassStore>()(
     set => ({
       selectedCaseId: null,
       selectedLocationId: null,
+      selectionTick: 0,
       view: 'cases',
       activity: [],
       attentionByLocation: {},
@@ -53,7 +60,14 @@ export const useCanvassStore = create<CanvassStore>()(
         ),
 
       selectLocation: locationId =>
-        set({ selectedLocationId: locationId }, undefined, 'selectLocation'),
+        set(
+          current => ({
+            selectedLocationId: locationId,
+            selectionTick: current.selectionTick + 1,
+          }),
+          undefined,
+          'selectLocation'
+        ),
 
       setView: view => set({ view }, undefined, 'setView'),
 
@@ -100,6 +114,7 @@ export function resetCanvassStore(): void {
   useCanvassStore.setState({
     selectedCaseId: null,
     selectedLocationId: null,
+    selectionTick: 0,
     view: 'cases',
     activity: [],
     attentionByLocation: {},
