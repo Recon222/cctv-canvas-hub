@@ -97,6 +97,16 @@
 
   "commands.testToast.label": "Test Toast Notification",
   "commands.testToast.description": "Show a test toast notification",
+  "commands.group.canvass": "Canvass board",
+  "commands.group.session": "Session",
+  "commands.canvassViewCases.label": "Go to Cases",
+  "commands.canvassViewCases.description": "Show the active cases landing view",
+  "commands.canvassViewCase.label": "Go to Case dashboard",
+  "commands.canvassViewCase.description": "Show the selected case's dashboard",
+  "commands.canvassViewMap.label": "Go to Map",
+  "commands.canvassViewMap.description": "Show the live canvass map",
+  "commands.sessionSignOut.label": "Sign out",
+  "commands.sessionSignOut.description": "End the session and return to sign-in",
 
   "commandPalette.title": "Command Palette",
   "commandPalette.placeholder": "Type a command or search...",
