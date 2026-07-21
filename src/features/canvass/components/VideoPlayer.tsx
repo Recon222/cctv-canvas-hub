@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, TriangleAlert } from 'lucide-react'
 import type { CanvassMedia } from '../types'
@@ -30,9 +30,17 @@ export function VideoPlayer({
 }: VideoPlayerProps) {
   const { t } = useTranslation()
   const [failed, setFailed] = useState(false)
+  // Own the keyboard the moment the modal opens (M4 wiring): the Esc
+  // handler lives on this div — without focus it never fires on a
+  // mouse-driven wall board.
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    dialogRef.current?.focus()
+  }, [])
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={media.filename}

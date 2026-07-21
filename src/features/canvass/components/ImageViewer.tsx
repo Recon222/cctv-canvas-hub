@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react'
 import type { CanvassMedia } from '../types'
@@ -32,6 +33,13 @@ export function ImageViewer({
   onNavigate,
 }: ImageViewerProps) {
   const { t } = useTranslation()
+  // Own the keyboard the moment the modal opens (M4 wiring): the Esc and
+  // arrow handlers live on this div — without focus they never fire on a
+  // mouse-driven wall board.
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    dialogRef.current?.focus()
+  }, [])
   const current = media[index]
   if (current === undefined) {
     return null
@@ -41,6 +49,7 @@ export function ImageViewer({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={current.filename}
