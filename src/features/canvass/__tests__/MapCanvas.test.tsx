@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { screen } from '@testing-library/react'
+import { screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { UseQueryResult } from '@tanstack/react-query'
@@ -64,6 +64,23 @@ function preferencesResult(overrides: Partial<AppPreferences>) {
 /** Every recorded render's props for the mocked `<Map>`. */
 function mapProps() {
   return MockMap.mock.calls.map(call => call[0])
+}
+
+/** Board-mount plumbing shared by the CanvassRoot-based tests: the
+ * realtime channel fake (casesView precedent) + a keyed map for the
+ * furniture's provider seam. */
+function stubBoardSeams() {
+  const channel = { on: vi.fn(), subscribe: vi.fn() }
+  channel.on.mockReturnValue(channel)
+  vi.mocked(getSupabase).mockReturnValue({
+    channel: vi.fn(() => channel),
+    removeChannel: vi.fn(() => Promise.resolve('ok')),
+  } as unknown as ReturnType<typeof getSupabase>)
+  const zoomIn = vi.fn()
+  vi.mocked(useMap).mockReturnValue({
+    [CANVASS_MAP_ID]: { zoomIn, zoomOut: vi.fn(), fitBounds: vi.fn() },
+  } as unknown as ReturnType<typeof useMap>)
+  return { zoomIn }
 }
 
 beforeEach(() => {
@@ -142,19 +159,7 @@ describe('map furniture (M3 live-smoke fix round)', () => {
     mockUsePreferences.mockReturnValue(
       preferencesResult({ mapbox_token: 'pk.test-fake-token' })
     )
-    // CanvassRoot mounts realtime — minimal channel fake (casesView
-    // precedent).
-    const channel = { on: vi.fn(), subscribe: vi.fn() }
-    channel.on.mockReturnValue(channel)
-    vi.mocked(getSupabase).mockReturnValue({
-      channel: vi.fn(() => channel),
-      removeChannel: vi.fn(() => Promise.resolve('ok')),
-    } as unknown as ReturnType<typeof getSupabase>)
-    // The furniture reaches the map by id through useMap().
-    const zoomIn = vi.fn()
-    vi.mocked(useMap).mockReturnValue({
-      [CANVASS_MAP_ID]: { zoomIn, zoomOut: vi.fn(), fitBounds: vi.fn() },
-    } as unknown as ReturnType<typeof useMap>)
+    const { zoomIn } = stubBoardSeams()
 
     const user = userEvent.setup()
     renderWithFeatureProviders(<CanvassRoot />)
@@ -172,5 +177,94 @@ describe('map furniture (M3 live-smoke fix round)', () => {
     // And it is CLICKABLE: the instruments drive the map via the seam.
     await user.click(screen.getByRole('button', { name: 'Zoom in' }))
     expect(zoomIn).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('style-load failure state (PR #6 H1)', () => {
+  // mapbox-gl 3.26 fetches the style DOCUMENT once, with no retry (only
+  // tiles retry) — a terminal style failure used to leave a permanently
+  // blank map with live-looking furniture and one log line. The fix
+  // surfaces a persistent designed state and pulls the instruments.
+  const fireMapError = (status: number) => {
+    const onError = mapProps().at(-1)?.onError
+    if (onError === undefined) {
+      throw new Error('mock <Map> captured no onError prop')
+    }
+    act(() => {
+      onError({
+        error: Object.assign(new Error('style fetch failed'), { status }),
+      } as never)
+    })
+  }
+  const fireMapLoad = () => {
+    const onLoad = mapProps().at(-1)?.onLoad
+    if (onLoad === undefined) {
+      throw new Error('mock <Map> captured no onLoad prop')
+    }
+    act(() => {
+      onLoad({} as never)
+    })
+  }
+
+  it('surfaces the style-error state and pulls the furniture on a pre-load failure', async () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    stubBoardSeams()
+    renderWithFeatureProviders(<CanvassRoot />)
+    // Furniture is live before the failure…
+    await screen.findByRole('button', { name: 'Fit all locations' })
+
+    // …then the style document fetch dies (offline / 402 / 429 / bad
+    // style id → 404) while the style never loaded.
+    fireMapError(500)
+
+    expect(
+      screen.getByText(
+        'Map error — style failed to load · board stays live in the card list'
+      )
+    ).toBeInTheDocument()
+    // No live-looking instruments over a dead map.
+    expect(
+      screen.queryByRole('button', { name: 'Fit all locations' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Zoom in' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the rejected-token gate — not styleError — for auth failures', () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    renderWithFeatureProviders(<MapCanvas />)
+
+    fireMapError(401)
+
+    expect(
+      screen.getByText('Map error — token rejected · check Preferences')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Map error — style failed to load · board stays live in the card list'
+      )
+    ).not.toBeInTheDocument()
+  })
+
+  it('stays silent for errors after a successful style load (tiles retry)', () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    renderWithFeatureProviders(<MapCanvas />)
+
+    fireMapLoad()
+    fireMapError(503)
+
+    // Transient exemption: mapbox retries tiles on its own.
+    expect(
+      screen.queryByText(
+        'Map error — style failed to load · board stays live in the card list'
+      )
+    ).not.toBeInTheDocument()
   })
 })

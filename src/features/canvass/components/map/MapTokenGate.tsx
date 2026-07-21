@@ -4,19 +4,26 @@ import { useTranslation } from 'react-i18next'
  * Token-missing designed state (Phase 3.2B inner, design_handoff §4):
  * grid-paper ground + a calm explainer — the board still works via the
  * card stack; this is a configuration state, not an error.
- * `variant="rejected"` is the map-error toast posture (bad token).
+ * `variant="rejected"` is the map-error toast posture (bad token);
+ * `variant="styleError"` reuses the same banner posture for a terminal
+ * style-load failure (PR #6 H1 — mapbox fetches the style document
+ * once, no retry).
  */
 export function MapTokenGate({
   variant = 'missing',
 }: {
-  variant?: 'missing' | 'rejected'
+  variant?: 'missing' | 'rejected' | 'styleError'
 }) {
   const { t } = useTranslation()
-  if (variant === 'rejected') {
+  if (variant === 'rejected' || variant === 'styleError') {
     return (
       <div className="absolute start-1/2 top-5 flex -translate-x-1/2 items-center gap-3 rounded-md border border-hub-danger/55 bg-hub-danger-panel px-5 py-3 rtl:translate-x-1/2">
         <p className="font-stmono text-xs uppercase tracking-[2px] text-hub-danger-text">
-          {t('canvass.map.tokenRejected')}
+          {t(
+            variant === 'rejected'
+              ? 'canvass.map.tokenRejected'
+              : 'canvass.map.styleError'
+          )}
         </p>
       </div>
     )

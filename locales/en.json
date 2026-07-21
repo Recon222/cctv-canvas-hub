@@ -223,6 +223,7 @@
   "canvass.map.fitAll": "Fit all locations",
   "canvass.map.legend.incident": "Incident",
   "canvass.map.incidentLabel": "Incident · {{name}}",
+  "canvass.map.styleError": "Map error — style failed to load · board stays live in the card list",
   "canvass.stack.listLabel": "Canvass locations",
   "canvass.stack.noFixCount": "{{count}} no GPS fix",
   "canvass.map.tokenRejected": "Map error — token rejected · check Preferences",

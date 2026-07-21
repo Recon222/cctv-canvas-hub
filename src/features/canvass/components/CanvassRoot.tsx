@@ -121,13 +121,18 @@ export function CanvassRoot() {
           transformOrigin: '0 0',
         }
 
+  // H1: MapCanvas reports a terminal style-load failure up here — the
+  // chrome-side furniture must not render live-looking instruments over
+  // a dead map (the two live in sibling layers; this is their parent).
+  const [mapStyleFailed, setMapStyleFailed] = useState(false)
+
   // 3.2D: laid-out-but-invisible off the map view — NEVER display:none.
   const mapLayer = (
     <div
       className="absolute inset-0"
       style={{ visibility: view === 'map' ? 'visible' : 'hidden' }}
     >
-      <MapCanvas />
+      <MapCanvas onStyleFailedChange={setMapStyleFailed} />
     </div>
   )
 
@@ -150,7 +155,7 @@ export function CanvassRoot() {
         {view === 'case' && <LocationCardStack />}
         {view === 'map' && (
           <>
-            <MapFurniture />
+            {!mapStyleFailed && <MapFurniture />}
             {/* 3.4A: the floating stack over the map — clear of every
                 edge, transparent column (never a full-height rail, spec
                 §4). It overlays the unscaled map from inside the scaled

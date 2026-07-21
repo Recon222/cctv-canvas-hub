@@ -231,6 +231,7 @@
   "canvass.map.fitAll": "احتواء جميع المواقع",
   "canvass.map.legend.incident": "الحادثة",
   "canvass.map.incidentLabel": "الحادثة · {{name}}",
+  "canvass.map.styleError": "خطأ في الخريطة — تعذر تحميل نمط الخريطة · تبقى اللوحة نشطة في قائمة البطاقات",
   "canvass.stack.listLabel": "مواقع القضية",
   "canvass.stack.noFixCount": "{{count}} بدون إحداثيات GPS",
   "canvass.map.tokenRejected": "خطأ في الخريطة — رُفض الرمز · راجع التفضيلات",

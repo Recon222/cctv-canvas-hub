@@ -43,8 +43,22 @@ const MAP_STYLE_URLS: Record<string, string> = {
 const DEFAULT_MAP_STYLE = 'standard-satellite'
 /** Street-level framing when jumping to a case's incident. */
 const INCIDENT_ZOOM = 15
+/**
+ * If the style document hasn't loaded this long after the map mounts,
+ * declare the load dead (PR #6 H1): mapbox-gl fetches the style ONCE
+ * with no retry — a hung/failed fetch would otherwise leave a
+ * permanently blank map with no on-screen signal.
+ */
+export const STYLE_LOAD_DEADLINE_MS = 20_000
 
-export function MapCanvas() {
+export function MapCanvas({
+  onStyleFailedChange,
+}: {
+  /** CanvassRoot listens so the chrome-side furniture can hide over a
+   * dead-style map (H1) — the map layer and the chrome layer are
+   * siblings, so the signal travels through their common parent. */
+  onStyleFailedChange?: (failed: boolean) => void
+}) {
   const { t } = useTranslation()
   const mapRef = useRef<MapRef>(null)
   const { data: preferences, isPending } = usePreferences()
@@ -56,6 +70,11 @@ export function MapCanvas() {
   // toast fires once per rejected token.
   const [rejectedToken, setRejectedToken] = useState<string | null>(null)
   const rejectionToastFor = useRef<string | null>(null)
+  // Style-load tracking (H1), keyed by token like the rejection state:
+  // a token swap remounts <Map>, and a stale "loaded" from the previous
+  // instance must not exempt the new style fetch from failure detection.
+  const [loadedForToken, setLoadedForToken] = useState<string | null>(null)
+  const [styleFailed, setStyleFailed] = useState(false)
   useFlyTo(mapRef)
 
   const selectedCase = cases?.find(c => c.id === selectedCaseId) ?? null
@@ -72,6 +91,28 @@ export function MapCanvas() {
   }, [styleId])
 
   const tokenRejected = rejectedToken !== null && rejectedToken === token
+  const styleLoaded = loadedForToken !== null && loadedForToken === token
+
+  const reportStyleFailed = (failed: boolean) => {
+    setStyleFailed(failed)
+    onStyleFailedChange?.(failed)
+  }
+
+  // H1 deadline arm: the style document is fetched once with no retry —
+  // if it neither loads nor errors inside the deadline (hung fetch),
+  // surface the failure state anyway.
+  useEffect(() => {
+    if (token === null || styleLoaded) {
+      return
+    }
+    const id = setTimeout(() => {
+      setStyleFailed(true)
+      onStyleFailedChange?.(true)
+    }, STYLE_LOAD_DEADLINE_MS)
+    return () => {
+      clearTimeout(id)
+    }
+  }, [token, styleLoaded, onStyleFailedChange])
 
   // Viewport from the incident coord (plan 3.2B). Keyed on the case id
   // and the coordinate VALUES — a reconcile refetch returns equal
@@ -103,6 +144,10 @@ export function MapCanvas() {
   }, [])
 
   const handleMapLoad = () => {
+    // The style (and first render) made it — clear any failure verdict,
+    // including a late recovery after the deadline fired.
+    setLoadedForToken(token)
+    reportStyleFailed(false)
     const map = mapRef.current?.getMap()
     if (map === undefined) {
       return
@@ -131,8 +176,15 @@ export function MapCanvas() {
       }
       return
     }
-    // Other load errors (offline tiles, transient fetch failures):
-    // mapbox retries on its own; the board's card list keeps working.
+    if (!styleLoaded) {
+      // Pre-load failure is TERMINAL (H1): mapbox-gl 3.26 fetches the
+      // style document once, no retry — offline at launch, 402/429, or
+      // a bad style id passthrough would blank the map forever. Surface
+      // it as a persistent designed state.
+      reportStyleFailed(true)
+    }
+    // Post-load errors stay silent on screen: those are tiles, and
+    // mapbox retries tiles on its own; the card list keeps working.
     logger.error('map: load error', { message: event.error?.message })
   }
 
@@ -175,8 +227,14 @@ export function MapCanvas() {
       </Map>
       {/* Top-centered in the full-window layer — clear of the rail band
           (which covers only the first 86 × scale px) and of the stack;
-          non-interactive, so the layering finding doesn't apply. */}
-      {tokenRejected && <MapTokenGate variant="rejected" />}
+          non-interactive, so the layering finding doesn't apply. A
+          rejected token subsumes the style failure (the style can't
+          load without auth) — the more actionable banner wins. */}
+      {tokenRejected ? (
+        <MapTokenGate variant="rejected" />
+      ) : (
+        styleFailed && <MapTokenGate variant="styleError" />
+      )}
     </div>
   )
 }
