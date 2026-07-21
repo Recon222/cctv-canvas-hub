@@ -217,6 +217,7 @@
   "canvass.media.photoCount_other": "{{count}} photos",
   "canvass.media.videoCount_one": "{{count}} vidéo",
   "canvass.media.videoCount_other": "{{count}} vidéos",
+  "canvass.media.openFailed": "Impossible d'ouvrir le fichier dans une application externe",
 
   "canvass.map.zoomIn": "Zoom avant",
   "canvass.map.zoomOut": "Zoom arrière",

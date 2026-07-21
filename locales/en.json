@@ -217,6 +217,7 @@
   "canvass.media.photoCount_other": "{{count}} photos",
   "canvass.media.videoCount_one": "{{count}} video",
   "canvass.media.videoCount_other": "{{count}} videos",
+  "canvass.media.openFailed": "Could not open the file externally",
 
   "canvass.map.zoomIn": "Zoom in",
   "canvass.map.zoomOut": "Zoom out",

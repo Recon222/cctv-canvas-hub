@@ -1,3 +1,4 @@
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { getSupabase } from '@/lib/supabase/client'
 
 /**
@@ -50,4 +51,18 @@ export async function createSignedUrl(
     throw new Error(error.message)
   }
   return data.signedUrl
+}
+
+/**
+ * Non-renderable media (HEIC, QuickTime, …): sign on demand and hand the
+ * URL to the OS default handler (spec §5's open-externally affordance).
+ * On-demand only — no standing signed URL for bytes the board never
+ * displays (T5).
+ */
+export async function openMediaExternally(
+  bucket: string,
+  path: string
+): Promise<void> {
+  const url = await createSignedUrl(bucket, path)
+  await openUrl(url)
 }

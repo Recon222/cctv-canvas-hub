@@ -1,6 +1,15 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Image as ImageIcon, Play, FileQuestion, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SIGNED_URL_KEY_PREFIX } from '@/store/health-store'
+import {
+  isInlineRenderable,
+  openMediaExternally,
+} from '../services/mediaService'
+import { useSignedUrl } from '../hooks/useSignedUrl'
 import type { CanvassMedia } from '../types'
 
 /**
@@ -23,6 +32,8 @@ export interface MediaThumbProps {
   onRetry?: () => void
   /** Signed-URL fetch failed (shows the fallback + retry). */
   errored?: boolean
+  /** The `<img>` failed to load (expired/broken URL) — host self-heals. */
+  onMediaError?: () => void
 }
 
 export function MediaThumb({
@@ -33,6 +44,7 @@ export function MediaThumb({
   onOpen,
   onRetry,
   errored = false,
+  onMediaError,
 }: MediaThumbProps) {
   const { t } = useTranslation()
 
@@ -80,6 +92,7 @@ export function MediaThumb({
           alt={media.filename}
           className="size-full object-cover"
           loading="lazy"
+          onError={onMediaError}
         />
       ) : isVideo ? (
         <span className="flex flex-col items-center gap-0.5">
@@ -146,4 +159,82 @@ export function MediaSummary({
 function mediaExtension(filename: string): string {
   const dot = filename.lastIndexOf('.')
   return dot === -1 ? '?' : filename.slice(dot + 1).toUpperCase()
+}
+
+/**
+ * The wired thumbnail (Phase 4.1C): derives `renderable` from the mime
+ * (§5.5.5), owns the signed-URL query, and runs the self-heal ladder —
+ * an `<img>` error invalidates that specific signed-URL query ONCE
+ * (auto re-sign: after an outage longer than the 60-min TTL an
+ * operator-less wall board heals on reconnect instead of waiting for
+ * the next 50-min tick), then the fallback tile with manual retry.
+ * Never a broken image.
+ */
+export function SignedMediaThumb({
+  media,
+  onOpen,
+  durationLabel,
+}: {
+  media: CanvassMedia
+  /** Open the viewer/player for an inline-renderable row. Non-renderable
+   * rows open externally — the thumb owns that path itself. */
+  onOpen?: () => void
+  durationLabel?: string
+}) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const renderable = isInlineRenderable(media.mime)
+  // Only a renderable IMAGE displays bytes in the tile — a video tile is
+  // a play glyph (bytes load on demand in the player) and a
+  // non-renderable row is the fallback tile: neither holds a standing
+  // signed URL (D8 discipline, T5).
+  const wantsUrl = renderable && media.type === 'image'
+  const query = useSignedUrl(media.bucket, media.path, wantsUrl)
+  const signedUrl = query.data ?? null
+  /** The exact URL the <img> last failed on — same URL back from the
+   * cache means still broken (fallback), a new one means try again. */
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const [autoRetried, setAutoRetried] = useState(false)
+
+  const reSign = () => {
+    void queryClient.invalidateQueries({
+      queryKey: [SIGNED_URL_KEY_PREFIX, media.bucket, media.path],
+    })
+  }
+  const errored =
+    wantsUrl &&
+    (query.isError || (signedUrl !== null && signedUrl === failedUrl))
+
+  return (
+    <MediaThumb
+      media={media}
+      signedUrl={errored ? null : signedUrl}
+      renderable={renderable}
+      durationLabel={durationLabel}
+      errored={errored}
+      onOpen={() => {
+        if (renderable) {
+          onOpen?.()
+          return
+        }
+        // HEIC/QuickTime etc.: sign on demand, hand to the OS (spec §5).
+        void openMediaExternally(media.bucket, media.path).catch(() => {
+          toast.error(t('canvass.media.openFailed'))
+        })
+      }}
+      onRetry={() => {
+        setFailedUrl(null)
+        reSign()
+      }}
+      onMediaError={() => {
+        setFailedUrl(signedUrl)
+        if (!autoRetried) {
+          // ONE automatic re-sign per thumb (4.1 error handling) — after
+          // that the fallback tile owns recovery.
+          setAutoRetried(true)
+          reSign()
+        }
+      }}
+    />
+  )
 }

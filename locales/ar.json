@@ -225,6 +225,7 @@
   "canvass.media.videoCount_few": "{{count}} فيديوهات",
   "canvass.media.videoCount_many": "{{count}} فيديو",
   "canvass.media.videoCount_other": "{{count}} فيديو",
+  "canvass.media.openFailed": "تعذّر فتح الملف في تطبيق خارجي",
 
   "canvass.map.zoomIn": "تكبير",
   "canvass.map.zoomOut": "تصغير",
