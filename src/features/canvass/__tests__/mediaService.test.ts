@@ -131,8 +131,11 @@ describe('useSignedUrl', () => {
     expect(second.result.current.data).toBe('https://cloud.example/sign/first')
     expect(sign).toHaveBeenCalledTimes(1)
 
-    // The interval IS what re-signs a mounted wall thumbnail: no focus,
-    // no reconnect — one refresh cycle re-signs on its own.
+    // Proves the interval alone re-signs — no focus event, no reconnect
+    // involved. (PR #7 L3: jsdom is always VISIBLE, so this cannot
+    // distinguish focus-independent from pauses-when-hidden — v5 gates
+    // intervals on visibility; the hidden-past-TTL edge is backstopped
+    // by the onError re-sign and can't arise on a wall deployment.)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SIGNED_URL_REFRESH_MS + 1_000)
     })
