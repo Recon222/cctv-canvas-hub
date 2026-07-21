@@ -201,10 +201,12 @@
   "canvass.viewer.previous": "Photo précédente",
   "canvass.viewer.next": "Photo suivante",
   "canvass.viewer.loading": "Chargement de la photo…",
+  "canvass.viewer.loadFailed": "La photo n'a pas pu être chargée",
   "canvass.viewer.meta": "Prise le {{time}} · {{investigator}}",
 
   "canvass.player.close": "Fermer le lecteur",
   "canvass.player.loading": "Préparation de la vidéo…",
+  "canvass.player.signFailed": "La vidéo n'a pas pu être chargée depuis le cloud",
   "canvass.player.unplayable": "Cette vidéo ne peut pas être lue ici",
   "canvass.player.unplayableDetail": "Le format ({{mime}}) n'est pas lisible sur le tableau. Ouvrez-le dans une application externe.",
   "canvass.player.openExternally": "Ouvrir dans une application externe",

@@ -15,6 +15,10 @@ export interface ImageViewerProps {
   index: number
   /** Signed URL for media[index]; null while resolving. */
   signedUrl: string | null
+  /** The host's sign query FAILED for media[index] (PR #7 H1) — renders
+   * the honest failed state; "loading" is reserved for genuinely
+   * pending. */
+  signFailed?: boolean
   /** Eyebrow line, e.g. "QUICKMART CONVENIENCE · 481 YONGE ST". */
   contextLabel: string
   /** Metadata footer, e.g. "TAKEN 10:12:47 · DET. A. MORGAN · 2.1 MB". */
@@ -27,6 +31,7 @@ export function ImageViewer({
   media,
   index,
   signedUrl,
+  signFailed = false,
   contextLabel,
   metaLabel,
   onClose,
@@ -105,7 +110,14 @@ export function ImageViewer({
           </button>
         </div>
         <div className="relative flex h-[460px] items-center justify-center bg-gradient-to-br from-[#060d18] to-[#0b1626]">
-          {signedUrl !== null ? (
+          {signFailed ? (
+            <div className="flex flex-col items-center gap-3 text-hub-ghost">
+              <ImageIcon className="size-16" strokeWidth={1.2} aria-hidden />
+              <span className="font-stmono text-[10px] uppercase tracking-[2.5px] text-hub-working">
+                {t('canvass.viewer.loadFailed')}
+              </span>
+            </div>
+          ) : signedUrl !== null ? (
             <img
               src={signedUrl}
               alt={current.filename}

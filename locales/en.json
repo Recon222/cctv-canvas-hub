@@ -201,10 +201,12 @@
   "canvass.viewer.previous": "Previous photo",
   "canvass.viewer.next": "Next photo",
   "canvass.viewer.loading": "Loading photo…",
+  "canvass.viewer.loadFailed": "The photo could not be loaded",
   "canvass.viewer.meta": "Taken {{time}} · {{investigator}}",
 
   "canvass.player.close": "Close player",
   "canvass.player.loading": "Preparing video…",
+  "canvass.player.signFailed": "The video could not be loaded from the cloud",
   "canvass.player.unplayable": "This video can't play here",
   "canvass.player.unplayableDetail": "The format ({{mime}}) is not playable on the board. Open it externally to view.",
   "canvass.player.openExternally": "Open externally",

@@ -237,10 +237,25 @@ describe('LocationCard', () => {
 })
 
 describe('LocationCard media strip (4.3B)', () => {
+  // Distinct storage paths per row — the signed-url query is keyed on
+  // [prefix, bucket, path], and the real rows never share a path.
+  const path = (filename: string) =>
+    `u1/${SEED_CASE_ID}/${locationRow().id}/${filename}`
   const stripMedia = () => [
-    mappedMedia(mediaRow({ id: 'p1', filename: 'front-door.jpg' })),
     mappedMedia(
-      mediaRow({ id: 'p2', filename: 'register.png', mime_type: 'image/png' })
+      mediaRow({
+        id: 'p1',
+        filename: 'front-door.jpg',
+        storage_path: path('front-door.jpg'),
+      })
+    ),
+    mappedMedia(
+      mediaRow({
+        id: 'p2',
+        filename: 'register.png',
+        mime_type: 'image/png',
+        storage_path: path('register.png'),
+      })
     ),
     mappedMedia(
       mediaRow({
@@ -249,6 +264,7 @@ describe('LocationCard media strip (4.3B)', () => {
         filename: 'clip.mp4',
         mime_type: 'video/mp4',
         storage_bucket: 'video',
+        storage_path: path('clip.mp4'),
       })
     ),
     mappedMedia(
@@ -258,6 +274,7 @@ describe('LocationCard media strip (4.3B)', () => {
         filename: 'note.m4a',
         mime_type: 'audio/mp4',
         storage_bucket: 'audio',
+        storage_path: path('note.m4a'),
       })
     ),
     // Another location's row must never surface on this card.
@@ -343,6 +360,59 @@ describe('LocationCard media strip (4.3B)', () => {
     expect(video).toHaveAttribute('src', 'https://signed.example/t')
     expect(createSignedUrl).toHaveBeenCalledWith('video', stripMedia()[2]?.path)
     expect(useCanvassStore.getState().selectedLocationId).toBeNull()
+  })
+
+  // PR #7 H1: both modal hosts must surface a failed sign query — a
+  // storage blip on modal open previously stranded the player on
+  // "Preparing video…" with the escape hatch structurally unreachable.
+  it('shows the honest failed panel when the player sign query fails', async () => {
+    const user = userEvent.setup()
+    // The video tile renders without a URL, so the player is reachable
+    // even while signing is down — exactly the stranding scenario.
+    vi.mocked(createSignedUrl).mockRejectedValue(new Error('storage 503'))
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('Play video (on demand)'))
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      await within(dialog).findByText(
+        'The video could not be loaded from the cloud'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText('Preparing video…')
+    ).not.toBeInTheDocument()
+    // The escape hatch is reachable with no <video> ever mounted.
+    expect(within(dialog).getByText('Open externally')).toBeInTheDocument()
+    expect(dialog.querySelector('video')).toBeNull()
+  })
+
+  it('shows the honest failed state when paging to a photo whose signing fails', async () => {
+    const user = userEvent.setup()
+    // First photo signs fine (its thumb is clickable); the second
+    // photo's object fails to sign once the viewer pages to it.
+    vi.mocked(createSignedUrl).mockImplementation((_bucket, path) =>
+      path.includes('register.png')
+        ? Promise.reject(new Error('storage 503'))
+        : Promise.resolve('https://signed.example/ok')
+    )
+
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    await user.click(await screen.findByTitle('View front-door.jpg'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Photo 1 of 2')).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Next photo' }))
+    expect(
+      await within(dialog).findByText('The photo could not be loaded')
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByText('Loading photo…')).not.toBeInTheDocument()
   })
 
   // M4 live-smoke F1: 4 photos + 1 video is the REALISTIC seeded shape —

@@ -73,6 +73,33 @@ describe('VideoPlayer', () => {
     expect(onOpenExternally).toHaveBeenCalledTimes(1)
   })
 
+  // PR #7 H1: a failed SIGNING query must not read as loading forever —
+  // the escape hatch has to be reachable without a <video> ever mounting.
+  it('surfaces a sign failure honestly with the open-externally escape hatch', async () => {
+    const user = userEvent.setup()
+    const onOpenExternally = vi.fn()
+    renderWithFeatureProviders(
+      <VideoPlayer
+        media={videoMedia()}
+        signedUrl={null}
+        signFailed
+        contextLabel="QUICKMART"
+        onClose={vi.fn()}
+        onOpenExternally={onOpenExternally}
+      />
+    )
+
+    // Honest failure copy — never the "Preparing video…" lie.
+    expect(
+      screen.getByText('The video could not be loaded from the cloud')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Preparing video…')).not.toBeInTheDocument()
+    expect(document.querySelector('video')).toBeNull()
+    // Open-externally signs its own fresh URL on click — the recovery path.
+    await user.click(screen.getByText('Open externally'))
+    expect(onOpenExternally).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the loading panel while the URL resolves, not a black player', () => {
     renderWithFeatureProviders(
       <VideoPlayer

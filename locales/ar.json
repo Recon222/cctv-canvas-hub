@@ -201,10 +201,12 @@
   "canvass.viewer.previous": "الصورة السابقة",
   "canvass.viewer.next": "الصورة التالية",
   "canvass.viewer.loading": "جارٍ تحميل الصورة…",
+  "canvass.viewer.loadFailed": "تعذّر تحميل الصورة",
   "canvass.viewer.meta": "التُقطت {{time}} · {{investigator}}",
 
   "canvass.player.close": "إغلاق المشغّل",
   "canvass.player.loading": "جارٍ تجهيز الفيديو…",
+  "canvass.player.signFailed": "تعذّر تحميل الفيديو من السحابة",
   "canvass.player.unplayable": "تعذّر تشغيل هذا الفيديو هنا",
   "canvass.player.unplayableDetail": "الصيغة ({{mime}}) غير قابلة للتشغيل على اللوحة. افتحه في تطبيق خارجي للمشاهدة.",
   "canvass.player.openExternally": "فتح في تطبيق خارجي",

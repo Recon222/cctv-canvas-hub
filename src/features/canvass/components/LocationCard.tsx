@@ -311,12 +311,15 @@ function PhotoViewerHost({
   onNavigate: (index: number) => void
 }) {
   const { t } = useTranslation()
-  const { data: signedUrl } = useSignedUrl(media.bucket, media.path)
+  // PR #7 H1: isError must reach the modal — a failed sign query is an
+  // honest failed state, never an eternal "Loading photo…".
+  const { data: signedUrl, isError } = useSignedUrl(media.bucket, media.path)
   return (
     <ImageViewer
       media={photos}
       index={index}
       signedUrl={signedUrl ?? null}
+      signFailed={isError}
       contextLabel={contextLabel}
       metaLabel={t('canvass.viewer.meta', {
         // Rule 6: absolute with seconds, explicit yyyy-mm-dd date.
@@ -340,11 +343,15 @@ function PlayerHost({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const { data: signedUrl } = useSignedUrl(media.bucket, media.path)
+  // PR #7 H1: without isError a failed sign query stranded the player
+  // on "Preparing video…" with open-externally structurally unreachable
+  // (it was gated on <video onError>, and the <video> never mounts).
+  const { data: signedUrl, isError } = useSignedUrl(media.bucket, media.path)
   return (
     <VideoPlayer
       media={media}
       signedUrl={signedUrl ?? null}
+      signFailed={isError}
       contextLabel={contextLabel}
       onClose={onClose}
       onOpenExternally={() => {

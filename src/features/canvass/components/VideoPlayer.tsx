@@ -14,6 +14,10 @@ export interface VideoPlayerProps {
   media: CanvassMedia
   /** Signed URL; null while resolving. */
   signedUrl: string | null
+  /** The host's sign query FAILED (PR #7 H1) — null signedUrl alone
+   * means "still resolving"; this flag is what separates the honest
+   * failed panel from the loading panel. */
+  signFailed?: boolean
   /** Eyebrow, e.g. "QUICKMART · 09:10:00–09:55:00 · 24.1 MB". */
   contextLabel: string
   onClose: () => void
@@ -24,6 +28,7 @@ export interface VideoPlayerProps {
 export function VideoPlayer({
   media,
   signedUrl,
+  signFailed = false,
   contextLabel,
   onClose,
   onOpenExternally,
@@ -89,7 +94,7 @@ export function VideoPlayer({
           </button>
         </div>
         <div className="flex min-h-[420px] items-center justify-center bg-gradient-to-br from-[#060d18] to-[#0b1626]">
-          {failed || signedUrl === null ? (
+          {failed || signFailed || signedUrl === null ? (
             <div className="flex flex-col items-center gap-3 p-10 text-center">
               <TriangleAlert
                 className="size-9 text-hub-working"
@@ -97,27 +102,31 @@ export function VideoPlayer({
                 aria-hidden
               />
               <p className="font-stmono text-[11px] uppercase tracking-[2px] text-hub-muted">
+                {/* PR #7 H1: "loading" copy is reserved for genuinely
+                    pending — a failed sign query says so honestly. */}
                 {failed
                   ? t('canvass.player.unplayable')
-                  : t('canvass.player.loading')}
+                  : signFailed
+                    ? t('canvass.player.signFailed')
+                    : t('canvass.player.loading')}
               </p>
               {failed && (
-                <>
-                  <p className="max-w-sm text-[13.5px] text-hub-faint [text-wrap:pretty]">
-                    {t('canvass.player.unplayableDetail', {
-                      mime: media.mime,
-                    })}
-                  </p>
-                  {onOpenExternally !== undefined && (
-                    <button
-                      type="button"
-                      onClick={onOpenExternally}
-                      className="mt-1 rounded border border-hub-accent/40 bg-hub-accent/10 px-4 py-2 font-stmono text-[11px] uppercase tracking-[2px] text-hub-heading transition-colors hover:bg-hub-accent/20"
-                    >
-                      {t('canvass.player.openExternally')}
-                    </button>
-                  )}
-                </>
+                <p className="max-w-sm text-[13.5px] text-hub-faint [text-wrap:pretty]">
+                  {t('canvass.player.unplayableDetail', {
+                    mime: media.mime,
+                  })}
+                </p>
+              )}
+              {(failed || signFailed) && onOpenExternally !== undefined && (
+                // Open-externally signs its own fresh URL on click —
+                // also the recovery path when the sign query failed.
+                <button
+                  type="button"
+                  onClick={onOpenExternally}
+                  className="mt-1 rounded border border-hub-accent/40 bg-hub-accent/10 px-4 py-2 font-stmono text-[11px] uppercase tracking-[2px] text-hub-heading transition-colors hover:bg-hub-accent/20"
+                >
+                  {t('canvass.player.openExternally')}
+                </button>
               )}
             </div>
           ) : (

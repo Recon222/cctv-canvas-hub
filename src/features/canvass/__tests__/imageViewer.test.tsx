@@ -68,6 +68,29 @@ describe('ImageViewer', () => {
     expect(screen.getByText('Photo 1 of 3')).toBeInTheDocument()
   })
 
+  // PR #7 H1 (photo surface): a failed signing query renders an honest
+  // failed state, never an eternal "Loading photo…".
+  it('surfaces a sign failure honestly instead of loading forever', () => {
+    renderWithFeatureProviders(
+      <ImageViewer
+        media={PHOTOS}
+        index={0}
+        signedUrl={null}
+        signFailed
+        contextLabel="QUICKMART"
+        metaLabel="Taken 2026-07-17 14:00:00 · Det. A. Morgan"
+        onClose={vi.fn()}
+        onNavigate={vi.fn()}
+      />
+    )
+
+    expect(
+      screen.getByText('The photo could not be loaded')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Loading photo…')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
   it('hides the ‹ › navigation for a single photo', () => {
     renderWithFeatureProviders(
       <ImageViewer
