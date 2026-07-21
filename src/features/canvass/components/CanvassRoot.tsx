@@ -19,6 +19,7 @@ import { useMediaPolling } from '../hooks/useMediaPolling'
 import { cameraPadding } from '../hooks/useFlyTo'
 import { NavRail } from './NavRail'
 import { CasesView } from './CasesView'
+import { CaseDashboard } from './CaseDashboard'
 import { LocationCardStack } from './LocationCardStack'
 import { MapCanvas, CANVASS_MAP_ID } from './MapCanvas'
 import { MapLegend } from './map/MapLegend'
@@ -171,7 +172,9 @@ export function CanvassRoot() {
         </div>
         <main className="relative min-w-0 flex-1 overflow-hidden">
           {view === 'cases' && <CasesView />}
-          {view === 'case' && <LocationCardStack />}
+          {/* AD12: the case view IS the dashboard (5.3A) — the stack
+              remains the MAP view's floating overlay below. */}
+          {view === 'case' && <CaseDashboard />}
           {view === 'map' && (
             <>
               {!mapStyleFailed && <MapFurniture />}
