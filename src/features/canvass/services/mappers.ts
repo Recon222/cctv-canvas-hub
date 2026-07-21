@@ -33,6 +33,13 @@ function wireString(value: string | null | undefined): string {
   return value ?? ''
 }
 
+/** Optional display fields: absent/blank ⇒ null, so consumers can gate
+ * whole lines on presence (never render `undefined`/empty text). */
+function emptyAsNull(value: string | null | undefined): string | null {
+  const trimmed = wireString(value).trim()
+  return trimmed === '' ? null : trimmed
+}
+
 /** §5.5.4 — `requester_name`, falling back to a shortened `user_id` (AD8). */
 export function investigatorLabel(row: LocationRow): string {
   const name = wireString(row.requester_name).trim()
@@ -93,6 +100,10 @@ export function toCanvassCase(row: CaseRow): CanvassCase | null {
     incidentBusinessName: row.incident_business_name,
     incidentAddress: row.incident_address,
     incidentCoord: numericCoord(row.incident_latitude, row.incident_longitude),
+    // Metadata is nullable on the wire and every field inside is
+    // optional — empty strings degrade to absent too (5.3A OIC line).
+    oicName: emptyAsNull(row.metadata?.oicName),
+    oicBadgeNumber: emptyAsNull(row.metadata?.oicBadgeNumber),
     createdAt: row.created_at,
     // Guarded: the cases-list sort derefs this on every broadcast patch
     // (review LOW: a null updated_at threw inside the cache updater).

@@ -34,6 +34,10 @@ export interface CanvassCase {
   incidentAddress: string
   /** Null when unset or `(0,0)` — GPS no-fix (trap §5.5.2). */
   incidentCoord: Coordinate | null
+  /** Officer in charge, from case metadata (5.3A) — absent is null,
+   * never `undefined` text (trap §5.5.3). */
+  oicName: string | null
+  oicBadgeNumber: string | null
   createdAt: string
   updatedAt: string
 }

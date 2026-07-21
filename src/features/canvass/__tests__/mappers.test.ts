@@ -160,6 +160,30 @@ describe('mappers', () => {
     ).toBe('')
   })
 
+  // 5.3A: the dashboard's OIC line derives from case metadata (AD8's
+  // location-derived roster never covers the officer in charge).
+  it('carries the OIC metadata onto the case view-model, absent as null', () => {
+    const withOic = toCanvassCase(
+      caseRow({
+        metadata: { oicName: 'D/Sgt. R. Vance', oicBadgeNumber: '2201' },
+      })
+    )
+    expect(withOic?.oicName).toBe('D/Sgt. R. Vance')
+    expect(withOic?.oicBadgeNumber).toBe('2201')
+
+    // Metadata is nullable on the wire, every field optional inside —
+    // absent renders as absent, never `undefined` text (trap §5.5.3).
+    expect(toCanvassCase(caseRow({ metadata: null }))?.oicName).toBeNull()
+    expect(
+      toCanvassCase(caseRow({ metadata: null }))?.oicBadgeNumber
+    ).toBeNull()
+    expect(toCanvassCase(caseRow({ metadata: {} }))?.oicName).toBeNull()
+    // The seeded shape: name without badge.
+    const seeded = toCanvassCase(caseRow())
+    expect(seeded?.oicName).toBe('D/Sgt. R. Vance')
+    expect(seeded?.oicBadgeNumber).toBeNull()
+  })
+
   it('rejects out-of-range incident coordinates like the WKB path does', () => {
     // geo.ts range-guards WKB points; a mis-keyed manual incident coord
     // must not become an off-planet marker in M3 (review LOW).
