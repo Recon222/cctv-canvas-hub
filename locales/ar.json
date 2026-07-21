@@ -230,6 +230,7 @@
   "canvass.map.zoomOut": "تصغير",
   "canvass.map.fitAll": "احتواء جميع المواقع",
   "canvass.map.legend.incident": "الحادثة",
+  "canvass.map.incidentLabel": "الحادثة · {{name}}",
   "canvass.map.tokenRejected": "خطأ في الخريطة — رُفض الرمز · راجع التفضيلات",
   "canvass.map.tokenMissing.eyebrow": "الخريطة غير متاحة — الرمز مفقود",
   "canvass.map.tokenMissing.title": "لم يتم تعيين رمز Mapbox",

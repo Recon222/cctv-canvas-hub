@@ -12,6 +12,7 @@ import { useFlyTo, cameraPadding } from '../hooks/useFlyTo'
 import { MapTokenGate } from './map/MapTokenGate'
 import { MapLegend } from './map/MapLegend'
 import { MapZoomControls } from './map/MapZoomControls'
+import { MarkerLayer } from './MarkerLayer'
 
 /**
  * The Mapbox canvas (Phase 3.2B). Mounted ONCE for the life of the
@@ -189,7 +190,9 @@ export function MapCanvas() {
         onLoad={handleMapLoad}
         onError={handleMapError}
         attributionControl={false}
-      />
+      >
+        <MarkerLayer />
+      </Map>
       <MapLegend />
       <MapZoomControls
         onZoomIn={() => mapRef.current?.zoomIn()}

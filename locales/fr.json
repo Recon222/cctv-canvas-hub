@@ -222,6 +222,7 @@
   "canvass.map.zoomOut": "Zoom arrière",
   "canvass.map.fitAll": "Cadrer tous les lieux",
   "canvass.map.legend.incident": "Incident",
+  "canvass.map.incidentLabel": "Incident · {{name}}",
   "canvass.map.tokenRejected": "Erreur de carte — jeton refusé · vérifiez les Préférences",
   "canvass.map.tokenMissing.eyebrow": "Carte indisponible — jeton manquant",
   "canvass.map.tokenMissing.title": "Aucun jeton Mapbox n'a été configuré",
