@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger'
 import { useCanvassStore } from '../store/canvass-store'
 import { useCases } from '../hooks/useCases'
 import { useCaseLocations } from '../hooks/useCaseLocations'
+import { useFlyTo, cameraPadding } from '../hooks/useFlyTo'
 import { MapTokenGate } from './map/MapTokenGate'
 import { MapLegend } from './map/MapLegend'
 import { MapZoomControls } from './map/MapZoomControls'
@@ -35,27 +36,6 @@ const DEFAULT_MAP_STYLE = 'standard-satellite'
 /** Street-level framing when jumping to a case's incident. */
 const INCIDENT_ZOOM = 15
 
-/**
- * Camera padding that keeps points clear of the floating card stack
- * (inline-end) and the NavRail (inline-start). Physical sides on
- * purpose — the map is screen-space — flipped for RTL, and scaled with
- * the AD15 chrome scale (the stack's real width is 408 design-px × the
- * shell scale). ponytail: constants eyeballed from the 1920 design
- * canvas; the AD15 live check tunes them.
- */
-function fitPadding() {
-  const scale = window.innerWidth / 1920
-  const rtl = document.documentElement.dir === 'rtl'
-  const stackSide = Math.round(470 * scale)
-  const railSide = Math.round(140 * scale)
-  return {
-    top: 96,
-    bottom: 96,
-    left: rtl ? stackSide : railSide,
-    right: rtl ? railSide : stackSide,
-  }
-}
-
 export function MapCanvas() {
   const { t } = useTranslation()
   const mapRef = useRef<MapRef>(null)
@@ -69,6 +49,7 @@ export function MapCanvas() {
   // toast fires once per rejected token.
   const [rejectedToken, setRejectedToken] = useState<string | null>(null)
   const rejectionToastFor = useRef<string | null>(null)
+  useFlyTo(mapRef)
 
   const selectedCase = cases?.find(c => c.id === selectedCaseId) ?? null
   const incidentLat = selectedCase?.incidentCoord?.lat
@@ -171,7 +152,7 @@ export function MapCanvas() {
         [minLng, minLat],
         [maxLng, maxLat],
       ],
-      { padding: fitPadding(), maxZoom: 16.5 }
+      { padding: cameraPadding(), maxZoom: 16.5 }
     )
   }
 

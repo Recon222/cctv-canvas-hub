@@ -56,6 +56,7 @@ export function LocationCard({ location }: LocationCardProps) {
   }
   return (
     <article
+      data-location-id={location.id}
       data-status={location.status}
       data-attention={attentionAt !== undefined || undefined}
       role="button"
