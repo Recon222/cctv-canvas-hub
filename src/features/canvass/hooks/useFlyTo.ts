@@ -21,6 +21,9 @@ export function useFlyTo(mapRef: RefObject<MapRef | null>): void {
   const queryClient = useQueryClient()
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   const selectedLocationId = useCanvassStore(state => state.selectedLocationId)
+  // Same-id re-selects bump the tick so the sync re-fires (PR #6 M1):
+  // click marker A, pan away, click A again — must fly back.
+  const selectionTick = useCanvassStore(state => state.selectionTick)
 
   useEffect(() => {
     if (selectedLocationId === null) {
@@ -41,7 +44,7 @@ export function useFlyTo(mapRef: RefObject<MapRef | null>): void {
     document
       .querySelector(`[data-location-id="${CSS.escape(selectedLocationId)}"]`)
       ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [selectedLocationId, selectedCaseId, queryClient, mapRef])
+  }, [selectedLocationId, selectionTick, selectedCaseId, queryClient, mapRef])
 }
 
 /**
