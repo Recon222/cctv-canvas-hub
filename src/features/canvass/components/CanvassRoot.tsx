@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { MapProvider, useMap } from 'react-map-gl/mapbox'
 import { useConnectionHealth } from '@/hooks/useConnectionHealth'
 import { isCaseDataKey, resetHealthStore } from '@/store/health-store'
 import { cn } from '@/lib/utils'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
+import { useCases } from '../hooks/useCases'
+import { useCaseLocations } from '../hooks/useCaseLocations'
+import { cameraPadding } from '../hooks/useFlyTo'
 import { NavRail } from './NavRail'
 import { CasesView } from './CasesView'
 import { LocationCardStack } from './LocationCardStack'
-import { MapCanvas } from './MapCanvas'
+import { MapCanvas, CANVASS_MAP_ID } from './MapCanvas'
+import { MapLegend } from './map/MapLegend'
+import { MapZoomControls } from './map/MapZoomControls'
 import './canvass.css'
 
 /**
@@ -143,12 +149,16 @@ export function CanvassRoot() {
         {view === 'cases' && <CasesView />}
         {view === 'case' && <LocationCardStack />}
         {view === 'map' && (
-          // 3.4A: the floating stack over the map — clear of every edge,
-          // transparent column (never a full-height rail, spec §4). It
-          // overlays the unscaled map from inside the scaled chrome.
-          <div className="pointer-events-auto absolute inset-y-4 end-4 w-[408px]">
-            <LocationCardStack floating />
-          </div>
+          <>
+            <MapFurniture />
+            {/* 3.4A: the floating stack over the map — clear of every
+                edge, transparent column (never a full-height rail, spec
+                §4). It overlays the unscaled map from inside the scaled
+                chrome. */}
+            <div className="pointer-events-auto absolute inset-y-4 end-4 w-[408px]">
+              <LocationCardStack floating />
+            </div>
+          </>
         )}
       </main>
     </div>
@@ -159,25 +169,98 @@ export function CanvassRoot() {
     // included (the simpler option if the live check shows no pointer or
     // crispness issues on the target display).
     return (
-      <div
-        ref={rootRef}
-        className="relative h-full overflow-hidden bg-hub-ground font-inter text-hub-body"
-      >
-        <div className="absolute top-0 left-0 h-full w-full" style={scaleStyle}>
-          {mapLayer}
-          {chromeLayer}
+      <MapProvider>
+        <div
+          ref={rootRef}
+          className="relative h-full overflow-hidden bg-hub-ground font-inter text-hub-body"
+        >
+          <div
+            className="absolute top-0 left-0 h-full w-full"
+            style={scaleStyle}
+          >
+            {mapLayer}
+            {chromeLayer}
+          </div>
         </div>
-      </div>
+      </MapProvider>
     )
   }
 
   return (
-    <div
-      ref={rootRef}
-      className="relative h-full overflow-hidden bg-hub-ground font-inter text-hub-body"
-    >
-      {mapLayer}
-      {chromeLayer}
+    // MapProvider: the chrome-side furniture reaches the map (which
+    // lives in the sibling unscaled layer) via useMap()[CANVASS_MAP_ID].
+    <MapProvider>
+      <div
+        ref={rootRef}
+        className="relative h-full overflow-hidden bg-hub-ground font-inter text-hub-body"
+      >
+        {mapLayer}
+        {chromeLayer}
+      </div>
+    </MapProvider>
+  )
+}
+
+/**
+ * Map furniture (legend + zoom instruments) — CHROME, not map layer
+ * (M3 live-smoke finding): in the unscaled full-window map layer the
+ * furniture sat in the exact inline-start band the scaled opaque
+ * NavRail paints over (rail visual width = 86 × scale while the
+ * furniture was unscaled — no static offset can track that), leaving it
+ * obscured and click-dead. Hosted here in the chrome layer's <main> it
+ * is laid out AFTER the rail in the flex row (the rail can never cover
+ * it) and scales with the shell like the rest of the design.
+ */
+function MapFurniture() {
+  const maps = useMap()
+  const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
+  const { data: cases } = useCases()
+  const { data: locations } = useCaseLocations(selectedCaseId)
+  const map = maps[CANVASS_MAP_ID]
+
+  if (map === undefined) {
+    // Token gate showing (no Map mounted) — no instruments to offer.
+    return null
+  }
+
+  const handleFitAll = () => {
+    const selectedCase = cases?.find(c => c.id === selectedCaseId) ?? null
+    const coords = (locations ?? []).map(l => l.coord).filter(c => c !== null)
+    if (selectedCase?.incidentCoord) {
+      coords.push(selectedCase.incidentCoord)
+    }
+    if (coords.length === 0) {
+      return
+    }
+    let minLng = Infinity
+    let minLat = Infinity
+    let maxLng = -Infinity
+    let maxLat = -Infinity
+    for (const c of coords) {
+      minLng = Math.min(minLng, c.lng)
+      minLat = Math.min(minLat, c.lat)
+      maxLng = Math.max(maxLng, c.lng)
+      maxLat = Math.max(maxLat, c.lat)
+    }
+    map.fitBounds(
+      [
+        [minLng, minLat],
+        [maxLng, maxLat],
+      ],
+      { padding: cameraPadding(), maxZoom: 16.5 }
+    )
+  }
+
+  return (
+    // The chrome wrapper is pointer-events-none on the map view — the
+    // instruments re-enable their own subtree.
+    <div className="pointer-events-auto">
+      <MapLegend />
+      <MapZoomControls
+        onZoomIn={() => map.zoomIn()}
+        onZoomOut={() => map.zoomOut()}
+        onFitAll={handleFitAll}
+      />
     </div>
   )
 }

@@ -7,11 +7,8 @@ import { usePreferences } from '@/features/preferences'
 import { logger } from '@/lib/logger'
 import { useCanvassStore } from '../store/canvass-store'
 import { useCases } from '../hooks/useCases'
-import { useCaseLocations } from '../hooks/useCaseLocations'
-import { useFlyTo, cameraPadding } from '../hooks/useFlyTo'
+import { useFlyTo } from '../hooks/useFlyTo'
 import { MapTokenGate } from './map/MapTokenGate'
-import { MapLegend } from './map/MapLegend'
-import { MapZoomControls } from './map/MapZoomControls'
 import { MarkerLayer } from './MarkerLayer'
 
 /**
@@ -24,7 +21,17 @@ import { MarkerLayer } from './MarkerLayer'
  * A2 bindings: satellite is the default style; Standard-family styles
  * get `setConfigProperty('basemap','lightPreset','night')` on every
  * style load (the preset does not survive a setStyle).
+ *
+ * Map furniture (legend + zoom instruments) deliberately does NOT live
+ * here (M3 live-smoke finding): this component renders in the unscaled
+ * full-window map layer, whose inline-start band the scaled opaque
+ * NavRail paints over — furniture here is obscured and click-dead.
+ * CanvassRoot hosts it in the scaled chrome layer, reaching this map
+ * through react-map-gl's MapProvider seam via `CANVASS_MAP_ID`.
  */
+
+/** The Map's id in CanvassRoot's MapProvider — the chrome-side seam. */
+export const CANVASS_MAP_ID = 'canvass-map'
 
 /** Style ids the Preferences select offers (A2 pin). Any other stored
  * string is passed through as-is — forward-tolerant. */
@@ -44,7 +51,6 @@ export function MapCanvas() {
   const view = useCanvassStore(state => state.view)
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   const { data: cases } = useCases()
-  const { data: locations } = useCaseLocations(selectedCaseId)
   // Rejection is keyed by the token that was rejected: a fresh token in
   // Preferences clears the gate by derivation (no reset effect), and the
   // toast fires once per rejected token.
@@ -130,33 +136,6 @@ export function MapCanvas() {
     logger.error('map: load error', { message: event.error?.message })
   }
 
-  const handleFitAll = () => {
-    const coords = (locations ?? []).map(l => l.coord).filter(c => c !== null)
-    if (selectedCase?.incidentCoord) {
-      coords.push(selectedCase.incidentCoord)
-    }
-    if (coords.length === 0) {
-      return
-    }
-    let minLng = Infinity
-    let minLat = Infinity
-    let maxLng = -Infinity
-    let maxLat = -Infinity
-    for (const c of coords) {
-      minLng = Math.min(minLng, c.lng)
-      minLat = Math.min(minLat, c.lat)
-      maxLng = Math.max(maxLng, c.lng)
-      maxLat = Math.max(maxLat, c.lat)
-    }
-    mapRef.current?.fitBounds(
-      [
-        [minLng, minLat],
-        [maxLng, maxLat],
-      ],
-      { padding: cameraPadding(), maxZoom: 16.5 }
-    )
-  }
-
   if (isPending) {
     // Preferences still loading — calm ground, never a flash of the gate.
     return <div className="hub-grid-paper h-full" />
@@ -172,6 +151,7 @@ export function MapCanvas() {
   return (
     <div className="relative h-full">
       <Map
+        id={CANVASS_MAP_ID}
         ref={mapRef}
         mapboxAccessToken={token}
         mapStyle={MAP_STYLE_URLS[styleId] ?? styleId}
@@ -193,12 +173,9 @@ export function MapCanvas() {
       >
         <MarkerLayer />
       </Map>
-      <MapLegend />
-      <MapZoomControls
-        onZoomIn={() => mapRef.current?.zoomIn()}
-        onZoomOut={() => mapRef.current?.zoomOut()}
-        onFitAll={handleFitAll}
-      />
+      {/* Top-centered in the full-window layer — clear of the rail band
+          (which covers only the first 86 × scale px) and of the stack;
+          non-interactive, so the layering finding doesn't apply. */}
       {tokenRejected && <MapTokenGate variant="rejected" />}
     </div>
   )

@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react'
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { UseQueryResult } from '@tanstack/react-query'
-import Map from 'react-map-gl/mapbox'
+import Map, { useMap } from 'react-map-gl/mapbox'
 import { usePreferences } from '@/features/preferences'
+import { getSupabase } from '@/lib/supabase/client'
 import type { AppPreferences } from '@/lib/tauri-bindings'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
-import { MapCanvas } from '../components/MapCanvas'
+import { CanvassRoot } from '../components/CanvassRoot'
+import { MapCanvas, CANVASS_MAP_ID } from '../components/MapCanvas'
 import { fetchCases } from '../services/canvassService'
 import { toCanvassCase } from '../services/mappers'
 import { resetCanvassStore, useCanvassStore } from '../store/canvass-store'
@@ -26,6 +29,7 @@ vi.mock('react-map-gl/mapbox', () => ({
     <div data-testid="mapbox-map">{children}</div>
   )),
   useMap: vi.fn(() => ({ current: undefined })),
+  MapProvider: ({ children }: { children?: ReactNode }) => <>{children}</>,
   Source: ({ children }: { children?: ReactNode }) => <>{children}</>,
   Layer: () => null,
 }))
@@ -122,5 +126,51 @@ describe('MapCanvas (Phase 3.2)', () => {
     renderWithFeatureProviders(<MapCanvas />)
 
     expect(mapProps().at(-1)?.mapStyle).toBe('mapbox://styles/mapbox/dark-v11')
+  })
+})
+
+describe('map furniture (M3 live-smoke fix round)', () => {
+  // Regression pin for the layering defect: legend + zoom/fit controls
+  // used to render inside the UNSCALED full-window map layer, where the
+  // scaled opaque NavRail (86 design-px × scale) painted over their
+  // inline-start band — obscured AND click-dead at any scale ≠ their
+  // static offset. The fix homes them in the scaled chrome layer's
+  // <main> (laid out AFTER the rail in the flex row — the rail can
+  // never cover them) and drives the map through react-map-gl's
+  // MapProvider seam.
+  it('mounts legend + zoom controls in the chrome layer, driving the map through the provider seam', async () => {
+    mockUsePreferences.mockReturnValue(
+      preferencesResult({ mapbox_token: 'pk.test-fake-token' })
+    )
+    // CanvassRoot mounts realtime — minimal channel fake (casesView
+    // precedent).
+    const channel = { on: vi.fn(), subscribe: vi.fn() }
+    channel.on.mockReturnValue(channel)
+    vi.mocked(getSupabase).mockReturnValue({
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(() => Promise.resolve('ok')),
+    } as unknown as ReturnType<typeof getSupabase>)
+    // The furniture reaches the map by id through useMap().
+    const zoomIn = vi.fn()
+    vi.mocked(useMap).mockReturnValue({
+      [CANVASS_MAP_ID]: { zoomIn, zoomOut: vi.fn(), fitBounds: vi.fn() },
+    } as unknown as ReturnType<typeof useMap>)
+
+    const user = userEvent.setup()
+    renderWithFeatureProviders(<CanvassRoot />)
+
+    // Furniture lives in the chrome <main> — beside the rail, never
+    // under it.
+    const fitAll = await screen.findByRole('button', {
+      name: 'Fit all locations',
+    })
+    expect(fitAll.closest('main')).not.toBeNull()
+    expect(screen.getByText('Incident').closest('main')).not.toBeNull()
+    // The map itself stays in the unscaled sibling layer (3.2D/AD15).
+    expect(screen.getByTestId('mapbox-map').closest('main')).toBeNull()
+
+    // And it is CLICKABLE: the instruments drive the map via the seam.
+    await user.click(screen.getByRole('button', { name: 'Zoom in' }))
+    expect(zoomIn).toHaveBeenCalledTimes(1)
   })
 })
