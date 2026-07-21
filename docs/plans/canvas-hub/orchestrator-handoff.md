@@ -9,8 +9,9 @@
 | Planning set (PR #1) + Amendments A1 (PR #3) and A2 (PR #5) | Merged. The three docs in `docs/plans/canvas-hub/` are the single source of truth — **131 tests pinned** (9 Rust + 122 TS; R6 added the D17 arms at M3), 7 milestones, AD1–AD15 |
 | **M1** — session foundation (PR #2) | Shipped + live-verified: encrypted vault (AES-GCM, key in OS keychain), enrollment, sign-in, schema gate, relaunch-restore |
 | **M2** — live data plane (PR #4) | Shipped + live-verified: three-view board (Cases/Case/Map-placeholder + NavRail), realtime at **13 ms** broadcast-to-board on the pure patch path, health machine, 135-test suite |
-| Design | Locked: the handoff package (§2) is the **binding design**. Claude design is **currently authoring the production components** per `design/production-brief.md` — that package arrives next |
-| **Next: M3 (map)** | Kicks off when the production package lands. Everything staged: Mapbox token in `CLAUDE.local.md`, two seeded cases, marker-binding doc, amended plan |
+| Design | Locked: the handoff package (§2) is the **binding design**. The production package landed 2026-07-20 and was poured as the front half of the M3 branch (`58c2fb2` — provenance + gate fixes documented in the commit body) |
+| **M3** — map (PR #6) | Shipped + live-verified (2026-07-21): Mapbox satellite-night canvas behind a token gate, persistent hoisted map div (3.2D), AD15 chrome-scaled transform (live-confirmed; whole-shell fallback parked behind `AD15_MODE`), HTML marker factories + built-in clustering, two-way fly-to, floating card stack with D16 listbox a11y, surfaced style-failure states. 167-test suite (137 numbered). Review: 1 HIGH + 4 MEDIUM + 5 LOW → two fix rounds → APPROVE with zero findings (first zero-finding fix round of the project) |
+| **Next: M4 (media)** | Signed URLs, thumbnails, polling + diff, video, fallbacks (phases 4.1–4.3). The poured `MediaThumb`/`VideoPlayer`/`ImageViewer` components await wiring. **D18 fires here** (`mediaPlayerIncluded` boolean type flip at first consumption, + L2's `MediaKind` union note); D14's `canPoll`/`'media-new'` consumers land here. Seeded media: 7 objects incl. the H.264 `.mp4` and the `image/heic` fallback-exerciser |
 
 ## 2. Required reading (in this order)
 
