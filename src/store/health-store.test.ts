@@ -7,6 +7,7 @@ import {
   useHealthStore,
   evaluate,
   canPoll,
+  lastConfirmAt,
   resetHealthStore,
   STALE_AFTER_MS,
   RECONCILE_MS,
@@ -158,6 +159,26 @@ describe('health-store', () => {
     useHealthStore.getState().channelStatus('subscribed')
     useHealthStore.getState().recordFetchError()
     expect(useHealthStore.getState().state).toBe('connecting')
+  })
+})
+
+describe('lastConfirmAt (5.2, §5.4 A2 binding)', () => {
+  // The indicator's displayed timestamp is max(lastEventAt, lastFetchOkAt)
+  // — binding to lastEventAt alone renders "updated —" beside a green dot
+  // on a silent overnight board (reconciles confirm, broadcasts don't).
+  it('is the max of the event and fetch confirmations', () => {
+    expect(lastConfirmAt(marks({ lastEventAt: 500, lastFetchOkAt: 900 }))).toBe(
+      900
+    )
+    expect(
+      lastConfirmAt(marks({ lastEventAt: 1_200, lastFetchOkAt: 900 }))
+    ).toBe(1_200)
+    // Either plane alone is a confirmation.
+    expect(lastConfirmAt(marks({ lastFetchOkAt: 900 }))).toBe(900)
+    expect(lastConfirmAt(marks({ lastEventAt: 700 }))).toBe(700)
+    // No confirmation yet ⇒ null (the chip renders its designed
+    // "awaiting first confirm" copy, never a fake time).
+    expect(lastConfirmAt(marks())).toBeNull()
   })
 })
 

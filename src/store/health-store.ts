@@ -88,13 +88,23 @@ export interface HealthMarks {
   startedAt: number
 }
 
+/**
+ * The last positive server confirmation from EITHER plane — the
+ * indicator's displayed timestamp (doc 01 §5.4, A2 binding for M5).
+ * Never `lastEventAt` alone: on a silent overnight board broadcasts
+ * stay null while reconciles keep confirming — binding to the event
+ * mark would render "updated —" beside a green dot.
+ */
+export function lastConfirmAt(marks: HealthMarks): number | null {
+  return Math.max(marks.lastEventAt ?? 0, marks.lastFetchOkAt ?? 0) || null
+}
+
 /** Pure state derivation — the whole machine, unit-testable without time. */
 export function evaluate(marks: HealthMarks, now: number): HealthState {
   if (!marks.online) {
     return 'offline'
   }
-  const lastConfirm =
-    Math.max(marks.lastEventAt ?? 0, marks.lastFetchOkAt ?? 0) || null
+  const lastConfirm = lastConfirmAt(marks)
   if (now - (lastConfirm ?? marks.startedAt) > STALE_AFTER_MS) {
     return 'stale'
   }
