@@ -166,6 +166,8 @@
   "cloudSession.signOutFailed": "فشل تسجيل الخروج",
 
   "canvass.loading": "جارٍ التحميل…",
+  "canvass.header.appTag": "CANVAS HUB",
+  "canvass.header.commandCentre": "مركز القيادة — القضايا النشطة",
   "canvass.nav.cases": "القضايا",
   "canvass.nav.case": "لوحة القضية",
   "canvass.nav.map": "الخريطة",

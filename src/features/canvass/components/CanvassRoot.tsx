@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { MapProvider, useMap } from 'react-map-gl/mapbox'
 import { useConnectionHealth } from '@/hooks/useConnectionHealth'
-import { isCaseDataKey, resetHealthStore } from '@/store/health-store'
+import {
+  isCaseDataKey,
+  lastConfirmAt,
+  resetHealthStore,
+  useHealthStore,
+} from '@/store/health-store'
 import { cn } from '@/lib/utils'
+import { ConnectionIndicator, ConnectionBanner } from '@/features/cloud-session'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
 import { useCases } from '../hooks/useCases'
@@ -16,6 +23,7 @@ import { LocationCardStack } from './LocationCardStack'
 import { MapCanvas, CANVASS_MAP_ID } from './MapCanvas'
 import { MapLegend } from './map/MapLegend'
 import { MapZoomControls } from './map/MapZoomControls'
+import { BoardHeader, CaseHeading, LiveClock } from './chrome/BoardHeader'
 import './canvass.css'
 
 /**
@@ -154,22 +162,30 @@ export function CanvassRoot() {
       <div className={cn(view === 'map' && 'pointer-events-auto')}>
         <NavRail />
       </div>
-      <main className="relative min-w-0 flex-1 overflow-hidden">
-        {view === 'cases' && <CasesView />}
-        {view === 'case' && <LocationCardStack />}
-        {view === 'map' && (
-          <>
-            {!mapStyleFailed && <MapFurniture />}
-            {/* 3.4A: the floating stack over the map — clear of every
-                edge, transparent column (never a full-height rail, spec
-                §4). It overlays the unscaled map from inside the scaled
-                chrome. */}
-            <div className="pointer-events-auto absolute inset-y-4 end-4 w-[408px]">
-              <LocationCardStack floating />
-            </div>
-          </>
-        )}
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Header chrome is opaque and always present (design §1) — it
+            re-enables pointer events on the map view so clicks never
+            fall through it into the map. */}
+        <div className={cn(view === 'map' && 'pointer-events-auto')}>
+          <HeaderChrome />
+        </div>
+        <main className="relative min-w-0 flex-1 overflow-hidden">
+          {view === 'cases' && <CasesView />}
+          {view === 'case' && <LocationCardStack />}
+          {view === 'map' && (
+            <>
+              {!mapStyleFailed && <MapFurniture />}
+              {/* 3.4A: the floating stack over the map — clear of every
+                  edge, transparent column (never a full-height rail, spec
+                  §4). It overlays the unscaled map from inside the scaled
+                  chrome. */}
+              <div className="pointer-events-auto absolute inset-y-4 end-4 w-[408px]">
+                <LocationCardStack floating />
+              </div>
+            </>
+          )}
+        </main>
+      </div>
     </div>
   )
 
@@ -207,6 +223,53 @@ export function CanvassRoot() {
         {chromeLayer}
       </div>
     </MapProvider>
+  )
+}
+
+/**
+ * Header chrome (Phase 5.2, design §1 — D15): the poured BoardHeader
+ * hosting CaseHeading, the connection chip, and the live clock, with
+ * the escalation banner mounted UNCONDITIONALLY beneath (it self-nulls
+ * unless stale/offline). This is the surface D15 demanded: the health
+ * machine has computed degradation since M2 and rendered it nowhere.
+ *
+ * `lastConfirm` is the §5.4 A2 binding — max(lastEventAt, lastFetchOkAt)
+ * via the store's `lastConfirmAt`, never `lastEventAt` alone (a silent
+ * overnight board confirms through reconciles only).
+ *
+ * The design's process-monitor toggle (MonitorToggle) is deliberately
+ * NOT mounted: its panel ships at 6.3, and a dead affordance on a wall
+ * board is dishonest UI.
+ */
+function HeaderChrome() {
+  const { t } = useTranslation()
+  const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
+  const healthState = useHealthStore(state => state.state)
+  const lastConfirm = useHealthStore(state => lastConfirmAt(state.marks))
+  const { data: cases } = useCases()
+  const selectedCase = cases?.find(c => c.id === selectedCaseId) ?? null
+
+  return (
+    <>
+      <BoardHeader>
+        {selectedCase === null ? (
+          <CaseHeading
+            tag={t('canvass.header.appTag')}
+            title={t('canvass.header.commandCentre')}
+          />
+        ) : (
+          <CaseHeading
+            tag={selectedCase.caseNumber}
+            title={
+              selectedCase.displayName ?? selectedCase.incidentBusinessName
+            }
+          />
+        )}
+        <ConnectionIndicator state={healthState} lastConfirm={lastConfirm} />
+        <LiveClock />
+      </BoardHeader>
+      <ConnectionBanner state={healthState} lastConfirm={lastConfirm} />
+    </>
   )
 }
 

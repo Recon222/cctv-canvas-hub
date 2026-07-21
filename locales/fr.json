@@ -166,6 +166,8 @@
   "cloudSession.signOutFailed": "Échec de la déconnexion",
 
   "canvass.loading": "Chargement…",
+  "canvass.header.appTag": "CANVAS HUB",
+  "canvass.header.commandCentre": "Centre de commandement — dossiers actifs",
   "canvass.nav.cases": "Dossiers",
   "canvass.nav.case": "Tableau du dossier",
   "canvass.nav.map": "Carte",

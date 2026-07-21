@@ -166,6 +166,8 @@
   "cloudSession.signOutFailed": "Sign-out failed",
 
   "canvass.loading": "Loading…",
+  "canvass.header.appTag": "CANVAS HUB",
+  "canvass.header.commandCentre": "Command centre — active cases",
   "canvass.nav.cases": "Cases",
   "canvass.nav.case": "Case dashboard",
   "canvass.nav.map": "Map",
