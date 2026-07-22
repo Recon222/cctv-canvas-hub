@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Lock } from 'lucide-react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { cn } from '@/lib/utils'
+import { commands } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
 import {
   emitSecondaryReady,
@@ -124,6 +125,20 @@ export function SecondaryRoot({ view }: { view: PopOutView }) {
         predicate: query => isCaseDataKey(query.queryKey[0]),
       })
       setPhase('ended')
+      // PR #10 M1 (fix b): SELF-CLOSE — an ended window must not linger
+      // for the rail's focus-if-open path to focus after re-sign-in
+      // (revival was rejected by two review lanes: endedRef blocks it,
+      // and it reintroduces the setAuth-before-subscribe hazard + a
+      // cross-operator case seed). Strictly AFTER the awaited teardown
+      // and purge above — the destroy can never race them; the brief
+      // terminal-screen flash before the window dies is fine. On close
+      // failure the terminal screen simply remains.
+      const closed = await commands.closeViewWindow(view)
+      if (closed.status === 'error') {
+        logger.warn('secondary: self-close failed; terminal screen stays', {
+          error: closed.error,
+        })
+      }
     }
 
     const attach = async () => {

@@ -18,6 +18,7 @@ import {
 } from '@/features/cloud-session'
 import { ProcessPanel, usePanelPosture } from '@/features/process-panel'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
+import { resetViewWindows } from '../services/viewWindows'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
 import { useViewWindowBridge } from '../hooks/useViewWindowBridge'
 import { useCases } from '../hooks/useCases'
@@ -92,6 +93,10 @@ export function CanvassRoot() {
     return () => {
       resetCanvassStore()
       resetHealthStore()
+      // PR #10 M1: the pop-out registry is per-session module state too
+      // — left stale, a re-sign-in reopen would focus a dead window and
+      // could seed operator A's case into operator B's handshake.
+      resetViewWindows()
       queryClient.removeQueries({
         predicate: query => isCaseDataKey(query.queryKey[0]),
       })

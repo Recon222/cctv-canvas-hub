@@ -42,7 +42,11 @@ import { resetHealthStore } from '@/store/health-store'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { NavRail } from '../components/NavRail'
 import { SecondaryRoot } from '../components/SecondaryRoot'
-import { openViewWindow } from '../services/viewWindows'
+import {
+  openViewWindow,
+  replySecondaryReady,
+  resetViewWindows,
+} from '../services/viewWindows'
 import { subscribeToCaseActivity } from '../services/realtimeService'
 import { useViewWindowBridge } from '../hooks/useViewWindowBridge'
 import { resetCanvassStore, useCanvassStore } from '../store/canvass-store'
@@ -237,6 +241,33 @@ describe('view-window service contract (Phase 7.1)', () => {
       caseId: 'case-two',
     })
     expect(useCanvassStore.getState().poppedViews.map).toBe(true)
+  })
+
+  // PR #10 M1 (fix b): sign-out must clear the per-view case registry
+  // DIRECTLY — the bridge has already unmounted, so view-window-closed
+  // can never do it. A stale registry after re-sign-in is the
+  // cross-operator seed the review flagged: operator A's caseId would
+  // answer operator B's fresh handshake.
+  it('resetViewWindows clears the registry and popped flags — reopen starts fresh', async () => {
+    await openViewWindow('map', SEED_CASE_ID)
+    expect(useCanvassStore.getState().poppedViews.map).toBe(true)
+
+    resetViewWindows()
+
+    expect(useCanvassStore.getState().poppedViews.map).toBe(false)
+    // The registry is empty: a secondary-ready for that view gets NO
+    // view-context reply (no stale case seed)…
+    vi.mocked(emitViewContext).mockClear()
+    replySecondaryReady('map')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(emitViewContext).not.toHaveBeenCalled()
+
+    // …and the next open registers fresh (create, then a fresh context).
+    await openViewWindow('map', 'case-after-resignin')
+    expect(emitViewContext).toHaveBeenCalledWith({
+      view: 'map',
+      caseId: 'case-after-resignin',
+    })
   })
 })
 
@@ -480,8 +511,9 @@ describe('SecondaryRoot (Phase 7.3A)', () => {
       [{ id: 'loc-1', name: 'operator A row' }]
     )
 
-    // session-ended (SIGN-OUT ONLY): teardown BEFORE the ended screen,
-    // then the per-context session-exit purge (doc 01 §5.4).
+    // session-ended (SIGN-OUT ONLY): teardown, then the per-context
+    // session-exit purge (doc 01 §5.4) — the teardown-before-terminal
+    // ORDERING is pinned by the deferred-teardown rider below (PR #10 L3).
     act(() => {
       for (const handler of harness.ended) {
         handler()
@@ -501,5 +533,94 @@ describe('SecondaryRoot (Phase 7.3A)', () => {
     expect(
       queryClient.getQueryData(['locations', SEED_CASE_ID])
     ).toBeUndefined()
+    // PR #10 M1 (fix b): the ended window SELF-CLOSES — an ended pop-out
+    // must never linger for the rail's focus-if-open path to focus.
+    await waitFor(() => {
+      expect(commands.closeViewWindow).toHaveBeenCalledWith('case')
+    })
+  })
+
+  // PR #10 M1 / pr-test-analyzer MUT11 — the endedRef guard was
+  // shipping uncovered: a late (or racing) session-token after
+  // session-ended must be IGNORED, never revive the terminal window
+  // with a fresh client.
+  it('ignores a late session-token after session-ended (endedRef guard)', async () => {
+    useSessionStore.setState({ state: 'booting' })
+    renderSecondary('case')
+    await waitFor(() => {
+      expect(emitSecondaryReady).toHaveBeenCalled()
+    })
+    act(() => {
+      for (const handler of harness.token) {
+        handler(TOKEN_PAYLOAD)
+      }
+    })
+    await screen.findByTestId('case-dashboard')
+
+    act(() => {
+      for (const handler of harness.ended) {
+        handler()
+      }
+    })
+    await screen.findByText('Session ended')
+    vi.mocked(initSecondaryClient).mockClear()
+
+    act(() => {
+      for (const handler of harness.token) {
+        handler({ ...TOKEN_PAYLOAD, token: 'too-late-jwt' })
+      }
+    })
+
+    expect(initSecondaryClient).not.toHaveBeenCalled()
+    expect(updateSecondaryToken).not.toHaveBeenCalledWith('too-late-jwt')
+    expect(screen.getByText('Session ended')).toBeInTheDocument()
+    expect(screen.queryByTestId('case-dashboard')).not.toBeInTheDocument()
+  })
+
+  // PR #10 L3 — the real ordering pin #117's comment used to overclaim:
+  // while teardownSecondaryClient is still IN FLIGHT the board stays up
+  // and neither the terminal screen nor the self-close may happen; both
+  // follow only once teardown resolves (MUT2: setPhase-before-teardown
+  // now fails here).
+  it('holds the terminal screen and self-close until teardown resolves', async () => {
+    useSessionStore.setState({ state: 'booting' })
+    let releaseTeardown: () => void = () => undefined
+    vi.mocked(teardownSecondaryClient).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          releaseTeardown = resolve
+        })
+    )
+    renderSecondary('case')
+    await waitFor(() => {
+      expect(emitSecondaryReady).toHaveBeenCalled()
+    })
+    act(() => {
+      for (const handler of harness.token) {
+        handler(TOKEN_PAYLOAD)
+      }
+    })
+    await screen.findByTestId('case-dashboard')
+
+    act(() => {
+      for (const handler of harness.ended) {
+        handler()
+      }
+    })
+
+    // Teardown pending: no terminal screen, no self-close, board intact
+    // (channels are still being removed — rendering "ended" now would
+    // lie about the token's liveness).
+    expect(screen.queryByText('Session ended')).not.toBeInTheDocument()
+    expect(screen.getByTestId('case-dashboard')).toBeInTheDocument()
+    expect(commands.closeViewWindow).not.toHaveBeenCalled()
+
+    act(() => {
+      releaseTeardown()
+    })
+    await screen.findByText('Session ended')
+    await waitFor(() => {
+      expect(commands.closeViewWindow).toHaveBeenCalledWith('case')
+    })
   })
 })

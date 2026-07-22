@@ -73,3 +73,17 @@ export function clearViewWindow(view: PopOutView): void {
   openViewCases.delete(view)
   useCanvassStore.getState().setViewPopped(view, false)
 }
+
+/**
+ * Session-exit registry reset (PR #10 M1, fix b): called from the board
+ * unmount (CanvassRoot's session-exit cleanup — the same place every
+ * other per-session module state resets; `signOut()` itself cannot call
+ * canvass code without an import cycle, and `view-window-closed` cannot
+ * cover it because the bridge has already unmounted). A stale registry
+ * after re-sign-in is a cross-operator seed: operator A's caseId would
+ * answer operator B's fresh handshake.
+ */
+export function resetViewWindows(): void {
+  openViewCases.clear()
+  useCanvassStore.setState({ poppedViews: { case: false, map: false } })
+}
