@@ -311,7 +311,9 @@
   "cloudSession.lock.subtitle": "تبقى اللوحة مباشرة خلف هذا القفل",
   "cloudSession.lock.passwordLabel": "كلمة مرور المنسّق",
   "cloudSession.lock.failed": "كلمة المرور غير مطابقة — حاول مجددًا",
+  "cloudSession.lock.unreachable": "تعذّر الوصول إلى السحابة — تحقق من اتصال الغرفة وحاول مجددًا",
   "cloudSession.lock.unlock": "فتح القفل",
+  "cloudSession.lock.signOut": "تسجيل الخروج بدلًا من ذلك",
   "cloudSession.lock.signedInAs": "مسجّل الدخول باسم {{email}} · منسّق",
 
   "processPanel.toggle": "مراقب العمليات",

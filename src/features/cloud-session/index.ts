@@ -12,8 +12,10 @@ export {
   ConnectionIndicator,
   ConnectionBanner,
 } from './components/ConnectionIndicator'
+export { SessionLockOverlay } from './components/LockOverlay'
 export { useSessionStore } from './store/session-store'
 export { useAuthBootstrap } from './hooks/useAuthBootstrap'
+export { useIdleLock } from './hooks/useIdleLock'
 // Sign-out action for non-component callers (the palette's
 // session-sign-out command, 5.3B); SignOutButton stays the UI surface.
 export { signOut } from './services/authService'

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useUIStore } from '@/store/ui-store'
+import { useSessionStore } from '@/features/cloud-session'
 import type { CommandContext } from '@/lib/commands/types'
 
 /**
@@ -13,6 +14,12 @@ import type { CommandContext } from '@/lib/commands/types'
 export function useKeyboardShortcuts(commandContext: CommandContext) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 6.1 (AD6): a locked board is interaction-dead, global shortcuts
+      // included — the overlay swallows pointer input, but document-level
+      // key listeners need their own gate.
+      if (useSessionStore.getState().state === 'locked') {
+        return
+      }
       if (e.metaKey || e.ctrlKey) {
         switch (e.key) {
           case ',': {

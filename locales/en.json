@@ -299,7 +299,9 @@
   "cloudSession.lock.subtitle": "The board stays live behind this lock",
   "cloudSession.lock.passwordLabel": "Coordinator password",
   "cloudSession.lock.failed": "That password didn't match — try again",
+  "cloudSession.lock.unreachable": "Can't reach the cloud — check the room's connection and try again",
   "cloudSession.lock.unlock": "Unlock",
+  "cloudSession.lock.signOut": "Sign out instead",
   "cloudSession.lock.signedInAs": "Signed in as {{email}} · coordinator",
 
   "processPanel.toggle": "Process monitor",

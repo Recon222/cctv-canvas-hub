@@ -1,18 +1,67 @@
 import React from 'react'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { commands } from '@/lib/tauri-bindings'
+import { renderWithFeatureProviders } from '@/test/feature-test-utils'
+import { getSupabase } from '@/lib/supabase/client'
+import { useUIStore } from '@/store/ui-store'
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
+import { MainWindowContent } from '@/components/layout/MainWindowContent'
 import { useSessionStore } from '../store/session-store'
 import { useIdleLock } from '../hooks/useIdleLock'
+import type { CommandContext } from '@/lib/commands/types'
 
 /**
- * Phase 6.1A — the idle timer (tests #100–101 + the ledger-L1 clamp).
+ * Phase 6.1 — the idle timer (tests #100–101 + the ledger-L1 clamp)
+ * and the lock overlay (tests #102–103 + the D3 error arms).
  *
  * Fake timers drive the idle window; the preferences query resolves on
  * the microtask queue (the mocked `loadPreferences` command), so each
  * mount flushes it with an async act before advancing time.
+ *
+ * The overlay tests mock the supabase client at the doc-03 choke point
+ * (`vi.mock('@/lib/supabase/client')`) so the REAL `reauthenticate`
+ * classification runs (D3: wrong password vs unreachable), and stub
+ * `CanvassRoot` with a static board carrying DVR credentials so #102's
+ * byte-identity pin is cheap to assert.
  */
+
+vi.mock('@/lib/supabase/client')
+vi.mock('../hooks/useAuthBootstrap', () => ({ useAuthBootstrap: vi.fn() }))
+vi.mock('@/features/canvass', () => ({
+  CanvassRoot: () => (
+    <div data-testid="board-stub">
+      <p>QuickMart Convenience</p>
+      <p>DVR admin / dvr-pass-1234</p>
+    </div>
+  ),
+}))
+
+/** Minimal client fake: only the surfaces Flow F touches. */
+function mockSupabaseClient(overrides: {
+  signInError?: { message: string; status?: number } | null
+}) {
+  const fake = {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: {
+          session: { user: { email: 'coord.reyes@canvass.dev' } },
+        },
+        error: null,
+      }),
+      signInWithPassword: vi.fn().mockResolvedValue({
+        data: {},
+        error: overrides.signInError ?? null,
+      }),
+      signOut: vi.fn().mockResolvedValue({ error: null }),
+    },
+    removeAllChannels: vi.fn().mockResolvedValue([]),
+  }
+  vi.mocked(getSupabase).mockReturnValue(fake as never)
+  return fake
+}
 
 function preferences(idleLockMinutes: number | null) {
   return {
@@ -149,5 +198,160 @@ describe('useIdleLock (6.1A)', () => {
     })
     // Still locked, and no zombie timer re-locking after unlock either.
     expect(useSessionStore.getState().state).toBe('locked')
+  })
+})
+
+describe('LockOverlay (6.1B)', () => {
+  beforeEach(() => {
+    useSessionStore.setState({ state: 'active' })
+  })
+
+  afterEach(() => {
+    useSessionStore.setState({ state: 'booting' })
+    useUIStore.setState({ rightSidebarVisible: true })
+  })
+
+  // Test #102
+  it('leaves board content untouched while locked and blocks interaction', async () => {
+    mockSupabaseClient({})
+    renderWithFeatureProviders(<MainWindowContent />)
+
+    const board = screen.getByTestId('board-stub')
+    const unlockedText = board.textContent
+
+    act(() => {
+      useSessionStore.getState().lock()
+    })
+    // Flush the overlay's async signed-in-email lookup (display-only).
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // The board is still mounted and BYTE-IDENTICAL — DVR credentials
+    // included (AD6 + owner directive: lock alters nothing, ever).
+    expect(screen.getByTestId('board-stub').textContent).toBe(unlockedText)
+    expect(screen.getByTestId('board-stub').textContent).toContain(
+      'DVR admin / dvr-pass-1234'
+    )
+
+    // The overlay is an input-swallowing veil covering the content area.
+    const overlay = screen
+      .getByText('Board locked — updates continue')
+      .closest('div.absolute.inset-0')
+    expect(overlay).not.toBeNull()
+
+    // Interaction-dead includes document-level shortcuts: Ctrl+2 (the
+    // panel toggle) must not fire while locked, and must again after.
+    const context = { openPreferences: vi.fn() } as unknown as CommandContext
+    renderHook(() => useKeyboardShortcuts(context))
+    const before = useUIStore.getState().rightSidebarVisible
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: '2', ctrlKey: true })
+      )
+    })
+    expect(useUIStore.getState().rightSidebarVisible).toBe(before)
+    act(() => {
+      useSessionStore.getState().unlock()
+    })
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: '2', ctrlKey: true })
+      )
+    })
+    expect(useUIStore.getState().rightSidebarVisible).toBe(!before)
+  })
+
+  // Test #103 — including both D3 error arms: the inline error names
+  // WHICH failure (wrong password vs cloud unreachable).
+  it('resumes on successful re-auth and stays locked on failure', async () => {
+    const user = userEvent.setup()
+    const fake = mockSupabaseClient({
+      signInError: { message: 'Invalid login credentials', status: 400 },
+    })
+    renderWithFeatureProviders(<MainWindowContent />)
+    act(() => {
+      useSessionStore.getState().lock()
+    })
+    // Flush the overlay's async signed-in-email lookup (display-only).
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const input = screen.getByLabelText('Coordinator password')
+
+    // Wrong password: the cloud answered and refused → stay locked,
+    // wrong-password copy.
+    await user.type(input, 'wrong-password')
+    await user.click(screen.getByRole('button', { name: 'Unlock' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "That password didn't match — try again"
+    )
+    expect(useSessionStore.getState().state).toBe('locked')
+
+    // Unreachable: nothing answered → stay locked, network copy (a
+    // coordinator must know which failure this was — D3).
+    fake.auth.signInWithPassword.mockResolvedValue({
+      data: {},
+      error: { message: 'fetch failed', status: 0 },
+    })
+    await user.clear(input)
+    await user.type(input, 'lVNI7U1gt78zHtlz')
+    await user.click(screen.getByRole('button', { name: 'Unlock' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Can't reach the cloud — check the room's connection and try again"
+    )
+    expect(useSessionStore.getState().state).toBe('locked')
+
+    // Correct password → active, overlay gone, board still there.
+    fake.auth.signInWithPassword.mockResolvedValue({ data: {}, error: null })
+    await user.clear(input)
+    await user.type(input, 'lVNI7U1gt78zHtlz')
+    await user.click(screen.getByRole('button', { name: 'Unlock' }))
+    await waitFor(() => {
+      expect(useSessionStore.getState().state).toBe('active')
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByTestId('board-stub')).toBeInTheDocument()
+  })
+
+  it('keeps sign-out reachable from the overlay', async () => {
+    const user = userEvent.setup()
+    mockSupabaseClient({})
+    renderWithFeatureProviders(<MainWindowContent />)
+    act(() => {
+      useSessionStore.getState().lock()
+    })
+    // Flush the overlay's async signed-in-email lookup (display-only).
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Sign out instead' }))
+    await waitFor(() => {
+      expect(useSessionStore.getState().state).toBe('signed-out')
+    })
+    // vaultClear ran (belt and braces — same contract as SignOutButton).
+    expect(vi.mocked(commands.vaultClear)).toHaveBeenCalled()
+  })
+
+  it('shows the signed-in email on the overlay when the config carries it', async () => {
+    mockSupabaseClient({})
+    vi.mocked(commands.loadCloudConfig).mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        url: 'https://example.supabase.co',
+        publishable_key: 'sb_publishable_x',
+        signed_in_email: 'coord.reyes@canvass.dev',
+      },
+    })
+    useSessionStore.setState({ state: 'locked' })
+    renderWithFeatureProviders(<MainWindowContent />)
+
+    expect(
+      await screen.findByText(
+        'Signed in as coord.reyes@canvass.dev · coordinator'
+      )
+    ).toBeInTheDocument()
   })
 })

@@ -6,7 +6,7 @@
 import { commands } from '@/lib/tauri-bindings'
 import { getSupabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
-import { loadConfig, saveConfig } from './configService'
+import { loadConfig, saveConfig, ProbeUnreachableError } from './configService'
 
 /** The cloud schema this app understands (AD10 — fail-closed gate). */
 export const APP_REQUIRED_SCHEMA_VERSION = 1
@@ -99,7 +99,15 @@ export async function checkSchemaGate(): Promise<'ok' | 'mismatch'> {
   return version === APP_REQUIRED_SCHEMA_VERSION ? 'ok' : 'mismatch'
 }
 
-/** Flow F unlock: password re-auth against the signed-in account. */
+/**
+ * Flow F unlock: password re-auth against the signed-in account.
+ *
+ * Ledger D3: `false` means the cloud ANSWERED and refused — a wrong
+ * password. A network-level failure throws {@link ProbeUnreachableError}
+ * instead (reusing the enrollment probe's distinction), so the lock
+ * screen can tell a coordinator WHICH it was — retype the password vs
+ * check the room's connection.
+ */
 export async function reauthenticate(password: string): Promise<boolean> {
   const supabase = getSupabase()
   const { data } = await supabase.auth.getSession()
@@ -115,5 +123,20 @@ export async function reauthenticate(password: string): Promise<boolean> {
     return false
   }
   const { error } = await supabase.auth.signInWithPassword({ email, password })
-  return !error
+  if (!error) {
+    return true
+  }
+  if (isNetworkAuthError(error)) {
+    throw new ProbeUnreachableError(error.message)
+  }
+  return false
+}
+
+/**
+ * GoTrue surfaces fetch-level failures as `AuthRetryableFetchError` with
+ * `status` 0/undefined; a 5xx is equally "not your password" — only a
+ * definite 4xx refusal reads as bad credentials.
+ */
+function isNetworkAuthError(error: { status?: number }): boolean {
+  return error.status === undefined || error.status === 0 || error.status >= 500
 }

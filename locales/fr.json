@@ -299,7 +299,9 @@
   "cloudSession.lock.subtitle": "Le tableau reste en direct derrière ce verrou",
   "cloudSession.lock.passwordLabel": "Mot de passe du coordonnateur",
   "cloudSession.lock.failed": "Ce mot de passe ne correspond pas — réessayez",
+  "cloudSession.lock.unreachable": "Impossible de joindre le nuage — vérifiez la connexion de la salle et réessayez",
   "cloudSession.lock.unlock": "Déverrouiller",
+  "cloudSession.lock.signOut": "Se déconnecter plutôt",
   "cloudSession.lock.signedInAs": "Connecté en tant que {{email}} · coordonnateur",
 
   "processPanel.toggle": "Moniteur de processus",
