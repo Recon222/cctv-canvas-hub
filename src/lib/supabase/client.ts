@@ -69,6 +69,46 @@ export async function teardownSupabase(): Promise<void> {
 }
 
 /**
+ * Refresh only this close to (or past) expiry on a wake path —
+ * `autoRefreshToken` owns ROUTINE rotation, and racing its ticker can
+ * submit an already-rotated refresh token (Flow E3, Phase 6.2).
+ */
+export const SESSION_EXPIRY_MARGIN_MS = 60_000
+
+export type SessionFreshness = 'fresh' | 'refreshed' | 'failed'
+
+/**
+ * Wake-time session check (Flow E3): `fresh` = token comfortably valid,
+ * nothing done; `refreshed` = rotated near/after expiry AND the realtime
+ * socket re-authed with the new token (refresh-then-setAuth order);
+ * `failed` = no session, or the refresh was refused — the session is
+ * genuinely dead and the caller must exit honestly (#106).
+ *
+ * Takes the client as an argument so the caller resolves `getSupabase()`
+ * synchronously (a context with no client has nothing to refresh).
+ */
+export async function ensureFreshSession(
+  supabase: SupabaseClient
+): Promise<SessionFreshness> {
+  const { data, error } = await supabase.auth.getSession()
+  if (error !== null || data.session === null) {
+    return 'failed'
+  }
+  const expiresAtMs = (data.session.expires_at ?? 0) * 1000
+  if (expiresAtMs - Date.now() > SESSION_EXPIRY_MARGIN_MS) {
+    return 'fresh'
+  }
+  const refreshed = await supabase.auth.refreshSession()
+  if (refreshed.error !== null || refreshed.data.session === null) {
+    return 'failed'
+  }
+  // The realtime socket authenticates separately — hand it the rotated
+  // token BEFORE the catch-up refetch re-subscribes anything.
+  await supabase.realtime.setAuth()
+  return 'refreshed'
+}
+
+/**
  * Transient client for the pre-init enrollment probe — no session
  * persistence, no refresh loop, never the vault.
  */

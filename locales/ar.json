@@ -144,6 +144,7 @@
   "toast.error.fullscreenExitFailed": "فشل الخروج من ملء الشاشة: {{message}}",
 
   "cloudSession.errors.configLoadFailed": "تعذّر قراءة إعدادات السحابة المحفوظة",
+  "cloudSession.errors.sessionExpired": "انتهت صلاحية جلسة السحابة — سجّل الدخول مجددًا",
   "cloudSession.errors.bootstrapFailed": "تعذّر استعادة جلسة السحابة",
 
   "cloudSession.setup.title": "الاتصال بسحابة وكالتك",

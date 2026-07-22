@@ -1,8 +1,12 @@
 import React from 'react'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { toast } from 'sonner'
 import { useConnectionHealth } from '@/hooks/useConnectionHealth'
+import { getSupabase, SupabaseNotInitializedError } from '@/lib/supabase/client'
+import type * as supabaseClientModule from '@/lib/supabase/client'
+import { useSessionStore } from '@/features/cloud-session'
 import {
   useHealthStore,
   evaluate,
@@ -15,6 +19,19 @@ import {
   SIGNED_URL_KEY_PREFIX,
   type HealthMarks,
 } from './health-store'
+
+vi.mock('@/lib/supabase/client', async importOriginal => {
+  const actual = await importOriginal<typeof supabaseClientModule>()
+  return {
+    ...actual,
+    // Default: no client in this context — the wake catch-up (6.2)
+    // degrades to the plain sync invalidation every pre-6.2 arm was
+    // written against. The 6.2 describe swaps in a fake per test.
+    getSupabase: vi.fn(() => {
+      throw new actual.SupabaseNotInitializedError()
+    }),
+  }
+})
 
 function marks(overrides: Partial<HealthMarks> = {}): HealthMarks {
   return {
@@ -374,6 +391,158 @@ describe('useConnectionHealth (2.5B)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // 6.2 (Flow E3): every wake path converges on session-check →
+  // (refresh near expiry) → setAuth → invalidate.
+  describe('wake catch-up (6.2)', () => {
+    function fakeSupabase(config: {
+      /** ms until token expiry; null = no session at all. */
+      expiresInMs: number | null
+      refresh?: 'ok' | 'error'
+    }) {
+      const order: string[] = []
+      const session = (expiresInMs: number) => ({
+        expires_at: Math.floor((Date.now() + expiresInMs) / 1000),
+        user: { email: 'coord.reyes@canvass.dev' },
+      })
+      const fake = {
+        auth: {
+          getSession: vi.fn(() =>
+            Promise.resolve({
+              data: {
+                session:
+                  config.expiresInMs === null
+                    ? null
+                    : session(config.expiresInMs),
+              },
+              error: null,
+            })
+          ),
+          refreshSession: vi.fn(() => {
+            order.push('refreshSession')
+            return config.refresh === 'error'
+              ? Promise.resolve({
+                  data: { session: null },
+                  error: { message: 'refresh_token_already_used' },
+                })
+              : Promise.resolve({
+                  data: { session: session(3_600_000) },
+                  error: null,
+                })
+          }),
+        },
+        realtime: {
+          setAuth: vi.fn(() => {
+            order.push('setAuth')
+            return Promise.resolve()
+          }),
+        },
+      }
+      vi.mocked(getSupabase).mockImplementation(() => fake as never)
+      return { fake, order }
+    }
+
+    beforeEach(() => {
+      useSessionStore.setState({ state: 'active' })
+    })
+
+    afterEach(() => {
+      vi.mocked(getSupabase).mockImplementation(() => {
+        throw new SupabaseNotInitializedError()
+      })
+      useSessionStore.setState({ state: 'booting' })
+    })
+
+    // Test #104 — the fresh arm: autoRefreshToken owns routine
+    // rotation; a wake with a fresh session must NOT race it.
+    it('does not refresh on wake when the session is fresh', async () => {
+      const { fake } = fakeSupabase({ expiresInMs: 3_600_000 })
+      const { queryClient } = mountHook()
+      queryClient.setQueryData(['cases'], [])
+
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+
+      await waitFor(() => {
+        expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(true)
+      })
+      expect(fake.auth.refreshSession).not.toHaveBeenCalled()
+      expect(fake.realtime.setAuth).not.toHaveBeenCalled()
+    })
+
+    // Test #104 — the near-expiry arm: refresh THEN setAuth, in order
+    // (the socket must get the rotated token before the refetch).
+    it('refreshes then re-auths realtime, in order, near expiry', async () => {
+      const { fake, order } = fakeSupabase({ expiresInMs: 10_000 })
+      const { queryClient } = mountHook()
+      queryClient.setQueryData(['cases'], [])
+
+      act(() => {
+        window.dispatchEvent(new Event('online'))
+      })
+
+      await waitFor(() => {
+        expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(true)
+      })
+      expect(fake.auth.refreshSession).toHaveBeenCalledTimes(1)
+      expect(order).toEqual(['refreshSession', 'setAuth'])
+    })
+
+    // Test #105
+    it('invalidates case-data on catch-up, excluding signed URLs', async () => {
+      fakeSupabase({ expiresInMs: 10_000 })
+      const { queryClient } = mountHook()
+      queryClient.setQueryData(['cases'], [])
+      queryClient.setQueryData(['locations', 'c1'], [])
+      queryClient.setQueryData(['media', 'c1'], [])
+      queryClient.setQueryData(
+        [SIGNED_URL_KEY_PREFIX, 'images', 'a/b.jpg'],
+        'https://signed.example'
+      )
+
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'))
+      })
+
+      await waitFor(() => {
+        expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(true)
+      })
+      expect(
+        queryClient.getQueryState(['locations', 'c1'])?.isInvalidated
+      ).toBe(true)
+      expect(queryClient.getQueryState(['media', 'c1'])?.isInvalidated).toBe(
+        true
+      )
+      // Signed URLs refresh on their own interval (AD11) — a wake must
+      // not mass-regenerate N storage URLs.
+      expect(
+        queryClient.getQueryState([SIGNED_URL_KEY_PREFIX, 'images', 'a/b.jpg'])
+          ?.isInvalidated
+      ).toBe(false)
+    })
+
+    // Test #106
+    it('drops to signed-out when the refresh fails', async () => {
+      const errorToast = vi.spyOn(toast, 'error')
+      fakeSupabase({ expiresInMs: 10_000, refresh: 'error' })
+      const { queryClient } = mountHook()
+      queryClient.setQueryData(['cases'], [])
+
+      act(() => {
+        window.dispatchEvent(new Event('online'))
+      })
+
+      // Session genuinely dead: an honest exit with a toast — never a
+      // silent stale board behind a green dot.
+      await waitFor(() => {
+        expect(useSessionStore.getState().state).toBe('signed-out')
+      })
+      expect(errorToast).toHaveBeenCalled()
+      expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(false)
+      errorToast.mockRestore()
+    })
   })
 
   // Test #64

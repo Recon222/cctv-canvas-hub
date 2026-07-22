@@ -144,6 +144,7 @@
   "toast.error.fullscreenExitFailed": "Failed to exit fullscreen: {{message}}",
 
   "cloudSession.errors.configLoadFailed": "Could not read the saved cloud configuration",
+  "cloudSession.errors.sessionExpired": "Cloud session expired — sign in again",
   "cloudSession.errors.bootstrapFailed": "Could not restore the cloud session",
 
   "cloudSession.setup.title": "Connect to your agency cloud",
