@@ -232,6 +232,32 @@ async vaultStatus() : Promise<Result<VaultStatus, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Opens (or focuses, create-once) the pop-out window for `view`.
+ * 
+ * `case_id` is logging context only — the case reaches the secondary
+ * via the JS-side `view-context` handshake (AD13; one emitter,
+ * `sessionEvents.ts`), never through this command.
+ */
+async openViewWindow(view: ViewWindow, caseId: string | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_view_window", { view, caseId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Destroys the pop-out window for `view` (idempotent).
+ */
+async closeViewWindow(view: ViewWindow) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_view_window", { view }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -349,6 +375,15 @@ export type VaultStatus = { config_present: boolean; vault_present: boolean; key
  * Last vault write, epoch ms (f64 — specta rejects u64).
  */
 vault_mtime_ms: number | null }
+/**
+ * The pop-out views (A1/AD12): the case dashboard and the map.
+ * 
+ * The Cases landing is deliberately NOT a variant — it is bound to the
+ * main window (test #119) — and A2 removed the diagnostics window, so
+ * invalid views are unrepresentable over IPC. Deliberately distinct
+ * from the frontend store's three-view union.
+ */
+export type ViewWindow = "case" | "map"
 
 /** tauri-specta globals **/
 

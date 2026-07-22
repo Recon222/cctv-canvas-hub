@@ -21,6 +21,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {
     // Mock unlisten function
   }),
+  emit: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@tauri-apps/plugin-updater', () => ({
@@ -66,6 +67,8 @@ vi.mock('@/lib/tauri-bindings', () => ({
     vaultGet: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     vaultSet: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     vaultClear: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    openViewWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    closeViewWindow: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     readLogTail: vi.fn().mockResolvedValue({ status: 'ok', data: '' }),
     vaultStatus: vi.fn().mockResolvedValue({
       status: 'ok',

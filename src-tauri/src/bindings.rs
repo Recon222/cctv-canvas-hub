@@ -3,7 +3,7 @@ use tauri_specta::{collect_commands, Builder};
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::features::{
         cloud_session_commands, example_feature_commands, notifications_commands,
-        preferences_commands, quick_pane_commands, recovery_commands,
+        preferences_commands, quick_pane_commands, recovery_commands, view_windows_commands,
     };
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
@@ -35,6 +35,9 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         cloud_session_commands::vault_clear,
         cloud_session_commands::read_log_tail,
         cloud_session_commands::vault_status,
+        // View windows feature (M7 pop-outs)
+        view_windows_commands::open_view_window,
+        view_windows_commands::close_view_window,
     ])
 }
 
