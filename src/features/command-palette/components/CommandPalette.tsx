@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUIStore } from '@/store/ui-store'
+import { useSessionStore } from '@/features/cloud-session'
 import { useCommandContext } from '@/hooks/use-command-context'
 import { getAllCommands, executeCommand } from '@/lib/commands'
 import {
@@ -58,6 +59,13 @@ export function CommandPalette() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
+        // AD6 (6.1): a locked board is interaction-dead — this opener
+        // bypasses the command dispatcher, so it gates itself (the
+        // dispatcher would block executions anyway; the palette UI
+        // must not open over the lock overlay either).
+        if (useSessionStore.getState().state === 'locked') {
+          return
+        }
         toggleCommandPalette()
       }
     }

@@ -221,4 +221,49 @@ describe('Simplified Command System', () => {
       resetCanvassStore()
     })
   })
+
+  // 6.1 hardening (AD6 "interaction dead"): the dispatcher is the
+  // choke point for palette + titlebar paths — a locked session blocks
+  // every command except the window-management allow-list. (Unnumbered
+  // arms; menu/shortcut listeners that bypass the dispatcher carry
+  // their own one-line gates, verified live.)
+  describe('locked-session command gate (6.1, AD6)', () => {
+    afterEach(() => {
+      useSessionStore.setState({ state: 'booting' })
+    })
+
+    it('blocks command execution while the session is locked', async () => {
+      registerCommands(navigationCommands)
+      const setter = vi.fn()
+      mockUIStore.getState.mockReturnValue({
+        leftSidebarVisible: true,
+        commandPaletteOpen: false,
+        setLeftSidebarVisible: setter,
+      })
+
+      useSessionStore.setState({ state: 'locked' })
+      const blocked = await executeCommand('hide-left-sidebar', mockContext)
+      expect(blocked.success).toBe(false)
+      expect(blocked.error).toContain('locked')
+      expect(setter).not.toHaveBeenCalled()
+
+      // Unlocked: the same command executes normally.
+      useSessionStore.setState({ state: 'active' })
+      const allowed = await executeCommand('hide-left-sidebar', mockContext)
+      expect(allowed.success).toBe(true)
+      expect(setter).toHaveBeenCalledWith(false)
+    })
+
+    it('keeps window-management commands reachable while locked', async () => {
+      const { windowCommands } = await import('./window-commands')
+      registerCommands(windowCommands)
+
+      useSessionStore.setState({ state: 'locked' })
+      const result = await executeCommand('window-minimize', mockContext)
+      // The gate lets it through to execution — in jsdom the Tauri
+      // window API then fails, which is exactly the proof: the failure
+      // is an execution error, never the locked block.
+      expect(result.error ?? '').not.toContain('locked')
+    })
+  })
 })
