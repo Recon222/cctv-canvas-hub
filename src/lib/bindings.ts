@@ -216,6 +216,22 @@ async vaultClear() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async readLogTail(lines: number) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_log_tail", { lines }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async vaultStatus() : Promise<Result<VaultStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("vault_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -275,7 +291,14 @@ publishable_key: string;
 /**
  * Convenience for the re-auth prompt; NOT a secret.
  */
-signed_in_email: string | null }
+signed_in_email: string | null; 
+/**
+ * Idle-lock durability (PR #9 H1): set on lock, cleared on
+ * unlock/sign-out, so a reload/relaunch re-enters `locked` instead
+ * of `active`. Not a secret — it gates nothing by itself (the
+ * session stays in the vault); absent on pre-M6 files ⇒ unlocked.
+ */
+locked?: boolean }
 /**
  * Example data structure demonstrating feature-scoped types.
  * 
@@ -316,6 +339,16 @@ export type RecoveryError =
  * JSON serialization/deserialization error
  */
 { type: "ParseError"; message: string }
+/**
+ * Presence report for the ProcessPanel's SYSTEM lane (6.3B). Status
+ * only — nothing here ever decrypts (`vault_get` is the wrong tool
+ * for status; status must never touch plaintext).
+ */
+export type VaultStatus = { config_present: boolean; vault_present: boolean; keyring_key_present: boolean; 
+/**
+ * Last vault write, epoch ms (f64 — specta rejects u64).
+ */
+vault_mtime_ms: number | null }
 
 /** tauri-specta globals **/
 

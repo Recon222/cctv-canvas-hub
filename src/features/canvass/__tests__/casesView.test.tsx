@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, act, waitFor } from '@testing-library/react'
+import { render, screen, act, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nextProvider } from 'react-i18next'
@@ -275,21 +275,25 @@ describe('board header chrome (5.2 — D15)', () => {
     // Boot posture: the channel has not subscribed — honest "connecting"
     // even while the board's own fetches are already confirming (the
     // pre-confirm "awaiting" copy is pinned at the component level, #93).
-    expect(await screen.findByText('Connecting')).toBeInTheDocument()
+    // Scoped to the header banner as of 6.3C: the ProcessPanel footer
+    // renders the same state word, and THIS arm pins the D15 chip.
+    const header = within(await screen.findByRole('banner'))
+    expect(await header.findByText('Connecting')).toBeInTheDocument()
 
     // Positive confirmation on both planes ⇒ live, timestamp with seconds.
     act(() => {
       useHealthStore.getState().channelStatus('subscribed')
       useHealthStore.getState().recordFetchOk()
     })
-    expect(screen.getByText('Live')).toBeInTheDocument()
-    expect(screen.getByText(/Updated \d{2}:\d{2}:\d{2}/)).toBeInTheDocument()
+    expect(header.getByText('Live')).toBeInTheDocument()
+    expect(header.getByText(/Updated \d{2}:\d{2}:\d{2}/)).toBeInTheDocument()
   })
 
   it('escalates to the banner under the header when offline', async () => {
     stubChannel()
     renderWithFeatureProviders(<CanvassRoot />)
-    await screen.findByText('Connecting')
+    // Scoped as of 6.3C — the panel footer shows the state word too.
+    await within(await screen.findByRole('banner')).findByText('Connecting')
 
     // The banner mounts unconditionally and self-nulls while healthy.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()

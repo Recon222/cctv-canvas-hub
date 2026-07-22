@@ -33,6 +33,8 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         cloud_session_commands::vault_get,
         cloud_session_commands::vault_set,
         cloud_session_commands::vault_clear,
+        cloud_session_commands::read_log_tail,
+        cloud_session_commands::vault_status,
     ])
 }
 

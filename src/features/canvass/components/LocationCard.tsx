@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { MapPinOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSessionStore } from '@/features/cloud-session'
 import { useCanvassStore } from '../store/canvass-store'
 import { formatClockTime, formatBoardTimestamp } from '../services/format'
 import {
@@ -179,6 +180,21 @@ type OpenMedia =
 export function MediaStrip({ location }: { location: CanvassLocation }) {
   const { data: media } = useCaseMedia(location.caseId)
   const [open, setOpen] = useState<OpenMedia | null>(null)
+
+  // PR #9 fix-delta r2 N3: the viewer/player below portal to
+  // document.body — OUTSIDE the M1 inert shell — so the lock must
+  // dismiss them here, at the state owner (MainWindow's N2 effect
+  // can't reach component-local state). Dismissal, not suspension:
+  // unlock never resurrects whatever the walked-away operator had
+  // open. setState rides the store-subscription callback (the
+  // sanctioned external-system shape).
+  useEffect(() => {
+    return useSessionStore.subscribe(state => {
+      if (state.state === 'locked') {
+        setOpen(null)
+      }
+    })
+  }, [])
 
   const rows = (media ?? []).filter(row => row.locationId === location.id)
   if (rows.length === 0) {

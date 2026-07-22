@@ -400,6 +400,46 @@ describe('LocationCard media strip (4.3B)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  // PR #9 fix-delta r2 N3: the viewer and player portal to
+  // document.body — OUTSIDE the M1 inert shell — so the lock must
+  // dismiss them at the state owner (MediaStrip). An open viewer left
+  // behind at lock time would let an unauthenticated person page the
+  // location's whole media array and hit open-externally. Unlock does
+  // NOT resurrect (dismissal, not suspension — N2 parity).
+  it('dismisses an open viewer and player when the lock fires', async () => {
+    const user = userEvent.setup()
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    // Viewer arm.
+    await user.click(await screen.findByTitle('View register.png'))
+    await screen.findByRole('dialog')
+    act(() => {
+      useSessionStore.setState({ state: 'locked' })
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    act(() => {
+      useSessionStore.setState({ state: 'active' })
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    // Player arm.
+    await user.click(await screen.findByTitle('Play video (on demand)'))
+    await screen.findByRole('dialog')
+    act(() => {
+      useSessionStore.setState({ state: 'locked' })
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    act(() => {
+      useSessionStore.setState({ state: 'booting' })
+    })
+  })
+
   it('expands the video tile into the on-demand VideoPlayer', async () => {
     const user = userEvent.setup()
     renderWithFeatureProviders(

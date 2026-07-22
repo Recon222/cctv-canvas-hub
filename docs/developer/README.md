@@ -37,6 +37,7 @@ Technical documentation for building and extending this app. These docs describe
 | ----------------------------------------- | -------------------------------------------- |
 | [Data Persistence](./data-persistence.md) | File storage patterns, atomic writes, SQLite |
 | [External APIs](./external-apis.md)       | HTTP API calls, authentication, caching      |
+| [Supabase Integration](./supabase-integration.md) | Agency-cloud client, session vault, connection health, the test mock seam |
 
 ## Quality & Tooling
 

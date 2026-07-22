@@ -1,5 +1,14 @@
 import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import i18n from '@/i18n/config'
+import { logger } from '@/lib/logger'
+import {
+  ensureFreshSession,
+  getSupabase,
+  type SupabaseClient,
+} from '@/lib/supabase/client'
+import { useSessionStore } from '@/features/cloud-session'
 import { isCaseDataKey, useHealthStore } from '@/store/health-store'
 
 /**
@@ -12,8 +21,11 @@ import { isCaseDataKey, useHealthStore } from '@/store/health-store'
  * refresh on their own interval and must not be mass-regenerated on
  * every wifi blip — preferences, M3/M5 families) (review LOW).
  *
- * Wake-time session refresh (`getSession`/`refreshSession` near expiry)
- * is Phase 6.2 — not wired here yet.
+ * 6.2A: every wake path (online / visible / resubscribe) converges on
+ * `catchUp` — session validity check, refresh ONLY near/after expiry
+ * (`autoRefreshToken` owns routine rotation), `realtime.setAuth()`,
+ * THEN the allow-listed invalidation. Refresh failure is an honest
+ * sign-out with a toast, never a silent stale board (Flow E3, #106).
  */
 
 const EVALUATE_INTERVAL_MS = 10_000
@@ -24,13 +36,58 @@ function invalidateCaseData(queryClient: QueryClient): void {
   })
 }
 
+function exitSignedOut(cause: unknown): void {
+  logger.error('Wake catch-up: session refresh failed', { cause })
+  toast.error(i18n.t('cloudSession.errors.sessionExpired'))
+  useSessionStore.getState().setState('signed-out')
+}
+
+/** Flow E3 — the one catch-up path every wake signal converges on. */
+function catchUp(queryClient: QueryClient): void {
+  let supabase: SupabaseClient
+  try {
+    supabase = getSupabase()
+  } catch {
+    // No client in this context (pre-init) — nothing to refresh; the
+    // catch-up degrades to the plain invalidation.
+    invalidateCaseData(queryClient)
+    return
+  }
+  void ensureFreshSession(supabase)
+    .then(freshness => {
+      if (freshness === 'failed') {
+        // Session genuinely dead (definite refusal / no session) —
+        // never refetch behind a dead token.
+        exitSignedOut('refresh refused')
+        return
+      }
+      if (freshness === 'deferred') {
+        // PR #9 M2: a network-shaped refresh failure (offline wake,
+        // 5xx) is NOT a dead session — stay put, skip the refetch (it
+        // would 401 behind the stale token), and let the next
+        // wake/reconnect or the reconcile net retry. Health degrades
+        // honestly on its own evidence.
+        logger.debug('Wake catch-up deferred: refresh not reachable')
+        return
+      }
+      invalidateCaseData(queryClient)
+    })
+    .catch((cause: unknown) => {
+      // PR #9 L2: sign-out keys off the explicit 'failed' freshness
+      // result ONLY. A chain rejection is machinery-level breakage —
+      // log it and let the next tick retry; never a forced sign-out
+      // over a possibly-valid session.
+      logger.error('Wake catch-up failed unexpectedly', { cause })
+    })
+}
+
 export function useConnectionHealth(): void {
   const queryClient = useQueryClient()
 
   useEffect(() => {
     const onOnline = () => {
       useHealthStore.getState().setOnline(true)
-      invalidateCaseData(queryClient)
+      catchUp(queryClient)
     }
     const onOffline = () => {
       useHealthStore.getState().setOnline(false)
@@ -41,7 +98,7 @@ export function useConnectionHealth(): void {
         // Flow E3: a restored board catches up immediately instead of
         // waiting out the reconcile interval (refetchInterval is
         // focus-gated while hidden, so data really is stale here).
-        invalidateCaseData(queryClient)
+        catchUp(queryClient)
       }
     }
     window.addEventListener('online', onOnline)
@@ -60,7 +117,7 @@ export function useConnectionHealth(): void {
         previous.marks.channel !== 'subscribed' &&
         previous.marks.channel !== null
       ) {
-        invalidateCaseData(queryClient)
+        catchUp(queryClient)
       }
     })
 

@@ -1,0 +1,55 @@
+/**
+ * CRT theme (ported `processTerminal` retained surface, plan 6.3A) —
+ * a THEME, not an engine. Pure CSS layered over the black surface when
+ * the pane carries data-bg="crt" (canvas-hub hardcodes it — the
+ * source's bgMode toggle is CUT per the fix-delta): scanlines +
+ * vignette on one pointer-transparent overlay, phosphor glow scoped to
+ * the lane text, and a subtle flicker gated behind the user's
+ * reduced-motion preference. The lane is DOM, so the theme skins it
+ * with selection/a11y intact. `inset: 0` is logical-safe; no physical
+ * left/right geometry lives here.
+ */
+
+/* Phosphor glow — each element glows with its own currentColor. */
+[data-bg='crt'] [data-testid='process-monitor-body'] * {
+  text-shadow: 0 0 3px currentColor;
+}
+
+/* Scanlines + vignette overlay (mounted only in crt mode). */
+[data-bg='crt'] .crt-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.18) 3px
+  );
+  box-shadow: inset 0 0 120px 30px rgba(0, 0, 0, 0.55);
+}
+
+/* Flicker — motion-gated (prefers-reduced-motion users get a steady
+ * overlay; scanlines/glow/vignette are static and remain). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-bg='crt'] .crt-overlay {
+    animation: crt-flicker 4s infinite steps(60);
+  }
+}
+
+@keyframes crt-flicker {
+  0%,
+  91%,
+  94%,
+  96%,
+  100% {
+    opacity: 1;
+  }
+  93% {
+    opacity: 0.86;
+  }
+  97% {
+    opacity: 0.93;
+  }
+}

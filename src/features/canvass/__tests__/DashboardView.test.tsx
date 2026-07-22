@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { CaseDashboard } from '../components/CaseDashboard'
+import { PanelActivityLane } from '../components/PanelActivityLane'
 import {
   fetchCases,
   fetchLocations,
@@ -27,9 +28,12 @@ import {
 
 /**
  * Phase 5.3A (tests #96–98 + #90): the case view's real dashboard —
- * the poured DashboardView wired by the CaseDashboard host, plus the
- * M5-INTERIM feed column (host-level composition; 6.3C drops the
- * column and the view becomes the dashboard alone — #98 amended then).
+ * the poured DashboardView wired by the CaseDashboard host. 6.3C
+ * landed: the M5-interim feed column is gone (the feed lives in the
+ * ProcessPanel's ACTIVITY lane via PanelActivityLane) — #98 is amended
+ * in place to pin the recomposition (doc 03's sanctioned exception),
+ * and #90's scoping arm retargets PanelActivityLane, the code that
+ * owns the case filter now.
  */
 
 vi.mock('../services/canvassService', () => ({
@@ -179,33 +183,55 @@ describe('CaseDashboard (Phase 5.3A)', () => {
     expect(within(chen).getByText('2 loc')).toBeInTheDocument()
   })
 
-  // Test #98 — M5-INTERIM form: the feed renders within the dashboard
-  // view (host-level column). Phase 6.3C amends this in place: feed
-  // absent (relocated to the panel's ACTIVITY lane).
-  it('embeds the activity feed (M5 interim home)', async () => {
+  // Test #98 — AMENDED IN PLACE at 6.3C (the doc-03 sanctioned
+  // exception): the dashboard is recomposed — the feed column is GONE
+  // (relocated to the ProcessPanel's ACTIVITY lane) and the view is
+  // the dashboard alone, roster owning the freed width.
+  it('renders the recomposed dashboard — no feed column (6.3C)', async () => {
     renderWithFeatureProviders(<CaseDashboard />)
     await screen.findByText('Locations')
 
-    expect(screen.getByText('Live activity')).toBeInTheDocument()
+    // The interim feed column and its header are absent from the view.
+    expect(screen.queryByText('Live activity')).not.toBeInTheDocument()
     act(() => {
       pushEntry(SEED_CASE_ID, 'QuickMart Convenience — status → COMPLETE')
     })
+    // Activity entries no longer render inside the dashboard view —
+    // #122 pins their new home (the panel's ACTIVITY lane).
     expect(
-      screen.getByText('QuickMart Convenience — status → COMPLETE')
-    ).toBeInTheDocument()
+      screen.queryByText('QuickMart Convenience — status → COMPLETE')
+    ).not.toBeInTheDocument()
+    // The dashboard itself (roster included) still renders in full.
+    expect(screen.getByText('Det. A. Morgan')).toBeInTheDocument()
   })
 
-  // Test #90
-  it('scopes the feed to the selected case', async () => {
+  // Test #90 — retargeted at 6.3C with the feed relocation: the case
+  // scoping now lives in PanelActivityLane (the activitySlot content
+  // CanvassRoot composes into the panel).
+  it('scopes the feed to the selected case', () => {
     act(() => {
       pushEntry(SEED_CASE_ID, 'Selected-case entry')
       pushEntry('other-case-id', 'Other-case entry')
     })
-    renderWithFeatureProviders(<CaseDashboard />)
-    await screen.findByText('Locations')
+    renderWithFeatureProviders(<PanelActivityLane />)
 
     expect(screen.getByText('Selected-case entry')).toBeInTheDocument()
     expect(screen.queryByText('Other-case entry')).not.toBeInTheDocument()
+  })
+
+  // The landing posture (no selection): the panel exists on every view
+  // as of 6.3C, and with no case selected the lane shows the whole
+  // agency ring (unnumbered arm — the null branch of #90's filter).
+  it('shows the whole agency ring when no case is selected', () => {
+    act(() => {
+      pushEntry(SEED_CASE_ID, 'Selected-case entry')
+      pushEntry('other-case-id', 'Other-case entry')
+      useCanvassStore.setState({ selectedCaseId: null })
+    })
+    renderWithFeatureProviders(<PanelActivityLane />)
+
+    expect(screen.getByText('Selected-case entry')).toBeInTheDocument()
+    expect(screen.getByText('Other-case entry')).toBeInTheDocument()
   })
 
   // 5.3A media wiring arm: expanded roster rows carry the M4 media

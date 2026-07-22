@@ -13,10 +13,27 @@ import {
 import { check } from '@tauri-apps/plugin-updater'
 import i18n from '@/i18n/config'
 import { useUIStore } from '@/store/ui-store'
+import { useSessionStore } from '@/features/cloud-session'
 import { logger } from '@/lib/logger'
 import { notifications } from '@/lib/notifications'
 
 const APP_NAME = 'Tauri Template'
+
+/**
+ * AD6 (6.1): a locked board is interaction-dead. Native menu actions
+ * (and their accelerators) are direct callbacks that BYPASS the JS
+ * command dispatcher, so the lock gate lives on this shared wrapper.
+ * Predefined items (Hide/Quit) stay un-gated — window management is
+ * OS chrome, matching the dispatcher's allow-list.
+ */
+function unlessLocked(action: () => void): () => void {
+  return () => {
+    if (useSessionStore.getState().state === 'locked') {
+      return
+    }
+    action()
+  }
+}
 
 /**
  * Build and set the application menu with translated labels.
@@ -32,22 +49,22 @@ export async function buildAppMenu(): Promise<Menu> {
         await MenuItem.new({
           id: 'about',
           text: t('menu.about', { appName: APP_NAME }),
-          action: handleAbout,
+          action: unlessLocked(handleAbout),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await MenuItem.new({
           id: 'check-updates',
           text: t('menu.checkForUpdates'),
-          action: () => {
+          action: unlessLocked(() => {
             void handleCheckForUpdates()
-          },
+          }),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await MenuItem.new({
           id: 'preferences',
           text: t('menu.preferences'),
           accelerator: 'CmdOrCtrl+,',
-          action: handleOpenPreferences,
+          action: unlessLocked(handleOpenPreferences),
         }),
         await PredefinedMenuItem.new({ item: 'Separator' }),
         await PredefinedMenuItem.new({
@@ -78,13 +95,13 @@ export async function buildAppMenu(): Promise<Menu> {
           id: 'toggle-left-sidebar',
           text: t('menu.toggleLeftSidebar'),
           accelerator: 'CmdOrCtrl+1',
-          action: handleToggleLeftSidebar,
+          action: unlessLocked(handleToggleLeftSidebar),
         }),
         await MenuItem.new({
           id: 'toggle-right-sidebar',
           text: t('menu.toggleRightSidebar'),
           accelerator: 'CmdOrCtrl+2',
-          action: handleToggleRightSidebar,
+          action: unlessLocked(handleToggleRightSidebar),
         }),
       ],
     })

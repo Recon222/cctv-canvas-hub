@@ -20,6 +20,7 @@ const { navigationCommands } = await import('./navigation-commands')
 const { featureCommands } = await import('./feature-commands')
 const { useCanvassStore, resetCanvassStore } =
   await import('@/features/canvass')
+const { useSessionStore } = await import('@/features/cloud-session')
 
 const createMockContext = (): CommandContext => ({
   openPreferences: vi.fn(),
@@ -168,9 +169,30 @@ describe('Simplified Command System', () => {
           'session-sign-out',
         ])
       )
-      // session-lock-now registers in 6.1, WITH its unlock overlay — a
-      // lock command with no escape would strand an M5 build.
-      expect(ids).not.toContain('session-lock-now')
+      // 6.1C landed: session-lock-now ships WITH its unlock overlay —
+      // the M5 absence pin flips to presence (see #108 below).
+      expect(ids).toContain('session-lock-now')
+    })
+
+    // Test #108 (R2 — restores the registration coverage #99 lost when
+    // the command moved out of 5.3)
+    it('registers session-lock-now with its unlock overlay (6.1C)', async () => {
+      registerCommands(featureCommands)
+
+      const ids = getAllCommands(mockContext).map(cmd => cmd.id)
+      expect(ids).toContain('session-lock-now')
+
+      // Executing it drives active → locked; lock() self-guards, so a
+      // signed-out shell can never lock itself into a dead end.
+      useSessionStore.setState({ state: 'active' })
+      await executeCommand('session-lock-now', mockContext)
+      expect(useSessionStore.getState().state).toBe('locked')
+
+      useSessionStore.setState({ state: 'signed-out' })
+      await executeCommand('session-lock-now', mockContext)
+      expect(useSessionStore.getState().state).toBe('signed-out')
+
+      useSessionStore.setState({ state: 'booting' })
     })
 
     it('guards the case-bound views behind a selected case', async () => {
@@ -197,6 +219,82 @@ describe('Simplified Command System', () => {
       expect(useCanvassStore.getState().view).toBe('cases')
 
       resetCanvassStore()
+    })
+  })
+
+  // 6.1 hardening (AD6 "interaction dead"): the dispatcher is the
+  // choke point for palette + titlebar paths — a locked session blocks
+  // every command except the window-management allow-list. (Unnumbered
+  // arms; menu/shortcut listeners that bypass the dispatcher carry
+  // their own one-line gates, verified live.)
+  describe('locked-session command gate (6.1, AD6)', () => {
+    afterEach(() => {
+      useSessionStore.setState({ state: 'booting' })
+    })
+
+    it('blocks command execution while the session is locked', async () => {
+      registerCommands(navigationCommands)
+      const setter = vi.fn()
+      mockUIStore.getState.mockReturnValue({
+        leftSidebarVisible: true,
+        commandPaletteOpen: false,
+        setLeftSidebarVisible: setter,
+      })
+
+      useSessionStore.setState({ state: 'locked' })
+      const blocked = await executeCommand('hide-left-sidebar', mockContext)
+      expect(blocked.success).toBe(false)
+      expect(blocked.error).toContain('locked')
+      expect(setter).not.toHaveBeenCalled()
+
+      // Unlocked: the same command executes normally.
+      useSessionStore.setState({ state: 'active' })
+      const allowed = await executeCommand('hide-left-sidebar', mockContext)
+      expect(allowed.success).toBe(true)
+      expect(setter).toHaveBeenCalledWith(false)
+    })
+
+    it('keeps window-management commands reachable while locked', async () => {
+      const { windowCommands } = await import('./window-commands')
+      registerCommands(windowCommands)
+
+      useSessionStore.setState({ state: 'locked' })
+      const result = await executeCommand('window-minimize', mockContext)
+      // The gate lets it through to execution — in jsdom the Tauri
+      // window API then fails, which is exactly the proof: the failure
+      // is an execution error, never the locked block.
+      expect(result.error ?? '').not.toContain('locked')
+    })
+
+    // PR #9 L10: pin the allow-list MEMBERSHIP, not just the blocking
+    // mechanism — every registered command must block while locked
+    // UNLESS it is one of the five window-management ids. A future
+    // leaked entry (e.g. session-sign-out) fails this loop.
+    it('allows exactly the window-management commands through the lock', async () => {
+      const { windowCommands } = await import('./window-commands')
+      registerCommands(navigationCommands)
+      registerCommands(featureCommands)
+      registerCommands(windowCommands)
+
+      useSessionStore.setState({ state: 'locked' })
+      const windowIds = new Set(windowCommands.map(cmd => cmd.id))
+      expect(windowIds).toEqual(
+        new Set([
+          'window-close',
+          'window-minimize',
+          'window-toggle-maximize',
+          'window-fullscreen',
+          'window-exit-fullscreen',
+        ])
+      )
+      for (const cmd of getAllCommands(mockContext)) {
+        const result = await executeCommand(cmd.id, mockContext)
+        if (windowIds.has(cmd.id)) {
+          expect(result.error ?? '', cmd.id).not.toContain('locked')
+        } else {
+          expect(result.error ?? '', cmd.id).toContain('locked')
+        }
+      }
     })
   })
 })

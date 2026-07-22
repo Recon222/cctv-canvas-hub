@@ -27,6 +27,7 @@ export type {
   CloudConfig,
   JsonValue,
   RecoveryError,
+  VaultStatus,
 } from './bindings'
 
 /**

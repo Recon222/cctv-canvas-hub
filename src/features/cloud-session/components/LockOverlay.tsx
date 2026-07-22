@@ -1,8 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { logger } from '@/lib/logger'
+import { useSessionStore } from '../store/session-store'
+import { loadConfig, ProbeUnreachableError } from '../services/configService'
+import { reauthenticate, signOut } from '../services/authService'
 
 /**
  * Idle lock overlay (Phase 6.1B, AD6, design_handoff §7): the board
@@ -10,31 +15,48 @@ import { Input } from '@/components/ui/input'
  * veil, never a content change (owner directive: lock alters nothing).
  * Gold frame + top banner say "locked but flowing" at wall distance.
  *
- * Presentational: the host (useIdleLock wiring) mounts it while
- * session === 'locked' and owns re-auth via `onUnlock`.
+ * Failed re-auth stays locked with an inline error that says WHICH
+ * failure it was (ledger D3): wrong password vs cloud unreachable —
+ * a coordinator retypes one and checks the room's network for the
+ * other. Sign-out stays reachable from the overlay (plan 6.1).
  */
 export interface LockOverlayProps {
   signedInEmail: string | null
-  /** Resolve to unlock; throw/reject ⇒ inline error, stays locked. */
+  /**
+   * Resolve to unlock; reject ⇒ inline error, stays locked. A
+   * `ProbeUnreachableError` rejection renders the network copy; any
+   * other rejection reads as a wrong password.
+   */
   onUnlock: (password: string) => Promise<void>
+  onSignOut: () => void
 }
 
-export function LockOverlay({ signedInEmail, onUnlock }: LockOverlayProps) {
+type LockError = 'wrong-password' | 'unreachable'
+
+export function LockOverlay({
+  signedInEmail,
+  onUnlock,
+  onSignOut,
+}: LockOverlayProps) {
   const { t } = useTranslation()
   const [password, setPassword] = useState('')
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<LockError | null>(null)
   const [busy, setBusy] = useState(false)
 
   const submit = async () => {
-    setError(false)
+    setError(null)
     setBusy(true)
     try {
       await onUnlock(password)
       setPassword('')
-    } catch {
+    } catch (cause) {
       // Failed re-auth stays locked with an inline error (plan 6.1) —
-      // the cause is always a wrong password from the operator's view.
-      setError(true)
+      // D3: name the failure, wrong password vs unreachable cloud.
+      setError(
+        cause instanceof ProbeUnreachableError
+          ? 'unreachable'
+          : 'wrong-password'
+      )
     } finally {
       setBusy(false)
     }
@@ -84,9 +106,11 @@ export function LockOverlay({ signedInEmail, onUnlock }: LockOverlayProps) {
             disabled={busy}
             className="h-11 rounded border-hub-input-border bg-hub-input !text-[15px] text-hub-heading placeholder:text-hub-ghost"
           />
-          {error && (
+          {error !== null && (
             <p role="alert" className="text-[14px] text-hub-danger">
-              {t('cloudSession.lock.failed')}
+              {error === 'unreachable'
+                ? t('cloudSession.lock.unreachable')
+                : t('cloudSession.lock.failed')}
             </p>
           )}
           <Button
@@ -97,6 +121,13 @@ export function LockOverlay({ signedInEmail, onUnlock }: LockOverlayProps) {
             {t('cloudSession.lock.unlock')}
           </Button>
         </form>
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="self-center font-stmono text-[10.5px] uppercase tracking-[2px] text-hub-ghost transition-colors hover:text-hub-accent"
+        >
+          {t('cloudSession.lock.signOut')}
+        </button>
         {signedInEmail !== null && (
           <p className="text-center font-stmono text-[9.5px] uppercase tracking-[1.5px] text-hub-ghost">
             {t('cloudSession.lock.signedInAs', { email: signedInEmail })}
@@ -104,5 +135,62 @@ export function LockOverlay({ signedInEmail, onUnlock }: LockOverlayProps) {
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * The wired overlay (6.1B): mounted by MainWindowContent while the
+ * session is `locked`. Owns the re-auth call (Flow F), the signed-in
+ * email lookup (display convenience — `reauthenticate` resolves its own
+ * email), and the sign-out escape.
+ */
+export function SessionLockOverlay() {
+  const { t } = useTranslation()
+  const [email, setEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    loadConfig()
+      .then(config => {
+        if (!cancelled) {
+          setEmail(config?.signed_in_email ?? null)
+        }
+      })
+      .catch(() => {
+        // Display-only convenience — the overlay just omits the line.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleUnlock = async (password: string) => {
+    // D3 contract: `false` = wrong password (generic rejection below);
+    // ProbeUnreachableError propagates and renders the network copy.
+    const ok = await reauthenticate(password)
+    if (!ok) {
+      throw new Error('wrong password')
+    }
+    useSessionStore.getState().unlock()
+  }
+
+  const handleSignOut = () => {
+    void (async () => {
+      try {
+        await signOut()
+        useSessionStore.getState().setState('signed-out')
+      } catch (cause) {
+        logger.error('Sign-out from lock overlay failed', { cause })
+        toast.error(t('cloudSession.signOutFailed'))
+      }
+    })()
+  }
+
+  return (
+    <LockOverlay
+      signedInEmail={email}
+      onUnlock={handleUnlock}
+      onSignOut={handleSignOut}
+    />
   )
 }

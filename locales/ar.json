@@ -105,6 +105,8 @@
   "commands.canvassViewCase.description": "عرض لوحة معلومات القضية المحددة",
   "commands.canvassViewMap.label": "الانتقال إلى الخريطة",
   "commands.canvassViewMap.description": "عرض خريطة المسح المباشرة",
+  "commands.sessionLockNow.label": "قفل اللوحة الآن",
+  "commands.sessionLockNow.description": "قفل التفاعل فورًا — تستمر التحديثات",
   "commands.sessionSignOut.label": "تسجيل الخروج",
   "commands.sessionSignOut.description": "إنهاء الجلسة والعودة إلى تسجيل الدخول",
 
@@ -142,6 +144,7 @@
   "toast.error.fullscreenExitFailed": "فشل الخروج من ملء الشاشة: {{message}}",
 
   "cloudSession.errors.configLoadFailed": "تعذّر قراءة إعدادات السحابة المحفوظة",
+  "cloudSession.errors.sessionExpired": "انتهت صلاحية جلسة السحابة — سجّل الدخول مجددًا",
   "cloudSession.errors.bootstrapFailed": "تعذّر استعادة جلسة السحابة",
 
   "cloudSession.setup.title": "الاتصال بسحابة وكالتك",
@@ -205,6 +208,8 @@
   "canvass.cases.empty.listening": "الاستماع إلى قناة الوكالة",
   "canvass.cases.syncedCount": "{{count}} مُزامنة من تطبيق الميدان",
 
+  "canvass.panel.versionChip": "الإصدار {{version}}",
+  "canvass.panel.schemaChip": "المخطط {{version}}",
   "canvass.feed.title": "النشاط المباشر",
   "canvass.feed.empty.title": "بانتظار أول نشاط",
   "canvass.feed.empty.description": "كل ما يحدث في هذه القضية يظهر هنا، الأحدث أولاً.",
@@ -311,7 +316,9 @@
   "cloudSession.lock.subtitle": "تبقى اللوحة مباشرة خلف هذا القفل",
   "cloudSession.lock.passwordLabel": "كلمة مرور المنسّق",
   "cloudSession.lock.failed": "كلمة المرور غير مطابقة — حاول مجددًا",
+  "cloudSession.lock.unreachable": "تعذّر الوصول إلى السحابة — تحقق من اتصال الغرفة وحاول مجددًا",
   "cloudSession.lock.unlock": "فتح القفل",
+  "cloudSession.lock.signOut": "تسجيل الخروج بدلًا من ذلك",
   "cloudSession.lock.signedInAs": "مسجّل الدخول باسم {{email}} · منسّق",
 
   "processPanel.toggle": "مراقب العمليات",
@@ -321,5 +328,18 @@
   "processPanel.title": "مراقب العمليات",
   "processPanel.lanes": "مسارات اللوحة",
   "processPanel.lane.activity": "النشاط",
-  "processPanel.lane.system": "النظام"
+  "processPanel.lane.system": "النظام",
+  "processPanel.monitor.summary": "{{count}} صفوف · نشط {{uptime}}",
+  "processPanel.stats.state": "الحالة",
+  "processPanel.stats.rows": "الصفوف",
+  "processPanel.stats.tail": "السجل",
+  "processPanel.stats.uptime": "مدة التشغيل",
+  "processPanel.health.current": "الصحة {{state}}",
+  "processPanel.health.transition": "الصحة {{from}} ← {{to}}",
+  "processPanel.log.error": "سجل النظام غير متاح — {{message}}",
+  "processPanel.vault.summary": "الإعدادات {{config}} · الخزنة {{vault}} · مفتاح سلسلة المفاتيح {{key}}",
+  "processPanel.vault.sealed": "خُتمت الخزنة {{time}}",
+  "processPanel.vault.present": "موجود",
+  "processPanel.vault.absent": "غير موجود",
+  "processPanel.vault.error": "حالة الخزنة غير متاحة — {{message}}"
 }

@@ -4,9 +4,14 @@
  */
 
 import { commands } from '@/lib/tauri-bindings'
-import { getSupabase } from '@/lib/supabase/client'
+import { getSupabase, isNetworkAuthError } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
-import { loadConfig, saveConfig } from './configService'
+import {
+  loadConfig,
+  saveConfig,
+  setLockedFlag,
+  ProbeUnreachableError,
+} from './configService'
 
 /** The cloud schema this app understands (AD10 — fail-closed gate). */
 export const APP_REQUIRED_SCHEMA_VERSION = 1
@@ -57,6 +62,14 @@ export async function signOut(): Promise<void> {
   if (result.status === 'error') {
     throw new Error(result.error)
   }
+  // PR #9 H1: sign-out is the one lock exit that never runs `unlock()`
+  // — clear the persisted flag here so the NEXT sign-in's relaunch
+  // doesn't re-enter locked. Non-fatal: the session is already gone.
+  try {
+    await setLockedFlag(false)
+  } catch (cause) {
+    logger.warn('Failed to clear the lock flag on sign-out', { cause })
+  }
   // The client singleton stays alive: the config/project is unchanged and
   // GoTrue already cleared its session, so the next in-process sign-in
   // reuses it. Teardown is reserved for re-enrollment (`initSupabase`
@@ -99,7 +112,15 @@ export async function checkSchemaGate(): Promise<'ok' | 'mismatch'> {
   return version === APP_REQUIRED_SCHEMA_VERSION ? 'ok' : 'mismatch'
 }
 
-/** Flow F unlock: password re-auth against the signed-in account. */
+/**
+ * Flow F unlock: password re-auth against the signed-in account.
+ *
+ * Ledger D3: `false` means the cloud ANSWERED and refused — a wrong
+ * password. A network-level failure throws {@link ProbeUnreachableError}
+ * instead (reusing the enrollment probe's distinction), so the lock
+ * screen can tell a coordinator WHICH it was — retype the password vs
+ * check the room's connection.
+ */
 export async function reauthenticate(password: string): Promise<boolean> {
   const supabase = getSupabase()
   const { data } = await supabase.auth.getSession()
@@ -115,5 +136,11 @@ export async function reauthenticate(password: string): Promise<boolean> {
     return false
   }
   const { error } = await supabase.auth.signInWithPassword({ email, password })
-  return !error
+  if (!error) {
+    return true
+  }
+  if (isNetworkAuthError(error)) {
+    throw new ProbeUnreachableError(error.message)
+  }
+  return false
 }

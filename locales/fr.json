@@ -105,6 +105,8 @@
   "commands.canvassViewCase.description": "Afficher le tableau de bord du dossier sélectionné",
   "commands.canvassViewMap.label": "Aller à la carte",
   "commands.canvassViewMap.description": "Afficher la carte de ratissage en direct",
+  "commands.sessionLockNow.label": "Verrouiller le tableau maintenant",
+  "commands.sessionLockNow.description": "Verrouiller l'interaction immédiatement — les mises à jour continuent",
   "commands.sessionSignOut.label": "Se déconnecter",
   "commands.sessionSignOut.description": "Terminer la session et revenir à la connexion",
 
@@ -142,6 +144,7 @@
   "toast.error.fullscreenExitFailed": "Échec de la sortie du plein écran : {{message}}",
 
   "cloudSession.errors.configLoadFailed": "Impossible de lire la configuration cloud enregistrée",
+  "cloudSession.errors.sessionExpired": "Session infonuagique expirée — reconnectez-vous",
   "cloudSession.errors.bootstrapFailed": "Impossible de restaurer la session cloud",
 
   "cloudSession.setup.title": "Connexion au cloud de votre agence",
@@ -205,6 +208,8 @@
   "canvass.cases.empty.listening": "À l'écoute du canal de l'agence",
   "canvass.cases.syncedCount": "{{count}} synchronisés depuis l'application terrain",
 
+  "canvass.panel.versionChip": "V {{version}}",
+  "canvass.panel.schemaChip": "SCHÉMA {{version}}",
   "canvass.feed.title": "Activité en direct",
   "canvass.feed.empty.title": "En attente de la première activité",
   "canvass.feed.empty.description": "Tout ce qui se passe dans ce dossier s'affiche ici, du plus récent au plus ancien.",
@@ -299,7 +304,9 @@
   "cloudSession.lock.subtitle": "Le tableau reste en direct derrière ce verrou",
   "cloudSession.lock.passwordLabel": "Mot de passe du coordonnateur",
   "cloudSession.lock.failed": "Ce mot de passe ne correspond pas — réessayez",
+  "cloudSession.lock.unreachable": "Impossible de joindre le nuage — vérifiez la connexion de la salle et réessayez",
   "cloudSession.lock.unlock": "Déverrouiller",
+  "cloudSession.lock.signOut": "Se déconnecter plutôt",
   "cloudSession.lock.signedInAs": "Connecté en tant que {{email}} · coordonnateur",
 
   "processPanel.toggle": "Moniteur de processus",
@@ -309,5 +316,18 @@
   "processPanel.title": "Moniteur de processus",
   "processPanel.lanes": "Volets du panneau",
   "processPanel.lane.activity": "Activité",
-  "processPanel.lane.system": "Système"
+  "processPanel.lane.system": "Système",
+  "processPanel.monitor.summary": "{{count}} lignes · actif {{uptime}}",
+  "processPanel.stats.state": "État",
+  "processPanel.stats.rows": "Lignes",
+  "processPanel.stats.tail": "Journal",
+  "processPanel.stats.uptime": "Actif",
+  "processPanel.health.current": "santé {{state}}",
+  "processPanel.health.transition": "santé {{from}} → {{to}}",
+  "processPanel.log.error": "journal indisponible — {{message}}",
+  "processPanel.vault.summary": "config {{config}} · coffre {{vault}} · clé du trousseau {{key}}",
+  "processPanel.vault.sealed": "coffre scellé {{time}}",
+  "processPanel.vault.present": "présent",
+  "processPanel.vault.absent": "absent",
+  "processPanel.vault.error": "état du coffre indisponible — {{message}}"
 }

@@ -101,6 +101,22 @@ const { leftSidebarVisible } = useUIStore()
 execute: () => setLeftSidebarVisible(!leftSidebarVisible)
 ```
 
+### Locked-Session Gate (AD6)
+
+`executeCommand` blocks every command while the session is `locked`
+(kiosk idle lock — "interaction dead"), except the window-management
+allow-list (`LOCKED_ALLOWED_COMMANDS` in `registry.ts`): window chrome
+is OS interaction, not board interaction. Sign-out is deliberately not
+allow-listed — the `LockOverlay` owns the locked-state escape.
+
+Three entry paths bypass this dispatcher and carry their own one-line
+gates: native menu actions/accelerators (`menu.ts` — `unlessLocked`
+wrapper; predefined Hide/Quit stay reachable, matching the allow-list),
+the command palette's Ctrl+K opener (`CommandPalette.tsx`), and the
+global shortcut listener (`use-keyboard-shortcuts.ts`). If you add a
+NEW entry path that dispatches outside `executeCommand`, it needs the
+same gate.
+
 ## Integration Points
 
 ### Command Palette

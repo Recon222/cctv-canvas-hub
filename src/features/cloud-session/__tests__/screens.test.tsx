@@ -78,6 +78,7 @@ describe('session screens', () => {
       expect(saveConfig).toHaveBeenCalledWith({
         url: 'https://testref.supabase.co',
         publishable_key: 'sb_publishable_test',
+        locked: false,
         signed_in_email: null,
       })
     })

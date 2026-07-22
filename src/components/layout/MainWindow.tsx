@@ -1,29 +1,65 @@
+import { useEffect } from 'react'
 import { TitleBar } from '@/components/titlebar/TitleBar'
 import { MainWindowContent } from './MainWindowContent'
 import { CommandPalette } from '@/features/command-palette'
 import { PreferencesDialog } from '@/features/preferences'
+import { SessionLockOverlay, useSessionStore } from '@/features/cloud-session'
 import { Toaster } from 'sonner'
 import { useTheme } from '@/hooks/use-theme'
+import { useUIStore } from '@/store/ui-store'
 import { useMainWindowEventListeners } from '@/hooks/useMainWindowEventListeners'
 
 /**
  * Map-maximal shell (spec §4): TitleBar + full-bleed content, no
  * edge-docked side panels (AD9 — the sidebar files stay dormant for a
  * later /cleanup). Global overlays (palette, preferences, toasts) remain.
+ *
+ * Lock containment (PR #9 M1): while `locked`, the WHOLE shell —
+ * TitleBar included — goes `inert` (React 19 native prop), killing
+ * pointer AND focus/keyboard reachability for every control that
+ * bypasses the command dispatcher (titlebar toggles, NavRail,
+ * MonitorToggle, map zoom). The LockOverlay is a SIBLING outside the
+ * inert subtree so its own password/sign-out input keeps working, and
+ * it covers the full window rather than the content region alone.
  */
 export function MainWindow() {
   const { theme } = useTheme()
+  const locked = useSessionStore(state => state.state === 'locked')
 
   // Set up global event listeners (keyboard shortcuts, etc.)
   useMainWindowEventListeners()
 
-  return (
-    <div className="flex h-screen w-full flex-col overflow-hidden rounded-xl bg-background">
-      <TitleBar />
+  // PR #9 fix-delta N2: `inert` does not cross React portals — the
+  // Preferences dialog and command palette render into document.body,
+  // OUTSIDE the inert shell, and Preferences' Save is a plain mutation
+  // (not dispatcher-gated). Dismiss both when the lock fires; discarding
+  // in-progress edits is correct — the operator walked away. The other
+  // two body-portalled actionable surfaces — the media viewer/player —
+  // are dismissed the same way at their state owner (MediaStrip,
+  // LocationCard.tsx — fix-delta r2 N3); toasts carry no actions. That
+  // completes the body-portal set (verified by the r2 sweep).
+  useEffect(() => {
+    if (locked) {
+      useUIStore.getState().setPreferencesOpen(false)
+      useUIStore.getState().setCommandPaletteOpen(false)
+    }
+  }, [locked])
 
-      <div className="flex flex-1 overflow-hidden">
-        <MainWindowContent className="flex-1" />
+  return (
+    <div className="relative flex h-screen w-full flex-col overflow-hidden rounded-xl bg-background">
+      <div
+        inert={locked}
+        data-testid="lockable-shell"
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TitleBar />
+
+        <div className="flex flex-1 overflow-hidden">
+          <MainWindowContent className="flex-1" />
+        </div>
       </div>
+
+      {locked && <SessionLockOverlay />}
 
       {/* Global UI Components (hidden until triggered) */}
       <CommandPalette />

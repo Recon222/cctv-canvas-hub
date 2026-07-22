@@ -3,6 +3,7 @@ import {
   SetupScreen,
   SignInScreen,
   useAuthBootstrap,
+  useIdleLock,
   useSessionStore,
 } from '@/features/cloud-session'
 import { CanvassRoot } from '@/features/canvass'
@@ -17,9 +18,15 @@ interface MainWindowContentProps {
  * bootstrap runs here, and the screen renders by session state.
  * `booting` shows the calm empty shell until bootstrap resolves —
  * the bootstrap guarantees it always exits to another state.
+ *
+ * Lock (Flow F, 6.1): the board mounts for `active` AND `locked` — a
+ * locked board keeps flowing unchanged. The LockOverlay itself lives
+ * in the MainWindow shell (PR #9 M1: it must cover the TitleBar too,
+ * and sit OUTSIDE the inert subtree).
  */
 export function MainWindowContent({ className }: MainWindowContentProps) {
   useAuthBootstrap()
+  useIdleLock()
   const state = useSessionStore(s => s.state)
 
   return (

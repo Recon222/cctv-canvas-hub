@@ -7,7 +7,7 @@
 use tauri::AppHandle;
 
 use super::services;
-use super::types::CloudConfig;
+use super::types::{CloudConfig, VaultStatus};
 
 #[tauri::command]
 #[specta::specta]
@@ -43,4 +43,16 @@ pub async fn vault_set(app: AppHandle, value: String) -> Result<(), String> {
 #[specta::specta]
 pub async fn vault_clear(app: AppHandle) -> Result<(), String> {
     services::vault_clear(&app)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn read_log_tail(app: AppHandle, lines: u32) -> Result<String, String> {
+    services::read_log_tail(&app, lines)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_status(app: AppHandle) -> Result<VaultStatus, String> {
+    services::vault_status(&app)
 }

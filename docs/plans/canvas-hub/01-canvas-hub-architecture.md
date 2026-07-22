@@ -338,7 +338,7 @@ interface AppPreferences {
 | `signed-out`    | config present, no session                   | client initialized, no subscriptions  | SignInScreen                         |
 | `schema-gate`   | signed in, `app_meta.schema_version ≠ 1`     | block all data features               | SchemaGateScreen (version mismatch)  |
 | `active`        | signed in, gate passed, not locked           | queries + realtime + polling run      | CanvassRoot (board)                  |
-| `locked`        | `active` + idle timer elapsed                | **data keeps flowing** — queries, realtime, and media polling all continue (a wall display is idle by default; only `offline`/`signed-out` stop data); interaction dead | Board visible and **unchanged** under LockOverlay (DVR credentials are ordinary strings — never masked); password re-auth to resume |
+| `locked`        | `active` + idle timer elapsed, OR session restored with the persisted lock flag set (PR #9 H1: the flag lives in `cloud-config.json` — set on lock, cleared on unlock/sign-out — so a reload/crash/updater relaunch re-enters `locked`, never `active`) | **data keeps flowing** — queries, realtime, and media polling all continue (a wall display is idle by default; only `offline`/`signed-out` stop data); interaction dead | Board visible and **unchanged** under LockOverlay (DVR credentials are ordinary strings — never masked); password re-auth to resume |
 
 **Session-exit purge (as-built M2 — an invariant, per JS context):** leaving `active`/`locked` (board unmount) purges everything session-scoped — the canvass store, the health marks, and every `CASE_DATA_KEY_FAMILIES` entry in the query cache (a cached list inside `staleTime` would suppress the next sign-in's refetch and render operator A's location rows, requester names, and DVR credentials to operator B). M7: **each secondary context owns the same purge** — on `session-ended` it resets its own stores and purges its own QueryClient (doc 02 7.3A; test #117).
 
@@ -378,7 +378,7 @@ interface AppPreferences {
 **Flow B — relaunch (always-on machine).**
 
 1. Config found → client init; supabase-js reads session from vault adapter, auto-refreshes token.
-2. No/expired-beyond-refresh session → `signed-out`. Else gate check → `active`; subscriptions + polling start.
+2. No/expired-beyond-refresh session → `signed-out`. Else gate check → `active` — or `locked` when the persisted lock flag is set (PR #9 H1: the idle lock survives relaunch); subscriptions + polling start either way.
 
 **Flow C — live location change (the seconds-loop).**
 

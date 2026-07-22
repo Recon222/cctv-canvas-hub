@@ -34,6 +34,31 @@ pub fn normalize_path_for_serialization(path: &Path) -> String {
     path.display().to_string().replace('\\', "/")
 }
 
+/// Tail the newest `max_lines` lines out of a raw byte window (Phase 6.3B′).
+///
+/// The caller (`read_log_tail`, app crate) seeks at most 64 KB back from the
+/// end of the log and hands the bytes here; the pure slicing lives in this
+/// Tauri-free crate so it is unit-testable on Windows at all (the app crate's
+/// harness is disabled — see the crate doc above).
+///
+/// - `from_utf8_lossy`: a seek-from-end read can land mid-codepoint, and the
+///   log is not ASCII-only (`TargetKind::Webview` routes frontend fr/ar
+///   strings into the same file) — never an error, at worst a replacement
+///   char confined to the first (dropped) line.
+/// - `partial_first_line`: pass `true` ONLY when the read actually seeked —
+///   the bytes alone cannot say whether byte 0 is a real line start; the
+///   caller holds that fact. When `true` the first line is dropped as a
+///   presumed fragment; when `false` (whole file) every line is kept.
+pub fn tail_log(bytes: &[u8], max_lines: usize, partial_first_line: bool) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let mut lines: Vec<&str> = text.lines().collect();
+    if partial_first_line && !lines.is_empty() {
+        lines.remove(0);
+    }
+    let start = lines.len().saturating_sub(max_lines);
+    lines[start..].join("\n")
+}
+
 /// Returns true if running on macOS.
 ///
 /// Use this for runtime checks. For compile-time checks, use `#[cfg(target_os = "macos")]`.
@@ -112,5 +137,51 @@ mod tests {
         let platforms = [is_macos(), is_windows(), is_linux()];
         let count = platforms.iter().filter(|&&x| x).count();
         assert_eq!(count, 1, "Exactly one platform should be detected");
+    }
+
+    // Test #127 (6.3B′): a seek-from-end window that lands mid-codepoint
+    // never errors — the lossy decode confines any replacement char to
+    // the first line, and the flagged drop removes that fragment.
+    // (Mutation-verified: deleting the partial_first_line drop fails
+    // this arm.)
+    #[test]
+    fn tail_log_survives_a_mid_codepoint_slice_boundary() {
+        let full = "première ligne — état: établi\nثانية: مقفلة\nthird line ok\n";
+        let bytes = full.as_bytes();
+        // Slice INSIDE the first line's multi-byte 'è' (é = 2 bytes;
+        // find a boundary that is provably mid-codepoint).
+        let mut cut = 4;
+        while full.is_char_boundary(cut) {
+            cut += 1;
+        }
+        let window = &bytes[cut..];
+        let tail = tail_log(window, 10, true);
+        // Only clean lines: the partial first line (with any replacement
+        // char) is gone, the complete lines survive byte-exact.
+        assert_eq!(tail, "ثانية: مقفلة\nthird line ok");
+        assert!(!tail.contains('\u{FFFD}'));
+    }
+
+    // Test #128 (6.3B′): input above the clamp returns exactly the
+    // newest `max_lines` lines.
+    #[test]
+    fn tail_log_clamps_to_the_last_max_lines() {
+        let input = (1..=10)
+            .map(|n| format!("line {n}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tail = tail_log(input.as_bytes(), 3, false);
+        assert_eq!(tail, "line 8\nline 9\nline 10");
+    }
+
+    // Test #129 (6.3B′): input shorter than the window with
+    // `partial_first_line: false` keeps every line, first included —
+    // the caller passes `false` because it never seeked; the flag is
+    // the caller's knowledge, not inferable from bytes (fix-delta 2).
+    #[test]
+    fn tail_log_returns_whole_input_when_shorter_than_window() {
+        let input = "boot line\nsecond line\n";
+        let tail = tail_log(input.as_bytes(), 500, false);
+        assert_eq!(tail, "boot line\nsecond line");
     }
 }
