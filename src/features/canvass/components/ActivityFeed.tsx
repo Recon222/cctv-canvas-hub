@@ -7,8 +7,9 @@ import type { ActivityEntry, ActivityKind } from '../types'
 /**
  * The live activity lane (Phase 5.1A): newest-first, timestamped rows
  * with status-colored dots and the 12 s attention tint. Home-agnostic —
- * mounts in the dashboard interim (M5) and the process panel's
- * ACTIVITY lane later (plan 6.3C); the host owns scrolling.
+ * hosted by the ProcessPanel's ACTIVITY lane as of 6.3C
+ * (PanelActivityLane composes it into the panel's activitySlot); the
+ * host owns scrolling.
  *
  * Typed-props only: the host selects `activity` from the canvass store
  * (or filters it case-scoped) and passes it down.

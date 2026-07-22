@@ -208,6 +208,8 @@
   "canvass.cases.empty.listening": "À l'écoute du canal de l'agence",
   "canvass.cases.syncedCount": "{{count}} synchronisés depuis l'application terrain",
 
+  "canvass.panel.versionChip": "V {{version}}",
+  "canvass.panel.schemaChip": "SCHÉMA {{version}}",
   "canvass.feed.title": "Activité en direct",
   "canvass.feed.empty.title": "En attente de la première activité",
   "canvass.feed.empty.description": "Tout ce qui se passe dans ce dossier s'affiche ici, du plus récent au plus ancien.",

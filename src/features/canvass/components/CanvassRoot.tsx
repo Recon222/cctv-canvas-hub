@@ -10,7 +10,13 @@ import {
   useHealthStore,
 } from '@/store/health-store'
 import { cn } from '@/lib/utils'
-import { ConnectionIndicator, ConnectionBanner } from '@/features/cloud-session'
+import { useUIStore } from '@/store/ui-store'
+import {
+  APP_REQUIRED_SCHEMA_VERSION,
+  ConnectionIndicator,
+  ConnectionBanner,
+} from '@/features/cloud-session'
+import { ProcessPanel, usePanelPosture } from '@/features/process-panel'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
 import { useCases } from '../hooks/useCases'
@@ -21,10 +27,12 @@ import { NavRail } from './NavRail'
 import { CasesView } from './CasesView'
 import { CaseDashboard } from './CaseDashboard'
 import { LocationCardStack } from './LocationCardStack'
+import { PanelActivityLane } from './PanelActivityLane'
 import { MapCanvas, CANVASS_MAP_ID } from './MapCanvas'
 import { MapLegend } from './map/MapLegend'
 import { MapZoomControls } from './map/MapZoomControls'
 import { BoardHeader, CaseHeading, LiveClock } from './chrome/BoardHeader'
+import { MonitorToggle } from './chrome/MonitorToggle'
 import './canvass.css'
 
 /**
@@ -56,6 +64,7 @@ const AD15_MODE: 'chrome-scaled' | 'whole-shell' = 'chrome-scaled'
 const DESIGN_WIDTH = 1920
 
 export function CanvassRoot() {
+  const { t } = useTranslation()
   const view = useCanvassStore(state => state.view)
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   const queryClient = useQueryClient()
@@ -64,6 +73,9 @@ export function CanvassRoot() {
   // the hook itself gates on session (active/locked) + health (canPoll).
   useMediaPolling(selectedCaseId)
   useConnectionHealth()
+  // 6.3C posture: view-derived default (open everywhere, SYS tab on
+  // map) applies on FIRST entry per view; user toggles win thereafter.
+  usePanelPosture(view, view !== 'map')
   // Module-scoped state outlives sign-out; unmount IS the session exit
   // (active/locked → anything else), so reset EVERYTHING session-scoped
   // here: the canvass store (selection/view/activity), the health marks
@@ -187,6 +199,24 @@ export function CanvassRoot() {
               </div>
             </>
           )}
+          {/* 6.3C: the ProcessPanel in the right-edge chrome position —
+              an OVERLAY inside the board tree (absolute in this
+              relative main): expanding on the map view floats over the
+              card stack; map and stack never reflow (AD14). ACTIVITY
+              lane content is host-composed (activitySlot — the panel
+              imports nothing from canvass); the version/schema chips
+              are host-supplied strings for the same reason. */}
+          <div className={cn(view === 'map' && 'pointer-events-auto')}>
+            <ProcessPanel
+              activitySlot={<PanelActivityLane />}
+              footerMeta={[
+                t('canvass.panel.versionChip', { version: __APP_VERSION__ }),
+                t('canvass.panel.schemaChip', {
+                  version: APP_REQUIRED_SCHEMA_VERSION,
+                }),
+              ]}
+            />
+          </div>
         </main>
       </div>
     </div>
@@ -240,15 +270,17 @@ export function CanvassRoot() {
  * via the store's `lastConfirmAt`, never `lastEventAt` alone (a silent
  * overnight board confirms through reconciles only).
  *
- * The design's process-monitor toggle (MonitorToggle) is deliberately
- * NOT mounted: its panel ships at 6.3, and a dead affordance on a wall
- * board is dishonest UI.
+ * MonitorToggle mounts here as of 6.3C (deferred from M5 so it never
+ * shipped as a dead affordance): its active state mirrors the panel's
+ * expanded boolean — the same `rightSidebarVisible` the Cmd/Ctrl+2
+ * shortcut and both palette commands drive.
  */
 function HeaderChrome() {
   const { t } = useTranslation()
   const selectedCaseId = useCanvassStore(state => state.selectedCaseId)
   const healthState = useHealthStore(state => state.state)
   const lastConfirm = useHealthStore(state => lastConfirmAt(state.marks))
+  const panelExpanded = useUIStore(state => state.rightSidebarVisible)
   const { data: cases } = useCases()
   const selectedCase = cases?.find(c => c.id === selectedCaseId) ?? null
 
@@ -269,6 +301,12 @@ function HeaderChrome() {
           />
         )}
         <ConnectionIndicator state={healthState} lastConfirm={lastConfirm} />
+        <MonitorToggle
+          active={panelExpanded}
+          onToggle={() => {
+            useUIStore.getState().toggleRightSidebar()
+          }}
+        />
         <LiveClock />
       </BoardHeader>
       <ConnectionBanner state={healthState} lastConfirm={lastConfirm} />

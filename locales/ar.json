@@ -208,6 +208,8 @@
   "canvass.cases.empty.listening": "الاستماع إلى قناة الوكالة",
   "canvass.cases.syncedCount": "{{count}} مُزامنة من تطبيق الميدان",
 
+  "canvass.panel.versionChip": "الإصدار {{version}}",
+  "canvass.panel.schemaChip": "المخطط {{version}}",
   "canvass.feed.title": "النشاط المباشر",
   "canvass.feed.empty.title": "بانتظار أول نشاط",
   "canvass.feed.empty.description": "كل ما يحدث في هذه القضية يظهر هنا، الأحدث أولاً.",

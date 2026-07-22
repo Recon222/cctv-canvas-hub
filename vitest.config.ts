@@ -1,8 +1,14 @@
 import path from 'path'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import packageJson from './package.json'
 
 export default defineConfig({
+  // Mirror vite.config's compile-time constants (menu.ts and the
+  // ProcessPanel's version chip read __APP_VERSION__ — 6.3C).
+  define: {
+    __APP_VERSION__: JSON.stringify(packageJson.version),
+  },
   plugins: [
     react({
       babel: {

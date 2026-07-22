@@ -208,6 +208,8 @@
   "canvass.cases.empty.listening": "Listening on agency channel",
   "canvass.cases.syncedCount": "{{count}} synced from the field app",
 
+  "canvass.panel.versionChip": "V {{version}}",
+  "canvass.panel.schemaChip": "SCHEMA {{version}}",
   "canvass.feed.title": "Live activity",
   "canvass.feed.empty.title": "Awaiting first activity",
   "canvass.feed.empty.description": "Everything that happens on this case lands here, newest first.",
