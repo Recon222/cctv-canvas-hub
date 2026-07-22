@@ -326,5 +326,22 @@
   "processPanel.title": "مراقب العمليات",
   "processPanel.lanes": "مسارات اللوحة",
   "processPanel.lane.activity": "النشاط",
-  "processPanel.lane.system": "النظام"
+  "processPanel.lane.system": "النظام",
+  "processPanel.monitor.summary": "{{count}} صفوف · نشط {{uptime}}",
+  "processPanel.export.title": "تصدير…",
+  "processPanel.export.txt": "تصدير كنص (.txt)",
+  "processPanel.export.html": "تصدير كـ HTML (.html)",
+  "processPanel.export.failed": "فشل التصدير",
+  "processPanel.stats.state": "الحالة",
+  "processPanel.stats.rows": "الصفوف",
+  "processPanel.stats.tail": "السجل",
+  "processPanel.stats.uptime": "مدة التشغيل",
+  "processPanel.health.current": "الصحة {{state}}",
+  "processPanel.health.transition": "الصحة {{from}} ← {{to}}",
+  "processPanel.log.error": "سجل النظام غير متاح — {{message}}",
+  "processPanel.vault.summary": "الإعدادات {{config}} · الخزنة {{vault}} · مفتاح سلسلة المفاتيح {{key}}",
+  "processPanel.vault.sealed": "خُتمت الخزنة {{time}}",
+  "processPanel.vault.present": "موجود",
+  "processPanel.vault.absent": "غير موجود",
+  "processPanel.vault.error": "حالة الخزنة غير متاحة — {{message}}"
 }

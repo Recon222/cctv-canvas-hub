@@ -314,5 +314,22 @@
   "processPanel.title": "Process monitor",
   "processPanel.lanes": "Panel lanes",
   "processPanel.lane.activity": "Activity",
-  "processPanel.lane.system": "System"
+  "processPanel.lane.system": "System",
+  "processPanel.monitor.summary": "{{count}} rows · up {{uptime}}",
+  "processPanel.export.title": "Export…",
+  "processPanel.export.txt": "Export as Text (.txt)",
+  "processPanel.export.html": "Export as HTML (.html)",
+  "processPanel.export.failed": "Export failed",
+  "processPanel.stats.state": "State",
+  "processPanel.stats.rows": "Rows",
+  "processPanel.stats.tail": "Tail",
+  "processPanel.stats.uptime": "Uptime",
+  "processPanel.health.current": "health {{state}}",
+  "processPanel.health.transition": "health {{from}} → {{to}}",
+  "processPanel.log.error": "log tail unavailable — {{message}}",
+  "processPanel.vault.summary": "config {{config}} · vault {{vault}} · keyring key {{key}}",
+  "processPanel.vault.sealed": "vault sealed {{time}}",
+  "processPanel.vault.present": "present",
+  "processPanel.vault.absent": "absent",
+  "processPanel.vault.error": "vault status unavailable — {{message}}"
 }

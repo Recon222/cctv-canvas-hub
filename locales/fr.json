@@ -314,5 +314,22 @@
   "processPanel.title": "Moniteur de processus",
   "processPanel.lanes": "Volets du panneau",
   "processPanel.lane.activity": "Activité",
-  "processPanel.lane.system": "Système"
+  "processPanel.lane.system": "Système",
+  "processPanel.monitor.summary": "{{count}} lignes · actif {{uptime}}",
+  "processPanel.export.title": "Exporter…",
+  "processPanel.export.txt": "Exporter en texte (.txt)",
+  "processPanel.export.html": "Exporter en HTML (.html)",
+  "processPanel.export.failed": "Échec de l'exportation",
+  "processPanel.stats.state": "État",
+  "processPanel.stats.rows": "Lignes",
+  "processPanel.stats.tail": "Journal",
+  "processPanel.stats.uptime": "Actif",
+  "processPanel.health.current": "santé {{state}}",
+  "processPanel.health.transition": "santé {{from}} → {{to}}",
+  "processPanel.log.error": "journal indisponible — {{message}}",
+  "processPanel.vault.summary": "config {{config}} · coffre {{vault}} · clé du trousseau {{key}}",
+  "processPanel.vault.sealed": "coffre scellé {{time}}",
+  "processPanel.vault.present": "présent",
+  "processPanel.vault.absent": "absent",
+  "processPanel.vault.error": "état du coffre indisponible — {{message}}"
 }
