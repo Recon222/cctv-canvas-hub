@@ -399,7 +399,10 @@ describe('useConnectionHealth (2.5B)', () => {
     function fakeSupabase(config: {
       /** ms until token expiry; null = no session at all. */
       expiresInMs: number | null
-      refresh?: 'ok' | 'error'
+      /** 'invalid-grant' = definite 4xx refusal; 'network-error' = the
+       * offline-wake shape (AuthRetryableFetchError, status 0). */
+      refresh?: 'ok' | 'invalid-grant' | 'network-error'
+      setAuthRejects?: boolean
     }) {
       const order: string[] = []
       const session = (expiresInMs: number) => ({
@@ -421,21 +424,33 @@ describe('useConnectionHealth (2.5B)', () => {
           ),
           refreshSession: vi.fn(() => {
             order.push('refreshSession')
-            return config.refresh === 'error'
-              ? Promise.resolve({
-                  data: { session: null },
-                  error: { message: 'refresh_token_already_used' },
-                })
-              : Promise.resolve({
-                  data: { session: session(3_600_000) },
-                  error: null,
-                })
+            if (config.refresh === 'invalid-grant') {
+              return Promise.resolve({
+                data: { session: null },
+                error: {
+                  message: 'Invalid Refresh Token: Already Used',
+                  status: 400,
+                },
+              })
+            }
+            if (config.refresh === 'network-error') {
+              return Promise.resolve({
+                data: { session: null },
+                error: { message: 'fetch failed', status: 0 },
+              })
+            }
+            return Promise.resolve({
+              data: { session: session(3_600_000) },
+              error: null,
+            })
           }),
         },
         realtime: {
           setAuth: vi.fn(() => {
             order.push('setAuth')
-            return Promise.resolve()
+            return config.setAuthRejects === true
+              ? Promise.reject(new Error('websocket not ready'))
+              : Promise.resolve()
           }),
         },
       }
@@ -523,10 +538,12 @@ describe('useConnectionHealth (2.5B)', () => {
       ).toBe(false)
     })
 
-    // Test #106
-    it('drops to signed-out when the refresh fails', async () => {
+    // Test #106 — AMENDED at the PR #9 M2 fix: "refresh fails" means a
+    // DEFINITE refusal (4xx invalid_grant) — the session is genuinely
+    // dead. A network-shaped failure is the deferred arm below.
+    it('drops to signed-out when the refresh is refused', async () => {
       const errorToast = vi.spyOn(toast, 'error')
-      fakeSupabase({ expiresInMs: 10_000, refresh: 'error' })
+      fakeSupabase({ expiresInMs: 10_000, refresh: 'invalid-grant' })
       const { queryClient } = mountHook()
       queryClient.setQueryData(['cases'], [])
 
@@ -541,6 +558,57 @@ describe('useConnectionHealth (2.5B)', () => {
       })
       expect(errorToast).toHaveBeenCalled()
       expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(false)
+      errorToast.mockRestore()
+    })
+
+    // PR #9 M2: a TRANSIENT blip must not sign out — a kiosk waking
+    // overnight before wifi reconnects gets a network-shaped refresh
+    // failure while the refresh token is still valid. Defer, stay,
+    // retry on the next wake/tick.
+    it('does not sign out when the refresh fails with a network error', async () => {
+      const errorToast = vi.spyOn(toast, 'error')
+      fakeSupabase({ expiresInMs: 10_000, refresh: 'network-error' })
+      const { queryClient } = mountHook()
+      queryClient.setQueryData(['cases'], [])
+
+      act(() => {
+        window.dispatchEvent(new Event('online'))
+      })
+
+      // Deferred: no sign-out, no toast, and no refetch behind a
+      // possibly-stale token (the reconcile net + next wake retry own
+      // recovery).
+      await waitFor(() => {
+        expect(vi.mocked(getSupabase)().auth.refreshSession).toHaveBeenCalled()
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(useSessionStore.getState().state).toBe('active')
+      expect(errorToast).not.toHaveBeenCalled()
+      expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(false)
+      errorToast.mockRestore()
+    })
+
+    // PR #9 L2: a post-refresh setAuth hiccup is NOT a dead session —
+    // the refresh succeeded; sign-out fires ONLY on the explicit
+    // 'failed' freshness result, never the chain's machinery.
+    it('does not sign out on a post-refresh setAuth hiccup', async () => {
+      const errorToast = vi.spyOn(toast, 'error')
+      fakeSupabase({ expiresInMs: 10_000, setAuthRejects: true })
+      const { queryClient } = mountHook()
+      queryClient.setQueryData(['cases'], [])
+
+      act(() => {
+        window.dispatchEvent(new Event('online'))
+      })
+
+      // The refreshed session still catches up (invalidation runs).
+      await waitFor(() => {
+        expect(queryClient.getQueryState(['cases'])?.isInvalidated).toBe(true)
+      })
+      expect(useSessionStore.getState().state).toBe('active')
+      expect(errorToast).not.toHaveBeenCalled()
       errorToast.mockRestore()
     })
   })

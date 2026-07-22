@@ -70,19 +70,38 @@ export async function teardownSupabase(): Promise<void> {
 
 /**
  * Refresh only this close to (or past) expiry on a wake path —
- * `autoRefreshToken` owns ROUTINE rotation, and racing its ticker can
- * submit an already-rotated refresh token (Flow E3, Phase 6.2).
+ * `autoRefreshToken` owns ROUTINE rotation (and installed gotrue's
+ * `getSession()` itself auto-refreshes within its ~90 s margin,
+ * single-flighted — the explicit branch below is the near-expiry
+ * fallback, not the common path).
  */
 export const SESSION_EXPIRY_MARGIN_MS = 60_000
 
-export type SessionFreshness = 'fresh' | 'refreshed' | 'failed'
+export type SessionFreshness = 'fresh' | 'refreshed' | 'deferred' | 'failed'
+
+/**
+ * Auth-error classifier shared by the wake path (PR #9 M2) and
+ * `reauthenticate` (D3). GoTrue surfaces fetch-level failures as
+ * `AuthRetryableFetchError` with `status` 0/undefined; a 5xx or a 429
+ * rate-limit is equally "not a refusal" — only a definite 4xx answer
+ * reads as the server rejecting the credential/token. Lives here (not
+ * authService) because client.ts must not import a feature barrel that
+ * imports client.ts back.
+ */
+export function isNetworkAuthError(error: { status?: number }): boolean {
+  return error.status === undefined || error.status === 0 || error.status >= 500
+}
 
 /**
  * Wake-time session check (Flow E3): `fresh` = token comfortably valid,
  * nothing done; `refreshed` = rotated near/after expiry AND the realtime
- * socket re-authed with the new token (refresh-then-setAuth order);
- * `failed` = no session, or the refresh was refused — the session is
- * genuinely dead and the caller must exit honestly (#106).
+ * socket re-authed (refresh-then-setAuth order); `deferred` = the
+ * refresh could not be ATTEMPTED to completion — a network-shaped
+ * failure (offline wake, 5xx) while the refresh token may be perfectly
+ * valid; the caller stays put and the next wake/tick retries (PR #9
+ * M2: a kiosk waking before wifi reconnects must NOT be signed out);
+ * `failed` = no session, or the refresh was REFUSED (definite 4xx
+ * invalid_grant) — genuinely dead, the caller exits honestly (#106).
  *
  * Takes the client as an argument so the caller resolves `getSupabase()`
  * synchronously (a context with no client has nothing to refresh).
@@ -99,12 +118,22 @@ export async function ensureFreshSession(
     return 'fresh'
   }
   const refreshed = await supabase.auth.refreshSession()
-  if (refreshed.error !== null || refreshed.data.session === null) {
+  if (refreshed.error !== null) {
+    return isNetworkAuthError(refreshed.error) ? 'deferred' : 'failed'
+  }
+  if (refreshed.data.session === null) {
     return 'failed'
   }
   // The realtime socket authenticates separately — hand it the rotated
-  // token BEFORE the catch-up refetch re-subscribes anything.
-  await supabase.realtime.setAuth()
+  // token BEFORE the catch-up refetch re-subscribes anything. A hiccup
+  // here is NOT a dead session (PR #9 L2): the refresh succeeded, and
+  // the client's own auth listener re-auths the socket on rotation.
+  try {
+    await supabase.realtime.setAuth()
+  } catch {
+    // Still 'refreshed' — sign-out must key off the session, not the
+    // socket handshake.
+  }
   return 'refreshed'
 }
 

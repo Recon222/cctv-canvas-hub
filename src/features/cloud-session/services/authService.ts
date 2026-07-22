@@ -4,7 +4,7 @@
  */
 
 import { commands } from '@/lib/tauri-bindings'
-import { getSupabase } from '@/lib/supabase/client'
+import { getSupabase, isNetworkAuthError } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import {
   loadConfig,
@@ -143,13 +143,4 @@ export async function reauthenticate(password: string): Promise<boolean> {
     throw new ProbeUnreachableError(error.message)
   }
   return false
-}
-
-/**
- * GoTrue surfaces fetch-level failures as `AuthRetryableFetchError` with
- * `status` 0/undefined; a 5xx is equally "not your password" — only a
- * definite 4xx refusal reads as bad credentials.
- */
-function isNetworkAuthError(error: { status?: number }): boolean {
-  return error.status === undefined || error.status === 0 || error.status >= 500
 }

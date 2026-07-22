@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { commands } from '@/lib/tauri-bindings'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { getSupabase } from '@/lib/supabase/client'
+import type * as supabaseClientModule from '@/lib/supabase/client'
 import { useUIStore } from '@/store/ui-store'
 import { MainWindow } from '@/components/layout/MainWindow'
 import { useSessionStore } from '../store/session-store'
@@ -26,7 +27,12 @@ import { useIdleLock } from '../hooks/useIdleLock'
  * byte-identity pin is cheap to assert.
  */
 
-vi.mock('@/lib/supabase/client')
+// Partial mock: getSupabase is the fake seam; the real helpers
+// (isNetworkAuthError — the D3 classifier) stay live.
+vi.mock('@/lib/supabase/client', async importOriginal => ({
+  ...(await importOriginal<typeof supabaseClientModule>()),
+  getSupabase: vi.fn(),
+}))
 vi.mock('../hooks/useAuthBootstrap', () => ({ useAuthBootstrap: vi.fn() }))
 vi.mock('@/features/canvass', () => ({
   CanvassRoot: () => (

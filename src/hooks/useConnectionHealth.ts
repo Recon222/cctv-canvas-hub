@@ -56,16 +56,28 @@ function catchUp(queryClient: QueryClient): void {
   void ensureFreshSession(supabase)
     .then(freshness => {
       if (freshness === 'failed') {
-        // Session genuinely dead — never refetch behind a dead token.
+        // Session genuinely dead (definite refusal / no session) —
+        // never refetch behind a dead token.
         exitSignedOut('refresh refused')
+        return
+      }
+      if (freshness === 'deferred') {
+        // PR #9 M2: a network-shaped refresh failure (offline wake,
+        // 5xx) is NOT a dead session — stay put, skip the refetch (it
+        // would 401 behind the stale token), and let the next
+        // wake/reconnect or the reconcile net retry. Health degrades
+        // honestly on its own evidence.
+        logger.debug('Wake catch-up deferred: refresh not reachable')
         return
       }
       invalidateCaseData(queryClient)
     })
     .catch((cause: unknown) => {
-      // getSession/refreshSession resolve their errors; a rejection is
-      // machinery-level breakage — the same honest exit.
-      exitSignedOut(cause)
+      // PR #9 L2: sign-out keys off the explicit 'failed' freshness
+      // result ONLY. A chain rejection is machinery-level breakage —
+      // log it and let the next tick retry; never a forced sign-out
+      // over a possibly-valid session.
+      logger.error('Wake catch-up failed unexpectedly', { cause })
     })
 }
 
