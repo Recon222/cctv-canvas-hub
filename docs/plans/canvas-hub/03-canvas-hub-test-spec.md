@@ -274,7 +274,7 @@ No existing test file is deleted or rewritten, with two sanctioned exceptions: *
 | --- | ------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | 104 | Should refresh on wake only when the session is near/after expiry        | fresh session ⇒ no `refreshSession` call (autoRefreshToken owns rotation); near-expiry ⇒ `refreshSession` then `setAuth` order |
 | 105 | Should invalidate case-data queries on catch-up, excluding signed URLs   | invalidation covers `['cases']`, `['locations', id]`, `['media', id]`; `['signed-url', …]` queries are NOT refetched |
-| 106 | Should drop to signed-out when the refresh fails                         | refresh error ⇒ `signed-out` (never silently stale)        |
+| 106 | Should drop to signed-out when the refresh is refused **(amended in place, PR #9 M2 fix round)** | a DEFINITE 4xx `invalid_grant` refusal ⇒ `signed-out` (never silently stale); a network-shaped refresh failure (status 0/5xx/429) is `deferred` — stays put and retries, never a forced sign-out on a transient blip (unnumbered deferred + setAuth-hiccup arms ride in the same file) |
 
 ---
 
