@@ -19,6 +19,7 @@ import {
 import { ProcessPanel, usePanelPosture } from '@/features/process-panel'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
+import { useViewWindowBridge } from '../hooks/useViewWindowBridge'
 import { useCases } from '../hooks/useCases'
 import { useCaseLocations } from '../hooks/useCaseLocations'
 import { useMediaPolling } from '../hooks/useMediaPolling'
@@ -73,6 +74,9 @@ export function CanvassRoot() {
   // the hook itself gates on session (active/locked) + health (canPoll).
   useMediaPolling(selectedCaseId)
   useConnectionHealth()
+  // M7 (7.3B): answer secondary-ready with the view-context half of the
+  // handshake + clear the rail's popped flag when a pop-out closes.
+  useViewWindowBridge()
   // 6.3C posture: view-derived default (open everywhere, SYS tab on
   // map) applies on FIRST entry per view; user toggles win thereafter.
   usePanelPosture(view, view !== 'map')

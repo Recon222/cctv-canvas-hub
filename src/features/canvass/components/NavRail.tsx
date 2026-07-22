@@ -1,15 +1,24 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
+import type { PopOutView } from '@/lib/services/sessionEvents'
 import { SignOutButton } from '@/features/cloud-session'
+import { openViewWindow } from '../services/viewWindows'
 import { useCanvassStore, type CanvassView } from '../store/canvass-store'
 
 /**
  * The slim icon rail (AD12) — navigation chrome in the repurposed
  * LeftSideBar slot, NOT an info panel. `case`/`map` need a selected
  * case. A flex column with room for a fourth entry (V2 admin). Sign-out
- * stays reachable from the rail's foot (D4). Pop-out affordances are M7
- * (the ↗ glyph is presentation only — it previews the future posture).
+ * stays reachable from the rail's foot (D4).
+ *
+ * M7 (7.3B): the ↗ glyph is a REAL pop-out affordance on the `case` and
+ * `map` entries only — never `cases`, which is bound to the main window
+ * (#119). It opens (or focuses+retargets) the view's secondary window
+ * with the selected case (#112–113); the popped state renders on the
+ * glyph (gold) from `poppedViews`.
  *
  * Case File restyle: 86px labeled rail — investigators are not
  * tech-savvy, every entry carries its word (design_handoff §1).
@@ -46,7 +55,6 @@ function PopOutGlyph() {
       stroke="currentColor"
       strokeWidth="2"
       aria-hidden
-      className="absolute end-1 top-1 text-hub-ghost"
     >
       <path d="M15 3h6v6" />
       <path d="M10 14 21 3" />
@@ -110,32 +118,48 @@ export function NavRail() {
   const hasSelectedCase = useCanvassStore(
     state => state.selectedCaseId !== null
   )
+  const poppedViews = useCanvassStore(state => state.poppedViews)
 
   const entries: {
     view: CanvassView
     label: string
     enabled: boolean
-    popOut: boolean
+    /** Non-null on the entries that can pop out (never `cases`, #119). */
+    popOut: PopOutView | null
   }[] = [
     {
       view: 'cases',
       label: t('canvass.nav.cases'),
       enabled: true,
-      popOut: false,
+      popOut: null,
     },
     {
       view: 'case',
       label: t('canvass.nav.case'),
       enabled: hasSelectedCase,
-      popOut: true,
+      popOut: 'case',
     },
     {
       view: 'map',
       label: t('canvass.nav.map'),
       enabled: hasSelectedCase,
-      popOut: true,
+      popOut: 'map',
     },
   ]
+
+  const handlePopOut = (popOutView: PopOutView) => {
+    const caseId = useCanvassStore.getState().selectedCaseId
+    if (caseId === null) {
+      return
+    }
+    openViewWindow(popOutView, caseId).catch((cause: unknown) => {
+      logger.error('Failed to open the view window', {
+        view: popOutView,
+        cause,
+      })
+      toast.error(t('canvass.nav.popOutFailed'))
+    })
+  }
 
   return (
     <nav className="flex w-[86px] shrink-0 flex-col items-center gap-1.5 border-e border-hub-hairline bg-hub-chrome py-4">
@@ -146,31 +170,60 @@ export function NavRail() {
         <CrosshairLogo />
       </div>
       {entries.map(entry => (
-        <button
-          key={entry.view}
-          type="button"
-          aria-label={entry.label}
-          title={entry.enabled ? entry.label : t('canvass.nav.needsCase')}
-          disabled={!entry.enabled}
-          data-active={view === entry.view}
-          onClick={() => {
-            useCanvassStore.getState().setView(entry.view)
-          }}
-          className={cn(
-            'relative flex h-[60px] w-[68px] flex-col items-center justify-center gap-1.5 rounded-md border border-transparent text-hub-muted transition-colors',
-            view === entry.view &&
-              'border-hub-hairline-bright bg-hub-accent/10 text-hub-heading',
-            entry.enabled
-              ? 'hover:text-hub-heading'
-              : 'cursor-not-allowed text-hub-ghost opacity-45'
+        <div key={entry.view} className="relative">
+          <button
+            type="button"
+            aria-label={entry.label}
+            title={entry.enabled ? entry.label : t('canvass.nav.needsCase')}
+            disabled={!entry.enabled}
+            data-active={view === entry.view}
+            onClick={() => {
+              useCanvassStore.getState().setView(entry.view)
+            }}
+            className={cn(
+              'relative flex h-[60px] w-[68px] flex-col items-center justify-center gap-1.5 rounded-md border border-transparent text-hub-muted transition-colors',
+              view === entry.view &&
+                'border-hub-hairline-bright bg-hub-accent/10 text-hub-heading',
+              entry.enabled
+                ? 'hover:text-hub-heading'
+                : 'cursor-not-allowed text-hub-ghost opacity-45'
+            )}
+          >
+            {RAIL_ICONS[entry.view]}
+            <span className="font-stmono text-[9px] uppercase tracking-[1.5px]">
+              {entry.label}
+            </span>
+          </button>
+          {entry.popOut !== null && (
+            // Sibling, never nested — a button inside a button is
+            // invalid HTML and AT reports neither.
+            <button
+              type="button"
+              aria-label={t('canvass.nav.popOutLabel', { view: entry.label })}
+              title={
+                poppedViews[entry.popOut]
+                  ? t('canvass.nav.popped')
+                  : t('canvass.nav.popOutLabel', { view: entry.label })
+              }
+              disabled={!entry.enabled}
+              data-popped={poppedViews[entry.popOut]}
+              onClick={() => {
+                if (entry.popOut !== null) {
+                  handlePopOut(entry.popOut)
+                }
+              }}
+              className={cn(
+                'absolute end-0.5 top-0.5 rounded-sm p-1 transition-colors',
+                poppedViews[entry.popOut]
+                  ? 'text-hub-working'
+                  : 'text-hub-ghost hover:text-hub-heading',
+                !entry.enabled && 'cursor-not-allowed opacity-45'
+              )}
+            >
+              <PopOutGlyph />
+            </button>
           )}
-        >
-          {RAIL_ICONS[entry.view]}
-          <span className="font-stmono text-[9px] uppercase tracking-[1.5px]">
-            {entry.label}
-          </span>
-          {entry.popOut && <PopOutGlyph />}
-        </button>
+        </div>
       ))}
       {/* Reserved V2 admin slot (design_handoff §1) */}
       <div

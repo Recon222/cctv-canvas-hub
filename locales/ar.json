@@ -205,6 +205,9 @@
   "canvass.dvr.password": "كلمة المرور",
 
   "canvass.nav.needsCase": "اختر قضية أولاً",
+  "canvass.nav.popOutLabel": "فتح {{view}} في نافذة مستقلة",
+  "canvass.nav.popped": "مفتوحة في نافذة مستقلة — انقر للتركيز",
+  "canvass.nav.popOutFailed": "تعذّر فتح النافذة",
   "canvass.cases.empty.listening": "الاستماع إلى قناة الوكالة",
   "canvass.cases.syncedCount": "{{count}} مُزامنة من تطبيق الميدان",
 

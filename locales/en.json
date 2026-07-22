@@ -205,6 +205,9 @@
   "canvass.dvr.password": "Password",
 
   "canvass.nav.needsCase": "Select a case first",
+  "canvass.nav.popOutLabel": "Pop out {{view}}",
+  "canvass.nav.popped": "Popped out — click to focus",
+  "canvass.nav.popOutFailed": "Couldn't open the window",
   "canvass.cases.empty.listening": "Listening on agency channel",
   "canvass.cases.syncedCount": "{{count}} synced from the field app",
 
