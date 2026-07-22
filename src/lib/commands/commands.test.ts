@@ -265,5 +265,36 @@ describe('Simplified Command System', () => {
       // is an execution error, never the locked block.
       expect(result.error ?? '').not.toContain('locked')
     })
+
+    // PR #9 L10: pin the allow-list MEMBERSHIP, not just the blocking
+    // mechanism — every registered command must block while locked
+    // UNLESS it is one of the five window-management ids. A future
+    // leaked entry (e.g. session-sign-out) fails this loop.
+    it('allows exactly the window-management commands through the lock', async () => {
+      const { windowCommands } = await import('./window-commands')
+      registerCommands(navigationCommands)
+      registerCommands(featureCommands)
+      registerCommands(windowCommands)
+
+      useSessionStore.setState({ state: 'locked' })
+      const windowIds = new Set(windowCommands.map(cmd => cmd.id))
+      expect(windowIds).toEqual(
+        new Set([
+          'window-close',
+          'window-minimize',
+          'window-toggle-maximize',
+          'window-fullscreen',
+          'window-exit-fullscreen',
+        ])
+      )
+      for (const cmd of getAllCommands(mockContext)) {
+        const result = await executeCommand(cmd.id, mockContext)
+        if (windowIds.has(cmd.id)) {
+          expect(result.error ?? '', cmd.id).not.toContain('locked')
+        } else {
+          expect(result.error ?? '', cmd.id).toContain('locked')
+        }
+      }
+    })
   })
 })

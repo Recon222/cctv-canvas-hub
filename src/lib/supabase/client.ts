@@ -89,7 +89,12 @@ export type SessionFreshness = 'fresh' | 'refreshed' | 'deferred' | 'failed'
  * imports client.ts back.
  */
 export function isNetworkAuthError(error: { status?: number }): boolean {
-  return error.status === undefined || error.status === 0 || error.status >= 500
+  return (
+    error.status === undefined ||
+    error.status === 0 ||
+    error.status === 429 ||
+    error.status >= 500
+  )
 }
 
 /**

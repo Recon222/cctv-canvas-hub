@@ -370,6 +370,21 @@ describe('LockOverlay (6.1B)', () => {
     )
     expect(useSessionStore.getState().state).toBe('locked')
 
+    // PR #9 L3: a 429 rate-limit is NOT "wrong password" — telling a
+    // coordinator to retype (and re-fire the limiter) is the D3
+    // distinction's exact failure mode. Same "can't reach" copy.
+    fake.auth.signInWithPassword.mockResolvedValue({
+      data: {},
+      error: { message: 'Request rate limit reached', status: 429 },
+    })
+    await user.clear(input)
+    await user.type(input, 'lVNI7U1gt78zHtlz')
+    await user.click(screen.getByRole('button', { name: 'Unlock' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Can't reach the cloud — check the room's connection and try again"
+    )
+    expect(useSessionStore.getState().state).toBe('locked')
+
     // Correct password → active, overlay gone, board still there.
     fake.auth.signInWithPassword.mockResolvedValue({ data: {}, error: null })
     await user.clear(input)

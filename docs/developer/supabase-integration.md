@@ -82,12 +82,18 @@ AES-256-GCM (`secure-vault` crate) with the key in the OS keychain and
 Every wake path (`online`, tab visible, channel resubscribe) converges on one
 path in `useConnectionHealth`:
 
-1. `ensureFreshSession(getSupabase())` — refresh **only** within
-   `SESSION_EXPIRY_MARGIN_MS` of expiry (`autoRefreshToken` owns routine
-   rotation; racing its ticker can submit an already-rotated refresh token),
-   then `realtime.setAuth()` with the rotated token;
+1. `ensureFreshSession(getSupabase())` — note that gotrue's `getSession()`
+   itself auto-refreshes within its ~90 s margin (single-flighted), so the
+   explicit `refreshSession()` branch is a near-expiry **fallback**, fired
+   only within `SESSION_EXPIRY_MARGIN_MS` of expiry; on rotation it then
+   re-auths the realtime socket via `realtime.setAuth()` (no argument — it
+   resolves the current token itself);
 2. invalidate the `CASE_DATA_KEY_FAMILIES` queries;
-3. on refresh failure: toast + `signed-out` — never a silent stale board.
+3. failure is classified (PR #9 M2): a network-shaped refresh failure
+   (offline wake, 5xx, 429) is `deferred` — stay put, skip the refetch,
+   retry on the next wake/tick; only a definite 4xx refusal (or no session)
+   is `failed` → toast + `signed-out` — never a silent stale board, and
+   never a forced sign-out over a still-valid refresh token.
 
 ## Session states the data plane must honor
 
