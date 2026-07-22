@@ -20,6 +20,7 @@ const CONFIG = {
   url: 'https://testref.supabase.co',
   publishable_key: 'sb_publishable_test',
   signed_in_email: 'coord@example.test',
+  locked: false,
 }
 
 beforeEach(() => {
@@ -69,6 +70,23 @@ describe('useAuthBootstrap', () => {
 
     await waitFor(() => {
       expect(useSessionStore.getState().state).toBe('active')
+    })
+  })
+
+  // PR #9 H1 (the REVISE gate): the idle lock must survive a
+  // reload/relaunch. A restored session + gate ok + the persisted
+  // locked flag ⇒ bootstrap re-enters `locked`, NEVER `active` — F5,
+  // a crash, the updater, or M1 relaunch-restore must not drop the
+  // wall without a password.
+  it('re-enters locked when the persisted lock flag is set', async () => {
+    mockLoadConfig.mockResolvedValue({ ...CONFIG, locked: true })
+    mockRestoreSession.mockResolvedValue(true)
+    mockCheckSchemaGate.mockResolvedValue('ok')
+
+    renderBootstrap()
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().state).toBe('locked')
     })
   })
 

@@ -1,11 +1,19 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import { logger } from '@/lib/logger'
+import { setLockedFlag } from '../services/configService'
 import type { SessionState } from '../types'
 
 /**
  * The session state machine (doc 01 §5.4). Selector-only access
  * (ast-grep no-destructure). ZERO health state here — health is the
  * global health-store's domain (AD11, M2).
+ *
+ * Lock durability (PR #9 H1): every lock/unlock transition persists
+ * the flag through `setLockedFlag` — the ONE home for it, so every
+ * caller (idle timer, palette command, overlay unlock) is covered and
+ * bootstrap can re-enter `locked` after a reload/relaunch. Sign-out
+ * clears it in `signOut()` (that path never runs `unlock()`).
  */
 interface SessionStore {
   state: SessionState
@@ -16,28 +24,37 @@ interface SessionStore {
   unlock: () => void
 }
 
+/** Fire-and-forget: a persist failure must never block the in-memory
+ * transition (the wall stays up NOW; durability degrades with a logged
+ * error — an unattended kiosk can't act on a toast). */
+function persistLockedFlag(locked: boolean): void {
+  setLockedFlag(locked).catch((cause: unknown) => {
+    logger.error('Failed to persist the lock flag', { locked, cause })
+  })
+}
+
 export const useSessionStore = create<SessionStore>()(
   devtools(
-    set => ({
+    (set, get) => ({
       state: 'booting',
 
       setState: state => set({ state }, undefined, 'setState'),
 
-      lock: () =>
-        set(
-          current =>
-            current.state === 'active' ? { state: 'locked' } : current,
-          undefined,
-          'lock'
-        ),
+      lock: () => {
+        if (get().state !== 'active') {
+          return
+        }
+        set({ state: 'locked' }, undefined, 'lock')
+        persistLockedFlag(true)
+      },
 
-      unlock: () =>
-        set(
-          current =>
-            current.state === 'locked' ? { state: 'active' } : current,
-          undefined,
-          'unlock'
-        ),
+      unlock: () => {
+        if (get().state !== 'locked') {
+          return
+        }
+        set({ state: 'active' }, undefined, 'unlock')
+        persistLockedFlag(false)
+      },
     }),
     { name: 'session-store' }
   )

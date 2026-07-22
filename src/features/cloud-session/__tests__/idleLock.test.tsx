@@ -342,6 +342,7 @@ describe('LockOverlay (6.1B)', () => {
       data: {
         url: 'https://example.supabase.co',
         publishable_key: 'sb_publishable_x',
+        locked: false,
         signed_in_email: 'coord.reyes@canvass.dev',
       },
     })

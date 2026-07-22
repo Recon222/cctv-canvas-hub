@@ -34,7 +34,12 @@ export function SetupScreen() {
     try {
       const { url, key } = parseEnrollmentPayload(payload)
       await probeProject(url, key)
-      const config = { url, publishable_key: key, signed_in_email: null }
+      const config = {
+        url,
+        publishable_key: key,
+        signed_in_email: null,
+        locked: false,
+      }
       await saveConfig(config)
       initSupabase(config)
       useSessionStore.getState().setState('signed-out')

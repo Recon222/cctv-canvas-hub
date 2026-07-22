@@ -291,7 +291,14 @@ publishable_key: string;
 /**
  * Convenience for the re-auth prompt; NOT a secret.
  */
-signed_in_email: string | null }
+signed_in_email: string | null; 
+/**
+ * Idle-lock durability (PR #9 H1): set on lock, cleared on
+ * unlock/sign-out, so a reload/relaunch re-enters `locked` instead
+ * of `active`. Not a secret — it gates nothing by itself (the
+ * session stays in the vault); absent on pre-M6 files ⇒ unlocked.
+ */
+locked?: boolean }
 /**
  * Example data structure demonstrating feature-scoped types.
  * 

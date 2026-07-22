@@ -95,9 +95,12 @@ path in `useConnectionHealth`:
 media poll all gate on `session === 'active' || session === 'locked'` plus
 `canPoll(health)`. Lock (Flow F) is interaction-only: the overlay swallows
 input and the keyboard-shortcut hook gates on `locked`; content is never
-altered. Leaving `active`/`locked` (board unmount) purges the canvass store,
-the health marks, and every `CASE_DATA_KEY_FAMILIES` cache entry
-(`CanvassRoot`'s unmount effect).
+altered. The lock is **durable** (PR #9 H1): lock/unlock persist a flag in
+`cloud-config.json` (cleared on sign-out too), and bootstrap re-enters
+`locked` when a session restores with the flag set — a reload or relaunch
+never drops the wall without a password. Leaving `active`/`locked` (board
+unmount) purges the canvass store, the health marks, and every
+`CASE_DATA_KEY_FAMILIES` cache entry (`CanvassRoot`'s unmount effect).
 
 ## Testing: the one mock seam
 

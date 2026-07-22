@@ -53,6 +53,7 @@ describe('configService', () => {
     const config = {
       url: 'https://testref.supabase.co',
       publishable_key: 'sb_publishable_test',
+      locked: false,
       signed_in_email: 'coord@example.test',
     }
     mockCommands.saveCloudConfig.mockResolvedValue({

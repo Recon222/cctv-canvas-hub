@@ -52,6 +52,21 @@ export async function clearConfig(): Promise<void> {
 }
 
 /**
+ * Idle-lock durability (PR #9 H1): persist the locked flag in the
+ * config JSON so `bootstrap()` re-enters `locked` after a reload,
+ * crash, updater restart, or relaunch — the wall must not drop without
+ * a password. Deliberately NOT in the vault: the flag is not a secret
+ * and must not gate on vault decrypt. No-op with no config on disk.
+ */
+export async function setLockedFlag(locked: boolean): Promise<void> {
+  const config = await loadConfig()
+  if (config === null || config.locked === locked) {
+    return
+  }
+  await saveConfig({ ...config, locked })
+}
+
+/**
  * Parse a `{v, url, key}` enrollment payload (the same pair the mobile
  * enrollment QR carries). Throws {@link EnrollmentPayloadError} on bad
  * JSON, wrong shape, or an unsupported version.

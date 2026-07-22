@@ -6,7 +6,12 @@
 import { commands } from '@/lib/tauri-bindings'
 import { getSupabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
-import { loadConfig, saveConfig, ProbeUnreachableError } from './configService'
+import {
+  loadConfig,
+  saveConfig,
+  setLockedFlag,
+  ProbeUnreachableError,
+} from './configService'
 
 /** The cloud schema this app understands (AD10 — fail-closed gate). */
 export const APP_REQUIRED_SCHEMA_VERSION = 1
@@ -56,6 +61,14 @@ export async function signOut(): Promise<void> {
   const result = await commands.vaultClear()
   if (result.status === 'error') {
     throw new Error(result.error)
+  }
+  // PR #9 H1: sign-out is the one lock exit that never runs `unlock()`
+  // — clear the persisted flag here so the NEXT sign-in's relaunch
+  // doesn't re-enter locked. Non-fatal: the session is already gone.
+  try {
+    await setLockedFlag(false)
+  } catch (cause) {
+    logger.warn('Failed to clear the lock flag on sign-out', { cause })
   }
   // The client singleton stays alive: the config/project is unchanged and
   // GoTrue already cleared its session, so the next in-process sign-in

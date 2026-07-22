@@ -45,7 +45,14 @@ async function bootstrap(): Promise<void> {
       return
     }
     const gate = await checkSchemaGate()
-    setState(gate === 'ok' ? 'active' : 'schema-gate')
+    if (gate !== 'ok') {
+      setState('schema-gate')
+      return
+    }
+    // PR #9 H1: the idle lock survives a reload/relaunch — a restored
+    // session re-enters `locked` when the persisted flag is set, never
+    // `active` (F5/crash/updater must not drop the wall passwordless).
+    setState(config.locked ? 'locked' : 'active')
   } catch (cause) {
     logger.error('Bootstrap: session restore failed', { cause })
     toast.error(i18n.t('cloudSession.errors.bootstrapFailed'))
