@@ -17,6 +17,9 @@ vi.mock('@/store/ui-store', () => ({
 const { registerCommands, getAllCommands, executeCommand } =
   await import('./registry')
 const { navigationCommands } = await import('./navigation-commands')
+const { featureCommands } = await import('./feature-commands')
+const { useCanvassStore, resetCanvassStore } =
+  await import('@/features/canvass')
 
 const createMockContext = (): CommandContext => ({
   openPreferences: vi.fn(),
@@ -148,6 +151,52 @@ describe('Simplified Command System', () => {
 
       expect(result.success).toBe(false)
       expect(result.error).toContain('Test error')
+    })
+  })
+
+  describe('M5 palette commands (Phase 5.3B)', () => {
+    // Test #99
+    it('registers the M5 palette commands (A1)', () => {
+      registerCommands(featureCommands)
+
+      const ids = getAllCommands(mockContext).map(cmd => cmd.id)
+      expect(ids).toEqual(
+        expect.arrayContaining([
+          'canvass-view-cases',
+          'canvass-view-case',
+          'canvass-view-map',
+          'session-sign-out',
+        ])
+      )
+      // session-lock-now registers in 6.1, WITH its unlock overlay — a
+      // lock command with no escape would strand an M5 build.
+      expect(ids).not.toContain('session-lock-now')
+    })
+
+    it('guards the case-bound views behind a selected case', async () => {
+      registerCommands(featureCommands)
+      resetCanvassStore()
+
+      // No selected case: the palette mirrors the rail's disabled
+      // posture honestly — a toast, never a broken blank view.
+      const result = await executeCommand('canvass-view-map', mockContext)
+      expect(result.success).toBe(true)
+      expect(mockContext.showToast).toHaveBeenCalledWith(
+        'Select a case first',
+        'info'
+      )
+      expect(useCanvassStore.getState().view).toBe('cases')
+
+      // With a selection, the three view commands mirror the rail.
+      useCanvassStore.getState().selectCase('case-1')
+      await executeCommand('canvass-view-map', mockContext)
+      expect(useCanvassStore.getState().view).toBe('map')
+      await executeCommand('canvass-view-case', mockContext)
+      expect(useCanvassStore.getState().view).toBe('case')
+      await executeCommand('canvass-view-cases', mockContext)
+      expect(useCanvassStore.getState().view).toBe('cases')
+
+      resetCanvassStore()
     })
   })
 })

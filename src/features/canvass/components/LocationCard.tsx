@@ -171,8 +171,12 @@ type OpenMedia =
  * the photo/video/audio count summary (#88). Thumb ⇒ ImageViewer at
  * that photo; video tile ⇒ on-demand VideoPlayer. Media comes from the
  * case-level query (one per case, AD3) filtered to this location.
+ *
+ * Exported for the dashboard's expanded roster rows (5.3A) — design §3
+ * pins the expanded detail as "identical content to map cards", so the
+ * roster reuses this strip rather than re-wiring thumbs/viewer/player.
  */
-function MediaStrip({ location }: { location: CanvassLocation }) {
+export function MediaStrip({ location }: { location: CanvassLocation }) {
   const { data: media } = useCaseMedia(location.caseId)
   const [open, setOpen] = useState<OpenMedia | null>(null)
 

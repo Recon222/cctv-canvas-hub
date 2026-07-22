@@ -97,6 +97,16 @@
 
   "commands.testToast.label": "Test Toast Notification",
   "commands.testToast.description": "Show a test toast notification",
+  "commands.group.canvass": "Canvass board",
+  "commands.group.session": "Session",
+  "commands.canvassViewCases.label": "Go to Cases",
+  "commands.canvassViewCases.description": "Show the active cases landing view",
+  "commands.canvassViewCase.label": "Go to Case dashboard",
+  "commands.canvassViewCase.description": "Show the selected case's dashboard",
+  "commands.canvassViewMap.label": "Go to Map",
+  "commands.canvassViewMap.description": "Show the live canvass map",
+  "commands.sessionSignOut.label": "Sign out",
+  "commands.sessionSignOut.description": "End the session and return to sign-in",
 
   "commandPalette.title": "Command Palette",
   "commandPalette.placeholder": "Type a command or search...",
@@ -166,6 +176,8 @@
   "cloudSession.signOutFailed": "Sign-out failed",
 
   "canvass.loading": "Loading…",
+  "canvass.header.appTag": "CANVAS HUB",
+  "canvass.header.commandCentre": "Command centre — active cases",
   "canvass.nav.cases": "Cases",
   "canvass.nav.case": "Case dashboard",
   "canvass.nav.map": "Map",
@@ -193,6 +205,7 @@
   "canvass.cases.empty.listening": "Listening on agency channel",
   "canvass.cases.syncedCount": "{{count}} synced from the field app",
 
+  "canvass.feed.title": "Live activity",
   "canvass.feed.empty.title": "Awaiting first activity",
   "canvass.feed.empty.description": "Everything that happens on this case lands here, newest first.",
 

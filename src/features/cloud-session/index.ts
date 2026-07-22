@@ -8,6 +8,13 @@ export { SetupScreen } from './components/SetupScreen'
 export { SignInScreen } from './components/SignInScreen'
 export { SchemaGateScreen } from './components/SchemaGateScreen'
 export { SignOutButton } from './components/SignOutButton'
+export {
+  ConnectionIndicator,
+  ConnectionBanner,
+} from './components/ConnectionIndicator'
 export { useSessionStore } from './store/session-store'
 export { useAuthBootstrap } from './hooks/useAuthBootstrap'
+// Sign-out action for non-component callers (the palette's
+// session-sign-out command, 5.3B); SignOutButton stays the UI surface.
+export { signOut } from './services/authService'
 export type { SessionState } from './types'

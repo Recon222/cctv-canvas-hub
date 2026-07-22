@@ -252,3 +252,73 @@ describe('CasesView (A1)', () => {
     expect(useCanvassStore.getState().view).toBe('cases')
   })
 })
+
+describe('board header chrome (5.2 — D15)', () => {
+  /** CanvassRoot mounts realtime; the auto-mocked client needs the
+   * minimal channel surface (reset-test precedent above). */
+  function stubChannel() {
+    const channel = { on: vi.fn(), subscribe: vi.fn() }
+    channel.on.mockReturnValue(channel)
+    vi.mocked(getSupabase).mockReturnValue({
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(() => Promise.resolve('ok')),
+    } as unknown as ReturnType<typeof getSupabase>)
+  }
+
+  // D15 (unnumbered arm behind #93–95): since M2 the health machine
+  // computed degradation and rendered it NOWHERE — this pins that the
+  // BOARD surface itself carries the chip and the escalation banner.
+  it('renders the connection chip live from the health store', async () => {
+    stubChannel()
+    renderWithFeatureProviders(<CanvassRoot />)
+
+    // Boot posture: the channel has not subscribed — honest "connecting"
+    // even while the board's own fetches are already confirming (the
+    // pre-confirm "awaiting" copy is pinned at the component level, #93).
+    expect(await screen.findByText('Connecting')).toBeInTheDocument()
+
+    // Positive confirmation on both planes ⇒ live, timestamp with seconds.
+    act(() => {
+      useHealthStore.getState().channelStatus('subscribed')
+      useHealthStore.getState().recordFetchOk()
+    })
+    expect(screen.getByText('Live')).toBeInTheDocument()
+    expect(screen.getByText(/Updated \d{2}:\d{2}:\d{2}/)).toBeInTheDocument()
+  })
+
+  it('escalates to the banner under the header when offline', async () => {
+    stubChannel()
+    renderWithFeatureProviders(<CanvassRoot />)
+    await screen.findByText('Connecting')
+
+    // The banner mounts unconditionally and self-nulls while healthy.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    act(() => {
+      useHealthStore.getState().setOnline(false)
+    })
+    expect(screen.getByRole('alert').textContent).toMatch(/offline/i)
+  })
+
+  it('swaps the heading between command centre and the selected case', async () => {
+    stubChannel()
+    renderWithFeatureProviders(<CanvassRoot />)
+
+    // Landing: the app heading (no case selected).
+    expect(await screen.findByText('CANVAS HUB')).toBeInTheDocument()
+    expect(
+      screen.getByText('Command centre — active cases')
+    ).toBeInTheDocument()
+
+    // A selected case owns the heading: gold number tag + title.
+    await screen.findByText('24-CANVASS-0417')
+    act(() => {
+      useCanvassStore.getState().selectCase(SEED_CASE_ID)
+      useCanvassStore.getState().setView('case')
+    })
+    expect(screen.queryByText('CANVAS HUB')).not.toBeInTheDocument()
+    expect(screen.getAllByText('24-CANVASS-0417').length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText('QuickMart Robbery — Yonge St Canvass').length
+    ).toBeGreaterThan(0)
+  })
+})

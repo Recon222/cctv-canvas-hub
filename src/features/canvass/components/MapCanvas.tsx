@@ -128,7 +128,7 @@ export function MapCanvas({
 
   // Viewport from the incident coord (plan 3.2B). Keyed on the case id
   // and the coordinate VALUES — a reconcile refetch returns equal
-  // coords and must not yank the coordinator's pan every 60 s.
+  // coords and must not yank the coordinator's pan every RECONCILE_MS.
   const caseKey = selectedCase?.id ?? null
   useEffect(() => {
     if (caseKey !== null && incidentLat !== undefined) {

@@ -97,6 +97,16 @@
 
   "commands.testToast.label": "Tester la notification toast",
   "commands.testToast.description": "Afficher une notification toast de test",
+  "commands.group.canvass": "Tableau de ratissage",
+  "commands.group.session": "Session",
+  "commands.canvassViewCases.label": "Aller aux dossiers",
+  "commands.canvassViewCases.description": "Afficher la vue d'accueil des dossiers actifs",
+  "commands.canvassViewCase.label": "Aller au tableau de bord du dossier",
+  "commands.canvassViewCase.description": "Afficher le tableau de bord du dossier sélectionné",
+  "commands.canvassViewMap.label": "Aller à la carte",
+  "commands.canvassViewMap.description": "Afficher la carte de ratissage en direct",
+  "commands.sessionSignOut.label": "Se déconnecter",
+  "commands.sessionSignOut.description": "Terminer la session et revenir à la connexion",
 
   "commandPalette.title": "Palette de commandes",
   "commandPalette.placeholder": "Tapez une commande ou recherchez...",
@@ -166,6 +176,8 @@
   "cloudSession.signOutFailed": "Échec de la déconnexion",
 
   "canvass.loading": "Chargement…",
+  "canvass.header.appTag": "CANVAS HUB",
+  "canvass.header.commandCentre": "Centre de commandement — dossiers actifs",
   "canvass.nav.cases": "Dossiers",
   "canvass.nav.case": "Tableau du dossier",
   "canvass.nav.map": "Carte",
@@ -193,6 +205,7 @@
   "canvass.cases.empty.listening": "À l'écoute du canal de l'agence",
   "canvass.cases.syncedCount": "{{count}} synchronisés depuis l'application terrain",
 
+  "canvass.feed.title": "Activité en direct",
   "canvass.feed.empty.title": "En attente de la première activité",
   "canvass.feed.empty.description": "Tout ce qui se passe dans ce dossier s'affiche ici, du plus récent au plus ancien.",
 

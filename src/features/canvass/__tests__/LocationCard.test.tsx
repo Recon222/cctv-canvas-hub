@@ -18,7 +18,11 @@ import { LocationCardStack } from '../components/LocationCardStack'
 import { fetchLocations, fetchMedia } from '../services/canvassService'
 import { createSignedUrl } from '../services/mediaService'
 import { toCanvassLocation, toCanvassMedia } from '../services/mappers'
-import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
+import {
+  useCanvassStore,
+  resetCanvassStore,
+  ATTENTION_TTL_MS,
+} from '../store/canvass-store'
 import type {
   CanvassLocation,
   CanvassMedia,
@@ -137,6 +141,64 @@ describe('LocationCard', () => {
     expect(useCanvassStore.getState().selectedLocationId).toBeNull()
     await user.keyboard(' ')
     expect(useCanvassStore.getState().selectedLocationId).toBe(locationRow().id)
+  })
+
+  // Test #91
+  it('applies the pulse class while attention is fresh', () => {
+    const at = Date.now()
+    act(() => {
+      useCanvassStore.getState().pushActivity({
+        id: 'a-fresh',
+        at,
+        caseId: SEED_CASE_ID,
+        kind: 'location-updated',
+        locationId: locationRow().id,
+        summary: 'QuickMart Convenience',
+      })
+    })
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+
+    const card = screen.getByRole('option', { name: /QuickMart Convenience/ })
+    // The 12 s gold flash keys off BOTH the animation class and the
+    // data-attention attribute (canvass.css scopes the keyframes to
+    // `.hub-attention-flash[data-attention]`) — but the class sits
+    // unconditionally in the card's base string, so the ATTRIBUTE is
+    // the pin (mutation-confirmed red both directions; PR #8 L1: a
+    // toHaveClass assertion here could never fail).
+    expect(card).toHaveAttribute('data-attention')
+  })
+
+  // Test #92
+  it('drops the pulse class after the attention TTL expires', () => {
+    const at = Date.now()
+    act(() => {
+      useCanvassStore.getState().pushActivity({
+        id: 'a-expiring',
+        at,
+        caseId: SEED_CASE_ID,
+        kind: 'location-status',
+        locationId: locationRow().id,
+        summary: 'QuickMart Convenience',
+      })
+    })
+    renderWithFeatureProviders(
+      <LocationCard location={mapped(locationRow())} />
+    )
+    const card = screen.getByRole('option', { name: /QuickMart Convenience/ })
+    expect(card).toHaveAttribute('data-attention')
+
+    // The store sweep (CanvassRoot's 1 s interval calls
+    // clearExpiredAttention) is the single expiry clock: presence on the
+    // store ≡ fresh for every consumer. One tick past the TTL ⇒ the
+    // stamp is gone and the card sheds the pulse.
+    act(() => {
+      useCanvassStore
+        .getState()
+        .clearExpiredAttention(at + ATTENTION_TTL_MS + 1)
+    })
+    expect(card).not.toHaveAttribute('data-attention')
   })
 
   // Test #59

@@ -26,14 +26,28 @@ export type ChannelStatus = 'subscribed' | 'timed-out' | 'closed' | 'error'
 export const STALE_AFTER_MS = 90_000
 
 /**
+ * Jitter budget for the two-cycle invariant below — what reality adds
+ * on top of two nominal reconcile periods: settle-based restart drift
+ * (TanStack schedules the next fetch AFTER the previous one settles,
+ * so per-cycle RTT compounds) plus up to one 10 s reevaluate tick of
+ * detection granularity. 20 s = the tick plus ~10 s for two slow
+ * round-trips.
+ */
+export const FETCH_BUDGET_MS = 20_000
+
+/**
  * Reconcile interval for case-data queries — the lost-broadcast safety
  * net (Flow E4) AND the liveness floor on a silent agency: with zero
  * broadcasts (e.g. an idle overnight wall board) the reconcile fetch is
- * the only positive confirmation, so this must stay BELOW
- * `STALE_AFTER_MS` or a healthy quiet board reads stale most of every
- * cycle. Two small queries per minute is the accepted cost.
+ * the only positive confirmation, and on the NO-case-selected views the
+ * cases/counts reconciles are the only confirmation at all (no 20 s
+ * media poll there). PR #8 H1 (two-cycle margin — was 60 s): ONE failed
+ * or slow cycle must never paint the red STALE banner, so the pinned
+ * invariant is `2 × RECONCILE_MS + FETCH_BUDGET_MS ≤ STALE_AFTER_MS`,
+ * not merely reconcile < stale. Two small queries every 35 s is the
+ * accepted cost (~1.7× the previous traffic, landing views only).
  */
-export const RECONCILE_MS = 60_000
+export const RECONCILE_MS = 35_000
 
 /**
  * Query-key prefix for signed-URL queries (M4). Signed URLs refresh on
@@ -88,13 +102,23 @@ export interface HealthMarks {
   startedAt: number
 }
 
+/**
+ * The last positive server confirmation from EITHER plane — the
+ * indicator's displayed timestamp (doc 01 §5.4, A2 binding for M5).
+ * Never `lastEventAt` alone: on a silent overnight board broadcasts
+ * stay null while reconciles keep confirming — binding to the event
+ * mark would render "updated —" beside a green dot.
+ */
+export function lastConfirmAt(marks: HealthMarks): number | null {
+  return Math.max(marks.lastEventAt ?? 0, marks.lastFetchOkAt ?? 0) || null
+}
+
 /** Pure state derivation — the whole machine, unit-testable without time. */
 export function evaluate(marks: HealthMarks, now: number): HealthState {
   if (!marks.online) {
     return 'offline'
   }
-  const lastConfirm =
-    Math.max(marks.lastEventAt ?? 0, marks.lastFetchOkAt ?? 0) || null
+  const lastConfirm = lastConfirmAt(marks)
   if (now - (lastConfirm ?? marks.startedAt) > STALE_AFTER_MS) {
     return 'stale'
   }

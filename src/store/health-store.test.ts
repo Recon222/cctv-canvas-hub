@@ -7,9 +7,11 @@ import {
   useHealthStore,
   evaluate,
   canPoll,
+  lastConfirmAt,
   resetHealthStore,
   STALE_AFTER_MS,
   RECONCILE_MS,
+  FETCH_BUDGET_MS,
   SIGNED_URL_KEY_PREFIX,
   type HealthMarks,
 } from './health-store'
@@ -28,12 +30,39 @@ function marks(overrides: Partial<HealthMarks> = {}): HealthMarks {
 
 describe('cadence invariant', () => {
   // The reconcile fetch is the ONLY positive liveness confirmation on a
-  // silent agency. If it fires slower than the stale threshold, a
-  // healthy quiet board reads STALE most of every cycle (the PR #4
-  // fix-delta round-2 mutation: reverting RECONCILE_MS to 300_000 left
-  // the whole suite green — this test is the tripwire).
-  it('reconciles faster than the stale threshold', () => {
-    expect(RECONCILE_MS).toBeLessThan(STALE_AFTER_MS)
+  // silent agency — and the only confirmation AT ALL on the
+  // no-case-selected views (cases + counts). PR #8 H1: the previous
+  // one-cycle form (`RECONCILE_MS < STALE_AFTER_MS`) protected a
+  // breakable invariant — settle-based restart (TanStack schedules the
+  // next fetch AFTER the previous settles, so RTT compounds per cycle)
+  // or a single failed/slow cycle pushed the next confirmation past the
+  // threshold and flashed a false red "do not trust as live" banner on
+  // a healthy idle board. The real invariant is TWO full cycles plus
+  // the jitter budget inside the threshold: one missed reconcile must
+  // never paint STALE. (Lineage: PR #4 round-2 mutation proved 300_000
+  // passed a green suite; PR #8 proved 60_000 passed the one-cycle
+  // tripwire while breachable in practice.)
+  it('keeps a full missed reconcile cycle inside the stale threshold', () => {
+    expect(2 * RECONCILE_MS + FETCH_BUDGET_MS).toBeLessThanOrEqual(
+      STALE_AFTER_MS
+    )
+  })
+
+  it('does not flash stale across one missed reconcile cycle', () => {
+    // Worst honest case on a landing view: confirm at t0, the next
+    // cycle's fetch FAILS (stamps an error, no confirm), and the
+    // recovery cycle lands as late as the jitter budget allows.
+    const t0 = 1_000_000
+    const worst = marks({
+      channel: 'subscribed',
+      lastFetchOkAt: t0,
+      lastFetchErrorAt: t0 + RECONCILE_MS,
+    })
+    const recoveryDue = t0 + 2 * RECONCILE_MS + FETCH_BUDGET_MS
+    // Amber (error newer than the confirm) is the honest render here —
+    // degraded, retrying. Never the red stale banner before the
+    // recovery cycle has had its chance to land.
+    expect(evaluate(worst, recoveryDue)).toBe('reconnecting')
   })
 })
 
@@ -158,6 +187,26 @@ describe('health-store', () => {
     useHealthStore.getState().channelStatus('subscribed')
     useHealthStore.getState().recordFetchError()
     expect(useHealthStore.getState().state).toBe('connecting')
+  })
+})
+
+describe('lastConfirmAt (5.2, §5.4 A2 binding)', () => {
+  // The indicator's displayed timestamp is max(lastEventAt, lastFetchOkAt)
+  // — binding to lastEventAt alone renders "updated —" beside a green dot
+  // on a silent overnight board (reconciles confirm, broadcasts don't).
+  it('is the max of the event and fetch confirmations', () => {
+    expect(lastConfirmAt(marks({ lastEventAt: 500, lastFetchOkAt: 900 }))).toBe(
+      900
+    )
+    expect(
+      lastConfirmAt(marks({ lastEventAt: 1_200, lastFetchOkAt: 900 }))
+    ).toBe(1_200)
+    // Either plane alone is a confirmation.
+    expect(lastConfirmAt(marks({ lastFetchOkAt: 900 }))).toBe(900)
+    expect(lastConfirmAt(marks({ lastEventAt: 700 }))).toBe(700)
+    // No confirmation yet ⇒ null (the chip renders its designed
+    // "awaiting first confirm" copy, never a fake time).
+    expect(lastConfirmAt(marks())).toBeNull()
   })
 })
 

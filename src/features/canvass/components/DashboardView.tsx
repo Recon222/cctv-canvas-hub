@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown, MapPinOff, Image as ImageIcon, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBoardTimestamp, formatClockTime } from '../services/format'
+import { MediaStrip } from './LocationCard'
 import type { CanvassCase, CanvassLocation, CanvassMedia } from '../types'
 import type { LocationStatusCounts } from '../services/canvassService'
 
@@ -12,9 +13,10 @@ import type { LocationStatusCounts } from '../services/canvassService'
  * (15+ investigators, inline-expandable location rows). NO activity
  * feed column — the feed lives in the process panel (plan 6.3C).
  *
- * Typed props only (M5 wiring is agent-owned): the host derives the
- * roster from locations (investigator grouping per AD8) and passes
- * media summaries. Expansion state is local (presentation).
+ * Typed props for all data (the CaseDashboard host derives them; the
+ * roster groups per investigator via AD8). Expansion state is local
+ * (presentation); expanded rows mount the shared MediaStrip, which
+ * reads the same case-level media query the host already holds (5.3A).
  */
 
 export interface DashboardViewProps {
@@ -187,7 +189,11 @@ export function DashboardView({
           {/* auto-fill grid: 15+ investigators wrap and scroll (§3) */}
           <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(380px,1fr))] content-start gap-3.5 overflow-y-auto pe-0.5">
             {roster.map(entry => (
-              <InvestigatorCard key={entry.investigator} entry={entry} />
+              <InvestigatorCard
+                key={entry.investigator}
+                entry={entry}
+                media={media}
+              />
             ))}
           </div>
         </section>
@@ -255,7 +261,13 @@ function initials(name: string): string {
   return `${first}${last}`.toUpperCase() || '—'
 }
 
-function InvestigatorCard({ entry }: { entry: RosterEntry }) {
+function InvestigatorCard({
+  entry,
+  media,
+}: {
+  entry: RosterEntry
+  media: CanvassMedia[]
+}) {
   const { t } = useTranslation()
   return (
     <article className="self-start rounded-md border border-hub-hairline bg-hub-panel p-4">
@@ -276,7 +288,7 @@ function InvestigatorCard({ entry }: { entry: RosterEntry }) {
       </div>
       <div className="mt-2 flex flex-col">
         {entry.locations.map(location => (
-          <RosterRow key={location.id} location={location} />
+          <RosterRow key={location.id} location={location} media={media} />
         ))}
       </div>
     </article>
@@ -285,10 +297,17 @@ function InvestigatorCard({ entry }: { entry: RosterEntry }) {
 
 /**
  * Collapsed: dot · name + address · arrival · chevron. Expanded: the
- * detail block (DVR grid, notes, no-fix chip) — same content language
- * as LocationCard §4. Media thumbs mount here at M4 wiring (MediaThumb).
+ * detail block (DVR grid, no-fix chip) plus the M4 media strip (5.3A
+ * wiring — thumbs open the viewer/player, identical content language
+ * to the map cards, design §3).
  */
-function RosterRow({ location }: { location: CanvassLocation }) {
+function RosterRow({
+  location,
+  media,
+}: {
+  location: CanvassLocation
+  media: CanvassMedia[]
+}) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const dvr = location.dvr
@@ -300,7 +319,8 @@ function RosterRow({ location }: { location: CanvassLocation }) {
         { label: t('canvass.dvr.password'), value: dvr.dvrPassword ?? '' },
       ].filter(row => row.value !== '')
     : []
-  const sparse = dvrRows.length === 0
+  const hasMedia = media.some(row => row.locationId === location.id)
+  const sparse = dvrRows.length === 0 && !hasMedia
 
   return (
     <div
@@ -349,6 +369,10 @@ function RosterRow({ location }: { location: CanvassLocation }) {
       </button>
       {expanded && (
         <div className="flex flex-col gap-3 px-2 pb-3.5 ps-7 pt-1">
+          {/* The M4 media strip (5.3A): fed by the same case-level media
+              query the host already holds — renders nothing when the
+              location has no media. */}
+          <MediaStrip location={location} />
           {location.coord === null && (
             <span className="inline-flex w-fit items-center gap-1 rounded-[3px] border border-hub-working/30 bg-hub-working/10 px-1.5 py-0.5 font-stmono text-[9px] uppercase tracking-[1px] text-hub-working">
               <MapPinOff className="size-3" aria-hidden />

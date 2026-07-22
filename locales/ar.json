@@ -97,6 +97,16 @@
 
   "commands.testToast.label": "اختبار إشعار التنبيه",
   "commands.testToast.description": "إظهار إشعار تنبيه اختباري",
+  "commands.group.canvass": "لوحة المسح الميداني",
+  "commands.group.session": "الجلسة",
+  "commands.canvassViewCases.label": "الانتقال إلى القضايا",
+  "commands.canvassViewCases.description": "عرض شاشة القضايا النشطة",
+  "commands.canvassViewCase.label": "الانتقال إلى لوحة القضية",
+  "commands.canvassViewCase.description": "عرض لوحة معلومات القضية المحددة",
+  "commands.canvassViewMap.label": "الانتقال إلى الخريطة",
+  "commands.canvassViewMap.description": "عرض خريطة المسح المباشرة",
+  "commands.sessionSignOut.label": "تسجيل الخروج",
+  "commands.sessionSignOut.description": "إنهاء الجلسة والعودة إلى تسجيل الدخول",
 
   "commandPalette.title": "لوحة الأوامر",
   "commandPalette.placeholder": "اكتب أمراً أو ابحث...",
@@ -166,6 +176,8 @@
   "cloudSession.signOutFailed": "فشل تسجيل الخروج",
 
   "canvass.loading": "جارٍ التحميل…",
+  "canvass.header.appTag": "CANVAS HUB",
+  "canvass.header.commandCentre": "مركز القيادة — القضايا النشطة",
   "canvass.nav.cases": "القضايا",
   "canvass.nav.case": "لوحة القضية",
   "canvass.nav.map": "الخريطة",
@@ -193,6 +205,7 @@
   "canvass.cases.empty.listening": "الاستماع إلى قناة الوكالة",
   "canvass.cases.syncedCount": "{{count}} مُزامنة من تطبيق الميدان",
 
+  "canvass.feed.title": "النشاط المباشر",
   "canvass.feed.empty.title": "بانتظار أول نشاط",
   "canvass.feed.empty.description": "كل ما يحدث في هذه القضية يظهر هنا، الأحدث أولاً.",
 
