@@ -66,6 +66,16 @@ vi.mock('@/lib/tauri-bindings', () => ({
     vaultGet: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     vaultSet: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     vaultClear: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    readLogTail: vi.fn().mockResolvedValue({ status: 'ok', data: '' }),
+    vaultStatus: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: {
+        config_present: true,
+        vault_present: true,
+        keyring_key_present: true,
+        vault_mtime_ms: null,
+      },
+    }),
   },
   unwrapResult: vi.fn((result: { status: string; data?: unknown }) => {
     if (result.status === 'ok') return result.data

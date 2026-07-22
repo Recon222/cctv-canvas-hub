@@ -216,6 +216,22 @@ async vaultClear() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async readLogTail(lines: number) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_log_tail", { lines }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async vaultStatus() : Promise<Result<VaultStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("vault_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -316,6 +332,16 @@ export type RecoveryError =
  * JSON serialization/deserialization error
  */
 { type: "ParseError"; message: string }
+/**
+ * Presence report for the ProcessPanel's SYSTEM lane (6.3B). Status
+ * only — nothing here ever decrypts (`vault_get` is the wrong tool
+ * for status; status must never touch plaintext).
+ */
+export type VaultStatus = { config_present: boolean; vault_present: boolean; keyring_key_present: boolean; 
+/**
+ * Last vault write, epoch ms (f64 — specta rejects u64).
+ */
+vault_mtime_ms: number | null }
 
 /** tauri-specta globals **/
 

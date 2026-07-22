@@ -5,12 +5,13 @@
 //! token. Do not add logging here (the preferences `{preferences:?}` idiom
 //! must not be copied — it would bypass the vault via the on-disk log).
 
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::{AppHandle, Manager};
 
-use super::types::CloudConfig;
+use super::types::{CloudConfig, VaultStatus};
 
 const CONFIG_FILE: &str = "cloud-config.json";
 const VAULT_FILE: &str = "session.vault";
@@ -137,4 +138,84 @@ fn remove_if_exists(path: &Path, what: &str) -> Result<(), String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(format!("Failed to clear {what}: {e}")),
     }
+}
+
+// ---- SYSTEM-lane diagnostics (6.3B — log tail + vault status) ----
+
+/// Hard clamp on requested tail lines.
+const LOG_TAIL_MAX_LINES: u32 = 500;
+/// Read at most this much from the end of the log per tail request.
+const LOG_TAIL_WINDOW_BYTES: u64 = 64 * 1024;
+
+/// Read the newest `lines` lines of the app log (6.3B).
+///
+/// The filename derives from `app.package_info().name` — never a
+/// literal: tauri-plugin-log's `LogDir { file_name: None }` writes
+/// `{name}.log`, and a `productName` rename must not silently strand
+/// the SYSTEM lane on a permanently empty file. This function does the
+/// bounded I/O only; the pure slicing is `platform_utils::tail_log`
+/// (6.3B′ — the Tauri-free crate is where it is unit-testable on
+/// Windows). Error strings name the operation, not the full path
+/// (defensive redaction).
+pub fn read_log_tail(app: &AppHandle, lines: u32) -> Result<String, String> {
+    let lines = lines.min(LOG_TAIL_MAX_LINES) as usize;
+    let name = &app.package_info().name;
+    let path = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| format!("Failed to resolve the log directory: {e}"))?
+        .join(format!("{name}.log"));
+    let mut file =
+        std::fs::File::open(&path).map_err(|e| format!("Failed to open the app log: {e}"))?;
+    let len = file
+        .metadata()
+        .map_err(|e| format!("Failed to stat the app log: {e}"))?
+        .len();
+    // `partial_first_line` is the caller's knowledge (6.3B′): true only
+    // when this read actually seeked past the start of the file.
+    let seeked = len > LOG_TAIL_WINDOW_BYTES;
+    if seeked {
+        file.seek(SeekFrom::End(-(LOG_TAIL_WINDOW_BYTES as i64)))
+            .map_err(|e| format!("Failed to seek the app log: {e}"))?;
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|e| format!("Failed to read the app log: {e}"))?;
+    Ok(platform_utils::tail_log(&bytes, lines, seeked))
+}
+
+/// Presence status for the SYSTEM lane (6.3B). Never decrypts — status
+/// must never touch plaintext (`vault_get` is the wrong tool here).
+///
+/// A locked or unreachable keychain is an **error**, never "absent":
+/// an `Ok` of all-false would read as "no key present" and send an
+/// operator to re-enroll a healthy install.
+pub fn vault_status(app: &AppHandle) -> Result<VaultStatus, String> {
+    let dir = app_data_dir(app)?;
+    let config_present = dir.join(CONFIG_FILE).exists();
+    let vault_path = dir.join(VAULT_FILE);
+    let vault_present = vault_path.exists();
+    let vault_mtime_ms = if vault_present {
+        std::fs::metadata(&vault_path)
+            .ok()
+            .and_then(|meta| meta.modified().ok())
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|elapsed| elapsed.as_millis() as f64)
+    } else {
+        None
+    };
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ENTRY)
+        .map_err(|e| format!("Failed to access keychain: {e}"))?;
+    let keyring_key_present = match entry.get_secret() {
+        // Bytes dropped immediately — presence only, never key material.
+        Ok(_) => true,
+        Err(keyring::Error::NoEntry) => false,
+        Err(e) => return Err(format!("Keychain unavailable: {e}")),
+    };
+    Ok(VaultStatus {
+        config_present,
+        vault_present,
+        keyring_key_present,
+        vault_mtime_ms,
+    })
 }
