@@ -28,6 +28,7 @@ export type {
   JsonValue,
   RecoveryError,
   VaultStatus,
+  ViewWindow,
 } from './bindings'
 
 /**

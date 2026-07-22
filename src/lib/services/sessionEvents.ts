@@ -26,9 +26,16 @@
  */
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { ViewWindow } from '@/lib/tauri-bindings'
 
-/** The two pop-out views (mirror of the Rust `ViewWindow` enum). */
-export type PopOutView = 'case' | 'map'
+/**
+ * The pop-out views — an ALIAS of the GENERATED Rust `ViewWindow` enum,
+ * never a hand-maintained copy (PR #10 L2): the Rust→TS
+ * `view-window-closed` event is a drift vector, and a future third Rust
+ * variant must surface as a tsc exhaustiveness error (e.g. in
+ * `poppedViews: Record<PopOutView, boolean>`), not as a typed lie.
+ */
+export type PopOutView = ViewWindow
 
 export interface SessionTokenPayload {
   /** CloudConfig url — designed-public (T4). */
