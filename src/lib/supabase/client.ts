@@ -54,6 +54,17 @@ export function getSupabase(): SupabaseClient {
   return client
 }
 
+/**
+ * Internal seam (7.2A): a SECONDARY context claims the `getSupabase()`
+ * holder with its accessToken-callback client so every reused
+ * service/view resolves this context's client unchanged. Only
+ * `secondary-client.ts` calls this — never main-window code (main's
+ * holder is owned by `initSupabase`/`teardownSupabase`).
+ */
+export function setSupabaseClientHolder(next: SupabaseClient | null): void {
+  client = next
+}
+
 export async function teardownSupabase(): Promise<void> {
   if (!client) {
     return
