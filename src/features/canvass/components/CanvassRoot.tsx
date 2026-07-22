@@ -364,7 +364,9 @@ function MapFurniture() {
         [minLng, minLat],
         [maxLng, maxLat],
       ],
-      { padding: cameraPadding(), maxZoom: 16.5 }
+      // L3 fix: padding scale from the map's own container (matches the
+      // chrome scale source; correct in any hosting).
+      { padding: cameraPadding(map.getContainer().clientWidth), maxZoom: 16.5 }
     )
   }
 
