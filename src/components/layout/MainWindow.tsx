@@ -33,10 +33,11 @@ export function MainWindow() {
   // Preferences dialog and command palette render into document.body,
   // OUTSIDE the inert shell, and Preferences' Save is a plain mutation
   // (not dispatcher-gated). Dismiss both when the lock fires; discarding
-  // in-progress edits is correct — the operator walked away. (The other
-  // full-screen surfaces — ImageViewer/VideoPlayer — are in-tree
-  // absolute overlays inside the board, so inert already covers them;
-  // toasts carry no actions.)
+  // in-progress edits is correct — the operator walked away. The other
+  // two body-portalled actionable surfaces — the media viewer/player —
+  // are dismissed the same way at their state owner (MediaStrip,
+  // LocationCard.tsx — fix-delta r2 N3); toasts carry no actions. That
+  // completes the body-portal set (verified by the r2 sweep).
   useEffect(() => {
     if (locked) {
       useUIStore.getState().setPreferencesOpen(false)
