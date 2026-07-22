@@ -5,6 +5,7 @@
 
 import { commands } from '@/lib/tauri-bindings'
 import { getSupabase, isNetworkAuthError } from '@/lib/supabase/client'
+import { emitSessionEnded } from '@/lib/services/sessionEvents'
 import { logger } from '@/lib/logger'
 import {
   loadConfig,
@@ -38,6 +39,14 @@ export async function signIn(email: string, password: string): Promise<void> {
 
 export async function signOut(): Promise<void> {
   const supabase = getSupabase()
+  // 7.2B/AD13: sign-out — and ONLY sign-out — terminates every pop-out
+  // window (`session-ended`; idle lock emits `session-locked` instead).
+  // Fire-and-forget FIRST: secondaries tear their sockets down in
+  // parallel with main's, and a failed emit must never block the local
+  // credential clear below.
+  emitSessionEnded().catch((cause: unknown) => {
+    logger.warn('Failed to broadcast session-ended to view windows', { cause })
+  })
   // Tear down realtime first: no channel may linger on a revoked token
   // (D12). The active→signed-out unmount removes them too — this makes
   // the guarantee independent of the component tree.

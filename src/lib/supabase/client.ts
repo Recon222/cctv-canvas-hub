@@ -12,6 +12,11 @@
 
 import { createClient } from '@supabase/supabase-js'
 import type { CloudConfig } from '@/lib/tauri-bindings'
+import { logger } from '@/lib/logger'
+import {
+  emitSessionToken,
+  onSecondaryReady,
+} from '@/lib/services/sessionEvents'
 import type { Database } from './database-types'
 import { resetVaultStorageBinding, vaultStorage } from './vault-storage'
 
@@ -34,9 +39,15 @@ export class SupabaseNotInitializedError extends Error {
 }
 
 let client: SupabaseClient | null = null
+/** The config behind the current MAIN-window client — the url/key half
+ * of every session-token push (designed-public values, T4). */
+let currentConfig: CloudConfig | null = null
+/** The secondary-ready reply listener attaches once per JS context. */
+let secondaryReadyReplyAttached = false
 
 export function initSupabase(config: CloudConfig): SupabaseClient {
-  client = createClient<Database>(config.url, config.publishable_key, {
+  currentConfig = config
+  const created = createClient<Database>(config.url, config.publishable_key, {
     auth: {
       storage: vaultStorage,
       persistSession: true,
@@ -44,7 +55,74 @@ export function initSupabase(config: CloudConfig): SupabaseClient {
       detectSessionInUrl: false,
     },
   })
-  return client
+  client = created
+  // 7.2C (AD13): main is the sole auth owner — every ROTATION is pushed
+  // to the pop-out windows. TOKEN_REFRESHED only; deliberately NO eager
+  // revocation detection here (ledger D19: accepted V1 posture — the
+  // honest signed-out path stays unchanged).
+  created.auth.onAuthStateChange((event, session) => {
+    const token = session?.access_token
+    if (event === 'TOKEN_REFRESHED' && token !== undefined) {
+      pushSessionToken(token)
+    }
+  })
+  attachSecondaryReadyReply()
+  return created
+}
+
+/** Fire-and-forget push to every secondary (a failed emit must never
+ * break main's own auth flow). */
+function pushSessionToken(token: string): void {
+  const config = currentConfig
+  if (config === null) {
+    return
+  }
+  emitSessionToken({
+    url: config.url,
+    key: config.publishable_key,
+    token,
+  }).catch((cause: unknown) => {
+    logger.warn('Failed to push the session token to view windows', { cause })
+  })
+}
+
+/**
+ * The token half of the handshake reply (7.2B): a secondary announced
+ * itself — reply with the CURRENT access token. A signed-out main
+ * replies nothing, so the secondary hits its boot timeout honestly
+ * instead of receiving a dead token. (The view-context half of the
+ * reply is the canvass bridge's — it owns the per-view case registry.)
+ */
+function attachSecondaryReadyReply(): void {
+  if (secondaryReadyReplyAttached) {
+    return
+  }
+  secondaryReadyReplyAttached = true
+  onSecondaryReady(() => {
+    void replyWithCurrentToken()
+  }).catch((cause: unknown) => {
+    secondaryReadyReplyAttached = false
+    logger.error('Failed to attach the secondary-ready reply listener', {
+      cause,
+    })
+  })
+}
+
+async function replyWithCurrentToken(): Promise<void> {
+  const holder = client
+  if (holder === null || currentConfig === null) {
+    return
+  }
+  try {
+    const { data, error } = await holder.auth.getSession()
+    const token = data.session?.access_token
+    if (error !== null || token === undefined) {
+      return
+    }
+    pushSessionToken(token)
+  } catch (cause) {
+    logger.warn('secondary-ready reply failed', { cause })
+  }
 }
 
 export function getSupabase(): SupabaseClient {

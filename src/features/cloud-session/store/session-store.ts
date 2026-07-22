@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { logger } from '@/lib/logger'
+import {
+  emitSessionLocked,
+  emitSessionUnlocked,
+} from '@/lib/services/sessionEvents'
 import { setLockedFlag } from '../services/configService'
 import type { SessionState } from '../types'
 
@@ -33,6 +37,21 @@ function persistLockedFlag(locked: boolean): void {
   })
 }
 
+/** 7.2B (AD6 parity, R8 #140): lock/unlock broadcast to the pop-out
+ * windows from the SAME choke point that persists the durable flag —
+ * every caller (idle timer, palette command, overlay unlock) is
+ * covered. Fire-and-forget like the flag write; secondaries seed their
+ * own-context session-store from these and keep the board flowing. */
+function broadcastLockState(locked: boolean): void {
+  const send = locked ? emitSessionLocked : emitSessionUnlocked
+  send().catch((cause: unknown) => {
+    logger.error('Failed to broadcast the lock state to view windows', {
+      locked,
+      cause,
+    })
+  })
+}
+
 export const useSessionStore = create<SessionStore>()(
   devtools(
     (set, get) => ({
@@ -46,6 +65,7 @@ export const useSessionStore = create<SessionStore>()(
         }
         set({ state: 'locked' }, undefined, 'lock')
         persistLockedFlag(true)
+        broadcastLockState(true)
       },
 
       unlock: () => {
@@ -54,6 +74,7 @@ export const useSessionStore = create<SessionStore>()(
         }
         set({ state: 'active' }, undefined, 'unlock')
         persistLockedFlag(false)
+        broadcastLockState(false)
       },
     }),
     { name: 'session-store' }

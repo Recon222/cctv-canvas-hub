@@ -1,7 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { waitFor } from '@testing-library/react'
 import { commands } from '@/lib/tauri-bindings'
+import {
+  emitSessionLocked,
+  emitSessionUnlocked,
+} from '@/lib/services/sessionEvents'
 import { useSessionStore } from '../store/session-store'
+
+vi.mock('@/lib/services/sessionEvents', () => ({
+  emitSessionLocked: vi.fn(() => Promise.resolve()),
+  emitSessionUnlocked: vi.fn(() => Promise.resolve()),
+}))
 
 beforeEach(() => {
   useSessionStore.setState({ state: 'booting' })
@@ -26,6 +35,30 @@ describe('session-store', () => {
     expect(useSessionStore.getState().state).toBe('signed-out')
     unlock()
     expect(useSessionStore.getState().state).toBe('signed-out')
+  })
+
+  // Test #140 (R8, lock half — the sign-out half lives in
+  // authService.test.ts): lock/unlock broadcast AD6 parity to the
+  // pop-out windows through the SAME choke point that persists the
+  // durable flag — every caller (idle timer, palette, overlay) covered.
+  it('broadcasts session-locked/-unlocked on lock/unlock transitions (R8 #140)', () => {
+    vi.mocked(emitSessionLocked).mockClear()
+    vi.mocked(emitSessionUnlocked).mockClear()
+
+    useSessionStore.setState({ state: 'active' })
+    useSessionStore.getState().lock()
+    expect(emitSessionLocked).toHaveBeenCalledTimes(1)
+
+    useSessionStore.getState().unlock()
+    expect(emitSessionUnlocked).toHaveBeenCalledTimes(1)
+
+    // Guarded no-op transitions broadcast nothing — a signed-out shell
+    // never leaks lock chatter to secondaries.
+    useSessionStore.setState({ state: 'signed-out' })
+    useSessionStore.getState().lock()
+    useSessionStore.getState().unlock()
+    expect(emitSessionLocked).toHaveBeenCalledTimes(1)
+    expect(emitSessionUnlocked).toHaveBeenCalledTimes(1)
   })
 
   // PR #9 H1: lock/unlock persist the durable flag through the config

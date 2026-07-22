@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { commands } from '@/lib/tauri-bindings'
 import { getSupabase, teardownSupabase } from '@/lib/supabase/client'
 import { vaultStorage } from '@/lib/supabase/vault-storage'
+import { emitSessionEnded } from '@/lib/services/sessionEvents'
 import {
   signIn,
   signOut,
@@ -11,6 +12,9 @@ import {
 
 // The single supabase-js seam.
 vi.mock('@/lib/supabase/client')
+vi.mock('@/lib/services/sessionEvents', () => ({
+  emitSessionEnded: vi.fn(() => Promise.resolve()),
+}))
 
 const mockCommands = vi.mocked(commands)
 const mockGetSupabase = vi.mocked(getSupabase)
@@ -141,6 +145,18 @@ describe('authService', () => {
     // The singleton must survive sign-out so the next in-process sign-in
     // can reach getSupabase() — teardown is reserved for re-enrollment.
     expect(mockTeardownSupabase).not.toHaveBeenCalled()
+  })
+
+  // Test #140 (R8, sign-out half — the lock half lives in
+  // session-store.test.ts): sign-out, and ONLY sign-out, terminates
+  // every pop-out window (7.2B: `session-ended` never fires for a lock).
+  it('emits session-ended exactly once on sign-out (R8 #140)', async () => {
+    const fake = fakeSupabase()
+    mockGetSupabase.mockReturnValue(fake)
+
+    await signOut()
+
+    expect(emitSessionEnded).toHaveBeenCalledTimes(1)
   })
 
   it('continues sign-out when channel teardown and cloud sign-out both fail', async () => {
