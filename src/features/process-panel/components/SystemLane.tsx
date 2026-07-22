@@ -3,18 +3,13 @@
  * canvas-hub row stream. Rows become ANSI-tagged text chunks (dim
  * source tag, tone-colored body) written through the vtEngine and
  * rendered by TextLane under the hardcoded CRT treatment; the retained
- * Header/Footer frame it, and the exports serialize the same stream
- * (vtPlainText / chunksToLinesHtml).
+ * Header/Footer frame it. (The export dropdown was cut at the M6 live
+ * smoke — see Header.tsx.)
  */
 
 import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-import { logger } from '@/lib/logger'
 import type { HealthState } from '@/store/health-store'
-import { createVtState, vtWrite, vtPlainText } from '../services/vtEngine'
-import { chunksToLinesHtml } from '../services/parseAnsiToHtml'
-import { exportTextFile } from '../services/exportService'
+import { createVtState, vtWrite } from '../services/vtEngine'
 import type { ProcessPanelRow } from '../sources/canvasHubSource'
 import { TextLane } from './TextLane'
 import { Header } from './Header'
@@ -67,20 +62,10 @@ function rowsToVtState(chunks: string[]) {
   return state
 }
 
-function htmlDocument(body: string): string {
-  return (
-    '<!doctype html><html><head><meta charset="utf-8"></head>' +
-    '<body style="background:#0a0a0a;color:#e5e5e5;font-family:monospace;font-size:12px">' +
-    body +
-    '</body></html>'
-  )
-}
-
 /** The panel's boot instant — uptime shown in the lane chrome. */
 const STARTED_AT = Date.now()
 
 export function SystemLane({ rows, healthState }: SystemLaneProps) {
-  const { t } = useTranslation()
   // 1 s uptime tick — runs only while the lane is actually mounted
   // (PanelShell mounts the slot only when expanded + SYSTEM active).
   const [now, setNow] = useState(() => Date.now())
@@ -98,29 +83,12 @@ export function SystemLane({ rows, healthState }: SystemLaneProps) {
   const uptimeLabel = formatUptime(now - STARTED_AT)
   const tailLineCount = rows.filter(row => row.source === 'log').length
 
-  const runExport = (name: string, content: string) => {
-    void exportTextFile(name, content).catch((cause: unknown) => {
-      logger.error('SYSTEM lane export failed', { cause })
-      toast.error(t('processPanel.export.failed'))
-    })
-  }
-
   return (
     <div data-bg="crt" className="flex h-full min-h-0 flex-col bg-[#0a0a0a]">
       <Header
         isRunning={healthState === 'live'}
         rowCount={rows.length}
         uptimeLabel={uptimeLabel}
-        onExportTxt={() => {
-          runExport('canvas-hub-system.txt', vtPlainText(vtState))
-        }}
-        onExportHtml={() => {
-          runExport(
-            'canvas-hub-system.html',
-            htmlDocument(chunksToLinesHtml(chunks))
-          )
-        }}
-        canExport={rows.length > 0}
       />
       <div
         data-testid="process-monitor-body"

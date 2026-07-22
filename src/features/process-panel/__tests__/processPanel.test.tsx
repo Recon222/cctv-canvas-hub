@@ -123,6 +123,24 @@ describe('ProcessPanel (6.3)', () => {
     expect(screen.getByText('SCHEMA 1')).toBeInTheDocument()
   })
 
+  // M6 live-smoke fix: the SYSTEM-lane export was cut (fs write
+  // commands are stripped from the kiosk build — removeUnusedCommands
+  // — and granting fs-write to a wall board for an unplanned feature
+  // expands the wrong surface). This pin keeps the removal from
+  // silently regressing into a re-added broken button.
+  it('renders the SYSTEM lane without an export affordance', async () => {
+    const user = userEvent.setup()
+    renderWithFeatureProviders(
+      <ProcessPanel activitySlot={<div>activity</div>} />
+    )
+    await openSystemLane(user)
+
+    expect(screen.getByTestId('process-monitor-footer')).toBeInTheDocument()
+    expect(
+      screen.queryByTestId('process-monitor-export-trigger')
+    ).not.toBeInTheDocument()
+  })
+
   // Test #122
   it('renders canvass activity in the ACTIVITY lane', () => {
     const entries = [

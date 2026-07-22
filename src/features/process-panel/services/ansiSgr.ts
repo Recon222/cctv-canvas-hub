@@ -1,12 +1,12 @@
 /**
- * ANSI SGR — shared state machine for the React + HTML parsers.
+ * ANSI SGR — the shared state machine behind the lane's parsers.
  *
  * Ported from the `processTerminal` retained surface (plan 6.3A —
- * gate-passed adaptation, not a copy). Shared by the React-node parser
- * (`ansiParser.tsx` → `parseAnsi`) and the HTML-string parser
- * (`parseAnsiToHtml.ts` → `parseAnsiToHtml`) so the SGR state machine
- * exists once. Drift is structurally prevented: any new SGR code lands
- * here, both parsers benefit.
+ * gate-passed adaptation, not a copy). Consumed by the React-node
+ * parser (`ansiParser.tsx` → `parseAnsi`) and the vtEngine. (The
+ * source's HTML-string sibling, `parseAnsiToHtml.ts`, and this file's
+ * `cssStringFrom*` helpers were dropped with the SYSTEM-lane export at
+ * the M6 live smoke — no canvas-hub consumer.)
  *
  * Module surface:
  *   - `AnsiState` — the SGR state shape (fg, bg, bold, dim, italic,
@@ -24,14 +24,6 @@
  *     compatible with React's CSSProperties)
  *   - `styleFromState(s)` — returns a `StyleAttrs` object for the
  *     React parser to spread onto `style={...}`
- *   - `cssStringFromState(s)` — returns an inline-CSS string
- *     (`'color: #...; font-weight: 600; ...'`) for the HTML parser
- *     to embed in `<span style="...">`
- *
- * Both `styleFromState` and `cssStringFromState` walk the same
- * `AnsiState` and share the inverse-swap + decoration-join logic.
- * Drift between the two output helpers is structurally tested by
- * the parity test at `parseAnsiToHtml.test.ts`.
  */
 
 export interface AnsiState {
@@ -196,35 +188,4 @@ function computeAttrs(s: AnsiState): StyleAttrs {
  */
 export function styleFromState(s: AnsiState): StyleAttrs {
   return computeAttrs(s)
-}
-
-/**
- * Serialize a computed `StyleAttrs` to an inline-CSS string. The
- * shared second half of `cssStringFromState`, exported (M5 Phase 15B)
- * so the HTML export can serialize vtEngine segment styles — which
- * are ALREADY `StyleAttrs` (produced via `styleFromState`) — with
- * structural React↔HTML parity: both surfaces flow through
- * `computeAttrs` and this one serializer.
- */
-export function cssStringFromAttrs(a: StyleAttrs): string {
-  const parts: string[] = []
-  if (a.color !== undefined) parts.push(`color: ${a.color}`)
-  if (a.backgroundColor !== undefined)
-    parts.push(`background-color: ${a.backgroundColor}`)
-  if (a.fontWeight !== undefined) parts.push(`font-weight: ${a.fontWeight}`)
-  if (a.opacity !== undefined) parts.push(`opacity: ${a.opacity}`)
-  if (a.fontStyle !== undefined) parts.push(`font-style: ${a.fontStyle}`)
-  if (a.textDecoration !== undefined)
-    parts.push(`text-decoration: ${a.textDecoration}`)
-  return parts.join('; ')
-}
-
-/**
- * HTML-facing — returns an inline-CSS string ready to embed in
- * `<span style="...">`. Same logic as `styleFromState`, just kebab-
- * cased + serialized. Returns an empty string when no attributes
- * are active so the consumer can branch on `.length === 0`.
- */
-export function cssStringFromState(s: AnsiState): string {
-  return cssStringFromAttrs(computeAttrs(s))
 }

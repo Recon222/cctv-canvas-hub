@@ -6,44 +6,27 @@
  *   adaptation hardcodes the CRT treatment (fix-delta 2).
  * - `mode: 'session' | 'empty'` is CUT with its only driver
  *   (`EmptyPanel` is in the discarded set) — the lane always has a
- *   session; `onExportJsonl` is CUT with the discarded source wrappers
- *   that supplied it.
+ *   session.
+ * - The export dropdown (.txt/.html) is CUT (M6 live-smoke fix): the
+ *   kiosk build strips the fs write commands (removeUnusedCommands),
+ *   and granting fs-write to a wall board for an unplanned feature
+ *   expands the wrong surface — the HTML-export path
+ *   (`parseAnsiToHtml`) fell with it, its sole consumer.
  *
- * Status dot + micro-label + row count / uptime + the export dropdown
- * (Text and HTML — both keyboard-accessible via Radix). Pure
- * presentational — accepts everything as props, subscribes to nothing.
+ * Status dot + micro-label + row count / uptime. Pure presentational —
+ * accepts everything as props, subscribes to nothing.
  */
 
 import { useTranslation } from 'react-i18next'
-import { DownloadIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 
 export interface HeaderProps {
   isRunning: boolean
   rowCount: number
   uptimeLabel: string
-  /** Export the lane's output as plain text (`.txt`). */
-  onExportTxt: () => void
-  /** Export the lane's output as a self-contained HTML document. */
-  onExportHtml: () => void
-  canExport: boolean
 }
 
-export function Header({
-  isRunning,
-  rowCount,
-  uptimeLabel,
-  onExportTxt,
-  onExportHtml,
-  canExport,
-}: HeaderProps) {
+export function Header({ isRunning, rowCount, uptimeLabel }: HeaderProps) {
   const { t } = useTranslation()
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b border-hub-hairline px-3">
@@ -67,34 +50,6 @@ export function Header({
           uptime: uptimeLabel,
         })}
       </span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={!canExport}
-            title={t('processPanel.export.title')}
-            data-testid="process-monitor-export-trigger"
-            className="size-6 text-hub-faint hover:text-hub-body-2"
-          >
-            <DownloadIcon className="size-3" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onClick={onExportTxt}
-            data-testid="process-monitor-export-txt"
-          >
-            {t('processPanel.export.txt')}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={onExportHtml}
-            data-testid="process-monitor-export-html"
-          >
-            {t('processPanel.export.html')}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </div>
   )
 }

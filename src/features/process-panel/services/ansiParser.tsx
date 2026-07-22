@@ -11,11 +11,10 @@
  * stream, not a terminal grid.
  *
  * Ported from the `processTerminal` retained surface (plan 6.3A). The
- * SGR state machine + palette + regex source live in `./ansiSgr.ts` so
- * the React parser here and the HTML parser at `./parseAnsiToHtml.ts`
- * share a single source of truth. Only the per-segment output differs:
- * this parser emits `<span>` React nodes; that parser emits `<span>`
- * HTML strings.
+ * SGR state machine + palette + regex source live in `./ansiSgr.ts` —
+ * a single source of truth this parser and the vtEngine share. (The
+ * HTML-string sibling parser was dropped with the SYSTEM-lane export
+ * at the M6 live smoke.)
  *
  * Lives in a service file (no React components) so any regex
  * rule-disable surface never touches a component the React Compiler
