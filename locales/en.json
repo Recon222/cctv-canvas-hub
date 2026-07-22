@@ -105,6 +105,8 @@
   "commands.canvassViewCase.description": "Show the selected case's dashboard",
   "commands.canvassViewMap.label": "Go to Map",
   "commands.canvassViewMap.description": "Show the live canvass map",
+  "commands.sessionLockNow.label": "Lock the board now",
+  "commands.sessionLockNow.description": "Lock interaction immediately — updates keep flowing",
   "commands.sessionSignOut.label": "Sign out",
   "commands.sessionSignOut.description": "End the session and return to sign-in",
 

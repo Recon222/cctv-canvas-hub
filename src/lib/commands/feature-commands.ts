@@ -8,7 +8,7 @@
  * load and features stay out of the command system's module graph.
  */
 
-import { FolderOpen, LayoutDashboard, Map, LogOut } from 'lucide-react'
+import { FolderOpen, LayoutDashboard, Map, Lock, LogOut } from 'lucide-react'
 import i18n from '@/i18n/config'
 import type { AppCommand, CommandContext } from './types'
 import type { CanvassView } from '@/features/canvass'
@@ -60,9 +60,21 @@ export const featureCommands: AppCommand[] = [
     keywords: ['map', 'markers', 'view'],
     execute: context => goToCanvassView('map', context),
   },
-  // NOTE: session-lock-now deliberately waits for 6.1 — it ships
-  // together with its unlock overlay so no build ever has a lock
-  // without an escape.
+  // session-lock-now ships WITH its unlock overlay (6.1C) — moved out
+  // of 5.3 so no build ever had a lock without an escape.
+  {
+    id: 'session-lock-now',
+    labelKey: 'commands.sessionLockNow.label',
+    descriptionKey: 'commands.sessionLockNow.description',
+    icon: Lock,
+    group: 'session',
+    keywords: ['lock', 'idle', 'kiosk', 'session', 'secure'],
+    execute: async () => {
+      const { useSessionStore } = await import('@/features/cloud-session')
+      // Self-guarding: lock() is active → locked only.
+      useSessionStore.getState().lock()
+    },
+  },
   {
     id: 'session-sign-out',
     labelKey: 'commands.sessionSignOut.label',

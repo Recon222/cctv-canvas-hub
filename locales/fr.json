@@ -105,6 +105,8 @@
   "commands.canvassViewCase.description": "Afficher le tableau de bord du dossier sélectionné",
   "commands.canvassViewMap.label": "Aller à la carte",
   "commands.canvassViewMap.description": "Afficher la carte de ratissage en direct",
+  "commands.sessionLockNow.label": "Verrouiller le tableau maintenant",
+  "commands.sessionLockNow.description": "Verrouiller l'interaction immédiatement — les mises à jour continuent",
   "commands.sessionSignOut.label": "Se déconnecter",
   "commands.sessionSignOut.description": "Terminer la session et revenir à la connexion",
 

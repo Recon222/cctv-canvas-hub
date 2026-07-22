@@ -20,6 +20,7 @@ const { navigationCommands } = await import('./navigation-commands')
 const { featureCommands } = await import('./feature-commands')
 const { useCanvassStore, resetCanvassStore } =
   await import('@/features/canvass')
+const { useSessionStore } = await import('@/features/cloud-session')
 
 const createMockContext = (): CommandContext => ({
   openPreferences: vi.fn(),
@@ -168,9 +169,30 @@ describe('Simplified Command System', () => {
           'session-sign-out',
         ])
       )
-      // session-lock-now registers in 6.1, WITH its unlock overlay — a
-      // lock command with no escape would strand an M5 build.
-      expect(ids).not.toContain('session-lock-now')
+      // 6.1C landed: session-lock-now ships WITH its unlock overlay —
+      // the M5 absence pin flips to presence (see #108 below).
+      expect(ids).toContain('session-lock-now')
+    })
+
+    // Test #108 (R2 — restores the registration coverage #99 lost when
+    // the command moved out of 5.3)
+    it('registers session-lock-now with its unlock overlay (6.1C)', async () => {
+      registerCommands(featureCommands)
+
+      const ids = getAllCommands(mockContext).map(cmd => cmd.id)
+      expect(ids).toContain('session-lock-now')
+
+      // Executing it drives active → locked; lock() self-guards, so a
+      // signed-out shell can never lock itself into a dead end.
+      useSessionStore.setState({ state: 'active' })
+      await executeCommand('session-lock-now', mockContext)
+      expect(useSessionStore.getState().state).toBe('locked')
+
+      useSessionStore.setState({ state: 'signed-out' })
+      await executeCommand('session-lock-now', mockContext)
+      expect(useSessionStore.getState().state).toBe('signed-out')
+
+      useSessionStore.setState({ state: 'booting' })
     })
 
     it('guards the case-bound views behind a selected case', async () => {

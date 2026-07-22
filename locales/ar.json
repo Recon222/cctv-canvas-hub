@@ -105,6 +105,8 @@
   "commands.canvassViewCase.description": "عرض لوحة معلومات القضية المحددة",
   "commands.canvassViewMap.label": "الانتقال إلى الخريطة",
   "commands.canvassViewMap.description": "عرض خريطة المسح المباشرة",
+  "commands.sessionLockNow.label": "قفل اللوحة الآن",
+  "commands.sessionLockNow.description": "قفل التفاعل فورًا — تستمر التحديثات",
   "commands.sessionSignOut.label": "تسجيل الخروج",
   "commands.sessionSignOut.description": "إنهاء الجلسة والعودة إلى تسجيل الدخول",
 
