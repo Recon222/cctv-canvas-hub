@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { TitleBar } from '@/components/titlebar/TitleBar'
 import { MainWindowContent } from './MainWindowContent'
 import { CommandPalette } from '@/features/command-palette'
@@ -5,6 +6,7 @@ import { PreferencesDialog } from '@/features/preferences'
 import { SessionLockOverlay, useSessionStore } from '@/features/cloud-session'
 import { Toaster } from 'sonner'
 import { useTheme } from '@/hooks/use-theme'
+import { useUIStore } from '@/store/ui-store'
 import { useMainWindowEventListeners } from '@/hooks/useMainWindowEventListeners'
 
 /**
@@ -26,6 +28,21 @@ export function MainWindow() {
 
   // Set up global event listeners (keyboard shortcuts, etc.)
   useMainWindowEventListeners()
+
+  // PR #9 fix-delta N2: `inert` does not cross React portals — the
+  // Preferences dialog and command palette render into document.body,
+  // OUTSIDE the inert shell, and Preferences' Save is a plain mutation
+  // (not dispatcher-gated). Dismiss both when the lock fires; discarding
+  // in-progress edits is correct — the operator walked away. (The other
+  // full-screen surfaces — ImageViewer/VideoPlayer — are in-tree
+  // absolute overlays inside the board, so inert already covers them;
+  // toasts carry no actions.)
+  useEffect(() => {
+    if (locked) {
+      useUIStore.getState().setPreferencesOpen(false)
+      useUIStore.getState().setCommandPaletteOpen(false)
+    }
+  }, [locked])
 
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden rounded-xl bg-background">

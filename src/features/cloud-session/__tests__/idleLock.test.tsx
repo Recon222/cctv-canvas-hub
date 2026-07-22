@@ -53,6 +53,17 @@ vi.mock('@/features/canvass', () => ({
   ),
 }))
 
+// jsdom has no ResizeObserver; cmdk (the palette dialog the N2 arm
+// opens) requires one. Scoped stub — no layout behavior needed.
+vi.stubGlobal(
+  'ResizeObserver',
+  class {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  }
+)
+
 /** Minimal client fake: only the surfaces Flow F touches. */
 function mockSupabaseClient(overrides: {
   signInError?: { message: string; status?: number } | null
@@ -222,7 +233,11 @@ describe('LockOverlay (6.1B)', () => {
 
   afterEach(() => {
     useSessionStore.setState({ state: 'booting' })
-    useUIStore.setState({ rightSidebarVisible: true })
+    useUIStore.setState({
+      rightSidebarVisible: true,
+      preferencesOpen: false,
+      commandPaletteOpen: false,
+    })
   })
 
   // Test #102
@@ -327,6 +342,37 @@ describe('LockOverlay (6.1B)', () => {
     expect(screen.getByTestId('lockable-shell')).not.toHaveAttribute('inert')
     await user.click(control)
     expect(useUIStore.getState().rightSidebarVisible).toBe(!before)
+  })
+
+  // PR #9 fix-delta N2: `inert` does not cross React portals — a
+  // Preferences dialog (or palette) left open when the lock fires
+  // would float OVER the overlay with a savable config surface. The
+  // shell dismisses body-portalled transient overlays on the locked
+  // transition; in-progress edits are deliberately discarded (the
+  // operator walked away).
+  it('dismisses body-portalled transient overlays when the lock fires', async () => {
+    mockSupabaseClient({})
+    renderWithFeatureProviders(<MainWindow />)
+
+    act(() => {
+      useUIStore.setState({ preferencesOpen: true, commandPaletteOpen: true })
+    })
+    act(() => {
+      useSessionStore.getState().lock()
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(useUIStore.getState().preferencesOpen).toBe(false)
+    expect(useUIStore.getState().commandPaletteOpen).toBe(false)
+
+    // Unlock does NOT resurrect them — dismissal, not suspension.
+    act(() => {
+      useSessionStore.getState().unlock()
+    })
+    expect(useUIStore.getState().preferencesOpen).toBe(false)
+    expect(useUIStore.getState().commandPaletteOpen).toBe(false)
   })
 
   // Test #103 — including both D3 error arms: the inline error names
