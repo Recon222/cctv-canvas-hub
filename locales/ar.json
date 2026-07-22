@@ -208,6 +208,11 @@
   "canvass.nav.popOutLabel": "فتح {{view}} في نافذة مستقلة",
   "canvass.nav.popped": "مفتوحة في نافذة مستقلة — انقر للتركيز",
   "canvass.nav.popOutFailed": "تعذّر فتح النافذة",
+  "canvass.secondary.connecting": "جارٍ الاتصال بالنافذة الرئيسية…",
+  "canvass.secondary.timeoutTitle": "لم يتم استلام جلسة",
+  "canvass.secondary.timeoutBody": "أغلق هذه النافذة وأعد فتحها من النافذة الرئيسية.",
+  "canvass.secondary.endedTitle": "انتهت الجلسة",
+  "canvass.secondary.endedBody": "تم تسجيل الخروج من الجلسة في النافذة الرئيسية. أعد فتح هذا العرض من النافذة الرئيسية بعد تسجيل الدخول.",
   "canvass.cases.empty.listening": "الاستماع إلى قناة الوكالة",
   "canvass.cases.syncedCount": "{{count}} مُزامنة من تطبيق الميدان",
 

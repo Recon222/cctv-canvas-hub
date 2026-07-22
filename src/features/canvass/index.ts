@@ -5,6 +5,8 @@
  */
 
 export { CanvassRoot } from './components/CanvassRoot'
+// The secondary-window host (M7, 7.3A) — mounted by window-main.tsx.
+export { SecondaryRoot } from './components/SecondaryRoot'
 // Board view/selection state — consumed by the palette's go-to-view
 // commands (5.3B); M7 secondary windows reuse the same surface.
 export { useCanvassStore, resetCanvassStore } from './store/canvass-store'

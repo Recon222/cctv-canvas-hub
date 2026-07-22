@@ -208,6 +208,11 @@
   "canvass.nav.popOutLabel": "Pop out {{view}}",
   "canvass.nav.popped": "Popped out — click to focus",
   "canvass.nav.popOutFailed": "Couldn't open the window",
+  "canvass.secondary.connecting": "Connecting to the main window…",
+  "canvass.secondary.timeoutTitle": "No session received",
+  "canvass.secondary.timeoutBody": "Close this window and reopen it from the main window.",
+  "canvass.secondary.endedTitle": "Session ended",
+  "canvass.secondary.endedBody": "The session was signed out in the main window. Reopen this view from the main window after signing in.",
   "canvass.cases.empty.listening": "Listening on agency channel",
   "canvass.cases.syncedCount": "{{count}} synced from the field app",
 
