@@ -1,6 +1,5 @@
 import {
   SchemaGateScreen,
-  SessionLockOverlay,
   SetupScreen,
   SignInScreen,
   useAuthBootstrap,
@@ -21,8 +20,9 @@ interface MainWindowContentProps {
  * the bootstrap guarantees it always exits to another state.
  *
  * Lock (Flow F, 6.1): the board mounts for `active` AND `locked` — a
- * locked board keeps flowing unchanged — with the input-swallowing
- * overlay layered above it while locked (relative/absolute pair).
+ * locked board keeps flowing unchanged. The LockOverlay itself lives
+ * in the MainWindow shell (PR #9 M1: it must cover the TitleBar too,
+ * and sit OUTSIDE the inert subtree).
  */
 export function MainWindowContent({ className }: MainWindowContentProps) {
   useAuthBootstrap()
@@ -30,14 +30,11 @@ export function MainWindowContent({ className }: MainWindowContentProps) {
   const state = useSessionStore(s => s.state)
 
   return (
-    <div
-      className={cn('relative flex h-full flex-col bg-background', className)}
-    >
+    <div className={cn('flex h-full flex-col bg-background', className)}>
       {state === 'needs-setup' && <SetupScreen />}
       {state === 'signed-out' && <SignInScreen />}
       {state === 'schema-gate' && <SchemaGateScreen />}
       {(state === 'active' || state === 'locked') && <CanvassRoot />}
-      {state === 'locked' && <SessionLockOverlay />}
     </div>
   )
 }

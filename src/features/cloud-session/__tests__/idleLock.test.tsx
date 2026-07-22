@@ -7,11 +7,9 @@ import { commands } from '@/lib/tauri-bindings'
 import { renderWithFeatureProviders } from '@/test/feature-test-utils'
 import { getSupabase } from '@/lib/supabase/client'
 import { useUIStore } from '@/store/ui-store'
-import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
-import { MainWindowContent } from '@/components/layout/MainWindowContent'
+import { MainWindow } from '@/components/layout/MainWindow'
 import { useSessionStore } from '../store/session-store'
 import { useIdleLock } from '../hooks/useIdleLock'
-import type { CommandContext } from '@/lib/commands/types'
 
 /**
  * Phase 6.1 — the idle timer (tests #100–101 + the ledger-L1 clamp)
@@ -35,6 +33,16 @@ vi.mock('@/features/canvass', () => ({
     <div data-testid="board-stub">
       <p>QuickMart Convenience</p>
       <p>DVR admin / dvr-pass-1234</p>
+      {/* A NavRail-class DIRECT-STORE control (bypasses the command
+          dispatcher) — the PR #9 M1 inert arm clicks this. */}
+      <button
+        type="button"
+        onClick={() => {
+          useUIStore.getState().toggleRightSidebar()
+        }}
+      >
+        direct store control
+      </button>
     </div>
   ),
 }))
@@ -214,7 +222,7 @@ describe('LockOverlay (6.1B)', () => {
   // Test #102
   it('leaves board content untouched while locked and blocks interaction', async () => {
     mockSupabaseClient({})
-    renderWithFeatureProviders(<MainWindowContent />)
+    renderWithFeatureProviders(<MainWindow />)
 
     const board = screen.getByTestId('board-stub')
     const unlockedText = board.textContent
@@ -242,8 +250,8 @@ describe('LockOverlay (6.1B)', () => {
 
     // Interaction-dead includes document-level shortcuts: Ctrl+2 (the
     // panel toggle) must not fire while locked, and must again after.
-    const context = { openPreferences: vi.fn() } as unknown as CommandContext
-    renderHook(() => useKeyboardShortcuts(context))
+    // MainWindow mounts the real listener chain (PR #9 M1 moved the
+    // overlay up to the shell) — no separate renderHook needed.
     const before = useUIStore.getState().rightSidebarVisible
     act(() => {
       document.dispatchEvent(
@@ -262,6 +270,59 @@ describe('LockOverlay (6.1B)', () => {
     expect(useUIStore.getState().rightSidebarVisible).toBe(!before)
   })
 
+  // PR #9 M1: the lock wall covers the WHOLE window and contains
+  // interaction — the shell (TitleBar included) goes inert while
+  // locked, so direct-store controls (NavRail/titlebar-toggle class,
+  // which bypass the command dispatcher) are unreachable by pointer
+  // AND keyboard; the overlay lives outside the inert subtree.
+  it('makes direct-store controls inert while locked', async () => {
+    const user = userEvent.setup()
+    mockSupabaseClient({})
+    renderWithFeatureProviders(<MainWindow />)
+
+    // The shell wrapper contains the board AND the titlebar, and only
+    // carries inert while locked.
+    const shell = screen.getByTestId('lockable-shell')
+    expect(shell).not.toHaveAttribute('inert')
+    expect(shell.contains(screen.getByTestId('board-stub'))).toBe(true)
+
+    const control = screen.getByRole('button', {
+      name: 'direct store control',
+    })
+    const before = useUIStore.getState().rightSidebarVisible
+
+    act(() => {
+      useSessionStore.getState().lock()
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getByTestId('lockable-shell')).toHaveAttribute('inert')
+
+    // The control sits INSIDE the inert subtree — the browser blocks
+    // pointer + focus on everything under [inert] (jsdom does not
+    // emulate inert behavior, so the pin is the mechanism: attribute
+    // present + structural containment; enforcement itself is the
+    // live-smoke leg). A regression that moves a control outside the
+    // wrapper, or drops the attribute, fails here.
+    expect(control.closest('[inert]')).not.toBeNull()
+    expect(useUIStore.getState().rightSidebarVisible).toBe(before)
+
+    // The overlay itself is OUTSIDE the inert subtree: its password
+    // field stays typable while the board is dead.
+    const input = screen.getByLabelText('Coordinator password')
+    await user.type(input, 'x')
+    expect(input).toHaveValue('x')
+
+    // Unlocked again: inert lifts and the same control works.
+    act(() => {
+      useSessionStore.getState().unlock()
+    })
+    expect(screen.getByTestId('lockable-shell')).not.toHaveAttribute('inert')
+    await user.click(control)
+    expect(useUIStore.getState().rightSidebarVisible).toBe(!before)
+  })
+
   // Test #103 — including both D3 error arms: the inline error names
   // WHICH failure (wrong password vs cloud unreachable).
   it('resumes on successful re-auth and stays locked on failure', async () => {
@@ -269,7 +330,7 @@ describe('LockOverlay (6.1B)', () => {
     const fake = mockSupabaseClient({
       signInError: { message: 'Invalid login credentials', status: 400 },
     })
-    renderWithFeatureProviders(<MainWindowContent />)
+    renderWithFeatureProviders(<MainWindow />)
     act(() => {
       useSessionStore.getState().lock()
     })
@@ -318,7 +379,7 @@ describe('LockOverlay (6.1B)', () => {
   it('keeps sign-out reachable from the overlay', async () => {
     const user = userEvent.setup()
     mockSupabaseClient({})
-    renderWithFeatureProviders(<MainWindowContent />)
+    renderWithFeatureProviders(<MainWindow />)
     act(() => {
       useSessionStore.getState().lock()
     })
@@ -347,7 +408,7 @@ describe('LockOverlay (6.1B)', () => {
       },
     })
     useSessionStore.setState({ state: 'locked' })
-    renderWithFeatureProviders(<MainWindowContent />)
+    renderWithFeatureProviders(<MainWindow />)
 
     expect(
       await screen.findByText(

@@ -2,6 +2,7 @@ import { TitleBar } from '@/components/titlebar/TitleBar'
 import { MainWindowContent } from './MainWindowContent'
 import { CommandPalette } from '@/features/command-palette'
 import { PreferencesDialog } from '@/features/preferences'
+import { SessionLockOverlay, useSessionStore } from '@/features/cloud-session'
 import { Toaster } from 'sonner'
 import { useTheme } from '@/hooks/use-theme'
 import { useMainWindowEventListeners } from '@/hooks/useMainWindowEventListeners'
@@ -10,20 +11,37 @@ import { useMainWindowEventListeners } from '@/hooks/useMainWindowEventListeners
  * Map-maximal shell (spec §4): TitleBar + full-bleed content, no
  * edge-docked side panels (AD9 — the sidebar files stay dormant for a
  * later /cleanup). Global overlays (palette, preferences, toasts) remain.
+ *
+ * Lock containment (PR #9 M1): while `locked`, the WHOLE shell —
+ * TitleBar included — goes `inert` (React 19 native prop), killing
+ * pointer AND focus/keyboard reachability for every control that
+ * bypasses the command dispatcher (titlebar toggles, NavRail,
+ * MonitorToggle, map zoom). The LockOverlay is a SIBLING outside the
+ * inert subtree so its own password/sign-out input keeps working, and
+ * it covers the full window rather than the content region alone.
  */
 export function MainWindow() {
   const { theme } = useTheme()
+  const locked = useSessionStore(state => state.state === 'locked')
 
   // Set up global event listeners (keyboard shortcuts, etc.)
   useMainWindowEventListeners()
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden rounded-xl bg-background">
-      <TitleBar />
+    <div className="relative flex h-screen w-full flex-col overflow-hidden rounded-xl bg-background">
+      <div
+        inert={locked}
+        data-testid="lockable-shell"
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TitleBar />
 
-      <div className="flex flex-1 overflow-hidden">
-        <MainWindowContent className="flex-1" />
+        <div className="flex flex-1 overflow-hidden">
+          <MainWindowContent className="flex-1" />
+        </div>
       </div>
+
+      {locked && <SessionLockOverlay />}
 
       {/* Global UI Components (hidden until triggered) */}
       <CommandPalette />
