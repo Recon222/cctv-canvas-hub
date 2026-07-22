@@ -56,13 +56,22 @@ export function initSupabase(config: CloudConfig): SupabaseClient {
     },
   })
   client = created
-  // 7.2C (AD13): main is the sole auth owner — every ROTATION is pushed
-  // to the pop-out windows. TOKEN_REFRESHED only; deliberately NO eager
-  // revocation detection here (ledger D19: accepted V1 posture — the
-  // honest signed-out path stays unchanged).
+  // 7.2C (AD13): main is the sole auth owner — every session ROTATION
+  // is pushed to the pop-out windows. The full rotation class (PR #10
+  // H1): TOKEN_REFRESHED (routine refresh), SIGNED_IN (the M6 unlock
+  // re-auth is a full signInWithPassword minting a NEW session — the
+  // old one is orphaned and never refreshed again; initial sign-in is
+  // harmless, no secondaries exist yet), USER_UPDATED. Deliberately NO
+  // eager revocation detection here (ledger D19: accepted V1 posture —
+  // SIGNED_OUT pushes nothing; session-ended is authService's emit).
   created.auth.onAuthStateChange((event, session) => {
     const token = session?.access_token
-    if (event === 'TOKEN_REFRESHED' && token !== undefined) {
+    if (
+      (event === 'TOKEN_REFRESHED' ||
+        event === 'SIGNED_IN' ||
+        event === 'USER_UPDATED') &&
+      token !== undefined
+    ) {
       pushSessionToken(token)
     }
   })

@@ -12,7 +12,9 @@
  * the timeout state.
  *
  * Lifecycle semantics (AD6 parity, doc 01 §A1):
- * - `session-token` — handshake reply + every TOKEN_REFRESHED in main.
+ * - `session-token` — handshake reply + every session rotation in main
+ *   (TOKEN_REFRESHED / SIGNED_IN / USER_UPDATED — the unlock re-auth is
+ *   a full sign-in minting a new session; PR #10 H1).
  * - `view-context`  — handshake reply + re-emitted on a focus-if-open
  *   retarget (the JS-side-only emit; the Rust command never emits it).
  * - `session-locked` / `session-unlocked` — idle lock parity: the
@@ -57,7 +59,8 @@ export async function emitSecondaryReady(view: PopOutView): Promise<void> {
   await emit(SECONDARY_READY, { view })
 }
 
-/** Main → secondaries: handshake reply + every TOKEN_REFRESHED. */
+/** Main → secondaries: handshake reply + every session rotation
+ * (TOKEN_REFRESHED / SIGNED_IN / USER_UPDATED — PR #10 H1). */
 export async function emitSessionToken(
   payload: SessionTokenPayload
 ): Promise<void> {

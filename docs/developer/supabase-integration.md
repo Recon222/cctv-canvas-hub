@@ -68,8 +68,12 @@ Token delivery is a **handshake** over typed Tauri events
 (`src/lib/services/sessionEvents.ts` — the one emitter home): the secondary
 attaches listeners FIRST, then emits `secondary-ready`; main replies
 `session-token` (`{url, key, token}` — designed-public url/key) +
-`view-context` (`{view, caseId}`). Ongoing: `session-token` on every
-`TOKEN_REFRESHED`, `session-locked`/`session-unlocked` for AD6 parity, and
+`view-context` (`{view, caseId}`). Ongoing: `session-token` on the **full
+session-rotation class** — `TOKEN_REFRESHED`, `SIGNED_IN` (the unlock flow
+re-authenticates via `signInWithPassword`, minting a NEW session; pushing
+only on refresh would orphan every pop-out after a routine lock→unlock —
+PR #10 H1), and `USER_UPDATED` — `session-locked`/`session-unlocked` for
+AD6 parity, and
 `session-ended` on **sign-out only** — the secondary tears down (channels →
 disconnect → token) BEFORE rendering its terminal screen, then runs the
 per-context session-exit purge (doc 01 §5.4).

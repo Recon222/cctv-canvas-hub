@@ -85,33 +85,35 @@ describe('main-side session propagation (Phase 7.2C, R8 #138–139)', () => {
     vi.mocked(emitSessionToken).mockClear()
   })
 
-  // Test #138
-  it('pushes session-token (url+key+token) on TOKEN_REFRESHED — and on nothing else', async () => {
+  // Test #138 — FLIPPED by the PR #10 review (H1): the original pin
+  // ("SIGNED_IN pushes nothing") was a false-confidence pin locking in
+  // the unlock-orphan defect. The push gate is the full session-rotation
+  // class: TOKEN_REFRESHED (routine refresh), SIGNED_IN (the M6 unlock
+  // re-auth mints a NEW session via signInWithPassword), USER_UPDATED.
+  it('pushes session-token on the full rotation class (TOKEN_REFRESHED, SIGNED_IN, USER_UPDATED) — never on SIGNED_OUT', async () => {
     const client = initSupabase(CONFIG)
     const notify = client.auth as unknown as NotifyCapable
 
-    await notify._notifyAllSubscribers(
-      'TOKEN_REFRESHED',
-      { access_token: 'rotated-jwt' },
-      false
-    )
-    await vi.waitFor(() => {
-      expect(emitSessionToken).toHaveBeenCalledWith({
-        url: CONFIG.url,
-        key: CONFIG.publishable_key,
-        token: 'rotated-jwt',
+    for (const [event, token] of [
+      ['TOKEN_REFRESHED', 'refreshed-jwt'],
+      ['SIGNED_IN', 'post-unlock-jwt'],
+      ['USER_UPDATED', 'updated-user-jwt'],
+    ] as const) {
+      vi.mocked(emitSessionToken).mockClear()
+      await notify._notifyAllSubscribers(event, { access_token: token }, false)
+      await vi.waitFor(() => {
+        expect(emitSessionToken).toHaveBeenCalledWith({
+          url: CONFIG.url,
+          key: CONFIG.publishable_key,
+          token,
+        })
       })
-    })
+    }
 
-    // TOKEN_REFRESHED ONLY — no other auth event pushes, and no eager
-    // revocation detection is wired here (ledger D19: accepted posture;
-    // the honest signed-out path is unchanged).
+    // SIGNED_OUT still pushes nothing — and no eager revocation
+    // detection is wired here (ledger D19: accepted posture; the honest
+    // signed-out path is unchanged; session-ended is authService's).
     vi.mocked(emitSessionToken).mockClear()
-    await notify._notifyAllSubscribers(
-      'SIGNED_IN',
-      { access_token: 'fresh-sign-in' },
-      false
-    )
     await notify._notifyAllSubscribers('SIGNED_OUT', null, false)
     expect(emitSessionToken).not.toHaveBeenCalled()
   })
@@ -146,5 +148,47 @@ describe('main-side session propagation (Phase 7.2C, R8 #138–139)', () => {
         token: 'live-jwt',
       })
     })
+  })
+
+  // Supporting arm on #138 (PR #10 H1 — the actual defect path): the
+  // unlock flow is LockOverlay → reauthenticate → signInWithPassword —
+  // a REAL GoTrue password grant (not a notifier shortcut) must result
+  // in a session-token push carrying the NEWLY minted token, or every
+  // open pop-out rides the orphaned old session to expiry.
+  it('pushes the newly minted token when a real signInWithPassword re-auth lands (unlock path)', async () => {
+    const client = initSupabase(CONFIG)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              access_token: 'unlock-minted-jwt',
+              token_type: 'bearer',
+              expires_in: 3600,
+              refresh_token: 'unlock-refresh',
+              user: { id: 'uid-1', aud: 'authenticated', email: 'c@x.test' },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
+          )
+        )
+      )
+    )
+    try {
+      // The same call reauthenticate() makes on unlock (authService).
+      await client.auth.signInWithPassword({
+        email: 'c@x.test',
+        password: 'pw',
+      })
+      await vi.waitFor(() => {
+        expect(emitSessionToken).toHaveBeenCalledWith({
+          url: CONFIG.url,
+          key: CONFIG.publishable_key,
+          token: 'unlock-minted-jwt',
+        })
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
