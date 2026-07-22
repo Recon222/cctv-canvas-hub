@@ -161,10 +161,12 @@ describe('LocationCard', () => {
     )
 
     const card = screen.getByRole('option', { name: /QuickMart Convenience/ })
-    // The 12 s gold flash keys off BOTH: the animation class and the
+    // The 12 s gold flash keys off BOTH the animation class and the
     // data-attention attribute (canvass.css scopes the keyframes to
-    // `.hub-attention-flash[data-attention]`).
-    expect(card).toHaveClass('hub-attention-flash')
+    // `.hub-attention-flash[data-attention]`) — but the class sits
+    // unconditionally in the card's base string, so the ATTRIBUTE is
+    // the pin (mutation-confirmed red both directions; PR #8 L1: a
+    // toHaveClass assertion here could never fail).
     expect(card).toHaveAttribute('data-attention')
   })
 
