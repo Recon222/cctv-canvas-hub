@@ -25,6 +25,15 @@ export async function signIn(email: string, password: string): Promise<void> {
   }
   // Realtime sockets authenticate separately (Flow A step 4).
   await supabase.realtime.setAuth()
+  // A fresh sign-in always starts unlocked. Clear any stale persisted
+  // lock flag: a prior session that exited to `signed-out` WHILE locked
+  // (a genuine session death behind the idle lock) routes through
+  // `exitSignedOut`, NOT `signOut()`, so its `setLockedFlag(false)`
+  // never runs — without this, the next relaunch would boot locked.
+  // Non-fatal, like the email persist below.
+  setLockedFlag(false).catch((cause: unknown) => {
+    logger.warn('Failed to clear the stale lock flag on sign-in', { cause })
+  })
   // Remember the email for the re-auth prompt (Flow F). Convenience only —
   // failure must not fail the sign-in.
   try {

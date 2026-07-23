@@ -15,7 +15,9 @@ import {
   getSupabase,
   teardownSupabase,
   SupabaseNotInitializedError,
+  ensureFreshSession,
 } from './client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { resetVaultStorageBinding } from './vault-storage'
 
 vi.mock('@/lib/services/sessionEvents', () => ({
@@ -190,5 +192,48 @@ describe('main-side session propagation (Phase 7.2C, R8 #138–139)', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('ensureFreshSession — wake-time freshness classification', () => {
+  function fakeClient(getSession: () => Promise<unknown>): SupabaseClient {
+    return {
+      auth: {
+        getSession,
+        refreshSession: vi.fn(),
+      },
+      realtime: { setAuth: vi.fn() },
+    } as unknown as SupabaseClient
+  }
+
+  // v1-final-sweep HIGH: a fully-expired token means getSession() itself
+  // does the refresh internally and can return { session: null, error }.
+  // A RETRYABLE (network/5xx/0/429) error there must NOT sign out — the
+  // refresh token is still valid; recovery is the next wake/tick.
+  it('defers on a retryable getSession error (expired token, network down)', async () => {
+    const client = fakeClient(() =>
+      Promise.resolve({ data: { session: null }, error: { status: 0 } })
+    )
+    await expect(ensureFreshSession(client)).resolves.toBe('deferred')
+    // Never reaches the explicit refresh — the getSession call already
+    // attempted (and deferred) it.
+    expect(client.auth.refreshSession).not.toHaveBeenCalled()
+  })
+
+  // A DEFINITE 4xx refusal at getSession is a genuinely dead session —
+  // the honest signed-out path is correct here.
+  it('fails on a definite non-retryable getSession error (dead session)', async () => {
+    const client = fakeClient(() =>
+      Promise.resolve({ data: { session: null }, error: { status: 400 } })
+    )
+    await expect(ensureFreshSession(client)).resolves.toBe('failed')
+  })
+
+  // No error, no session (never signed in on this context) stays failed.
+  it('fails when there is simply no session and no error', async () => {
+    const client = fakeClient(() =>
+      Promise.resolve({ data: { session: null }, error: null })
+    )
+    await expect(ensureFreshSession(client)).resolves.toBe('failed')
   })
 })
