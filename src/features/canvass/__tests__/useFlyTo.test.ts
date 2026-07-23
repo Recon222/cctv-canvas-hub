@@ -28,7 +28,12 @@ function mapped(): CanvassLocation {
 
 function fakeMapRef() {
   const flyTo = vi.fn()
-  const mapRef = { current: { flyTo } } as unknown as RefObject<MapRef | null>
+  // L3 fix (M7): the hook reads the padding scale from the map's own
+  // container width.
+  const getContainer = vi.fn(() => ({ clientWidth: 1920 }))
+  const mapRef = {
+    current: { flyTo, getContainer },
+  } as unknown as RefObject<MapRef | null>
   return { mapRef, flyTo }
 }
 
@@ -151,20 +156,37 @@ describe('useFlyTo (Phase 3.3C)', () => {
   })
 })
 
-describe('cameraPadding (PR #6 review L4)', () => {
+describe('cameraPadding (PR #6 review L4; L3 fix M7)', () => {
   afterEach(() => {
     document.documentElement.dir = ''
   })
 
+  // Test #135 — amended in place at M7 (ledger L3): the signature now
+  // threads the MEASURED board width; the pinned RTL-mirror behavior is
+  // unchanged.
   it('flips the stack/rail padding sides under RTL', () => {
     document.documentElement.dir = 'ltr'
-    const ltr = cameraPadding()
+    const ltr = cameraPadding(1920)
     document.documentElement.dir = 'rtl'
-    const rtl = cameraPadding()
+    const rtl = cameraPadding(1920)
 
     // LTR: stack clearance on the right, rail on the left; RTL mirrors.
     expect(ltr.right).toBeGreaterThan(ltr.left)
     expect(rtl.left).toBe(ltr.right)
     expect(rtl.right).toBe(ltr.left)
+  })
+
+  // Unnumbered rider (L3): the scale source IS the passed board width —
+  // a half-width surface (e.g. a small secondary window) halves the
+  // stack/rail clearance instead of reading the OS window.
+  it('scales the padding from the measured board width, not the window', () => {
+    document.documentElement.dir = 'ltr'
+    const full = cameraPadding(1920)
+    const half = cameraPadding(960)
+
+    expect(half.right).toBe(Math.round(full.right / 2))
+    expect(half.left).toBe(Math.round(full.left / 2))
+    // Zero (unmeasured, e.g. jsdom) degrades to the design scale.
+    expect(cameraPadding(0).right).toBe(full.right)
   })
 })

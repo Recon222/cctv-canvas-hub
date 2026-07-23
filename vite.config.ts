@@ -30,6 +30,8 @@ export default defineConfig(async () => ({
       input: {
         main: resolve(__dirname, 'index.html'),
         'quick-pane': resolve(__dirname, 'quick-pane.html'),
+        // M7 secondary view windows (7.1B) — one entry, view via query.
+        window: resolve(__dirname, 'window.html'),
       },
     },
   },

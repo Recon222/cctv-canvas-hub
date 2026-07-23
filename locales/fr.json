@@ -205,6 +205,14 @@
   "canvass.dvr.password": "Mot de passe",
 
   "canvass.nav.needsCase": "Sélectionnez d'abord un dossier",
+  "canvass.nav.popOutLabel": "Détacher {{view}}",
+  "canvass.nav.popped": "Détachée — cliquer pour la mettre au premier plan",
+  "canvass.nav.popOutFailed": "Impossible d'ouvrir la fenêtre",
+  "canvass.secondary.connecting": "Connexion à la fenêtre principale…",
+  "canvass.secondary.timeoutTitle": "Aucune session reçue",
+  "canvass.secondary.timeoutBody": "Fermez cette fenêtre et rouvrez-la depuis la fenêtre principale.",
+  "canvass.secondary.endedTitle": "Session terminée",
+  "canvass.secondary.endedBody": "La session a été fermée dans la fenêtre principale. Rouvrez cette vue depuis la fenêtre principale après vous être reconnecté.",
   "canvass.cases.empty.listening": "À l'écoute du canal de l'agence",
   "canvass.cases.syncedCount": "{{count}} synchronisés depuis l'application terrain",
 

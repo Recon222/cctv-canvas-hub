@@ -37,6 +37,47 @@ deliberate exception to the singleton (`persistSession: false`,
   `ReturnType<typeof createClient<Database>>` — annotating with the bare
   library type re-parameterizes the generics and trips `no-unsafe-assignment`.
 
+## Secondary windows (M7, AD13): the accessToken client
+
+A pop-out view window is a **separate JS context** — its module singletons
+(client holder, stores, query client) are its own. Main is the **sole auth
+owner**: secondaries never touch the vault/keyring and run no refresh ticker.
+Their client (`src/lib/supabase/secondary-client.ts`) is created with the
+**`accessToken` callback option** and claims the `getSupabase()` holder via
+`setSupabaseClientHolder`, so every reused service/view works unchanged.
+
+Three behaviors are pinned against the **installed** supabase-js source
+(2.110.7 — re-verify on upgrade; `secondary-client.test.ts` trips if they
+drift):
+
+1. The `accessToken` callback feeds the user bearer to **PostgREST, storage,
+   AND realtime** (`fetchWithAuth` ← `_getSessionToken`). `realtime.setAuth`
+   alone would leave REST/storage as anon → RLS-empty board.
+2. With `accessToken` set, `supabase.auth.*` is a **throwing proxy** — no
+   GoTrue client exists. Never call `getSession`/`refreshSession` in a
+   secondary; the wake-refresh path (`useConnectionHealth`) is never mounted
+   there (SecondaryRoot runs a refresh-passive substitute).
+3. **No `onAuthStateChange` fires** in a secondary, and because the client's
+   own constructor calls `realtime.setAuth(token)` explicitly (setting
+   realtime-js's manual-token flag, which disables its callback-driven
+   refresh paths), the ONLY way joined channels learn a rotated token is
+   `updateSecondaryToken(token)` — swap the closure token AND explicit
+   `realtime.setAuth(token)`.
+
+Token delivery is a **handshake** over typed Tauri events
+(`src/lib/services/sessionEvents.ts` — the one emitter home): the secondary
+attaches listeners FIRST, then emits `secondary-ready`; main replies
+`session-token` (`{url, key, token}` — designed-public url/key) +
+`view-context` (`{view, caseId}`). Ongoing: `session-token` on the **full
+session-rotation class** — `TOKEN_REFRESHED`, `SIGNED_IN` (the unlock flow
+re-authenticates via `signInWithPassword`, minting a NEW session; pushing
+only on refresh would orphan every pop-out after a routine lock→unlock —
+PR #10 H1), and `USER_UPDATED` — `session-locked`/`session-unlocked` for
+AD6 parity, and
+`session-ended` on **sign-out only** — the secondary tears down (channels →
+disconnect → token) BEFORE rendering its terminal screen, then runs the
+per-context session-exit purge (doc 01 §5.4).
+
 ## The session vault (AD5)
 
 GoTrue's persisted session goes through `vaultStorage`

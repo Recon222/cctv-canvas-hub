@@ -18,7 +18,9 @@ import {
 } from '@/features/cloud-session'
 import { ProcessPanel, usePanelPosture } from '@/features/process-panel'
 import { useCanvassStore, resetCanvassStore } from '../store/canvass-store'
+import { resetViewWindows } from '../services/viewWindows'
 import { useCaseRealtime } from '../hooks/useCaseRealtime'
+import { useViewWindowBridge } from '../hooks/useViewWindowBridge'
 import { useCases } from '../hooks/useCases'
 import { useCaseLocations } from '../hooks/useCaseLocations'
 import { useMediaPolling } from '../hooks/useMediaPolling'
@@ -73,6 +75,9 @@ export function CanvassRoot() {
   // the hook itself gates on session (active/locked) + health (canPoll).
   useMediaPolling(selectedCaseId)
   useConnectionHealth()
+  // M7 (7.3B): answer secondary-ready with the view-context half of the
+  // handshake + clear the rail's popped flag when a pop-out closes.
+  useViewWindowBridge()
   // 6.3C posture: view-derived default (open everywhere, SYS tab on
   // map) applies on FIRST entry per view; user toggles win thereafter.
   usePanelPosture(view, view !== 'map')
@@ -88,6 +93,10 @@ export function CanvassRoot() {
     return () => {
       resetCanvassStore()
       resetHealthStore()
+      // PR #10 M1: the pop-out registry is per-session module state too
+      // — left stale, a re-sign-in reopen would focus a dead window and
+      // could seed operator A's case into operator B's handshake.
+      resetViewWindows()
       queryClient.removeQueries({
         predicate: query => isCaseDataKey(query.queryKey[0]),
       })
@@ -360,7 +369,9 @@ function MapFurniture() {
         [minLng, minLat],
         [maxLng, maxLat],
       ],
-      { padding: cameraPadding(), maxZoom: 16.5 }
+      // L3 fix: padding scale from the map's own container (matches the
+      // chrome scale source; correct in any hosting).
+      { padding: cameraPadding(map.getContainer().clientWidth), maxZoom: 16.5 }
     )
   }
 

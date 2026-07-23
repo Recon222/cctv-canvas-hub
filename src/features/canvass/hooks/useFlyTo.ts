@@ -34,10 +34,14 @@ export function useFlyTo(mapRef: RefObject<MapRef | null>): void {
       selectedCaseId,
     ])
     const location = locations?.find(l => l.id === selectedLocationId)
-    if (location?.coord != null) {
-      mapRef.current?.flyTo({
+    const map = mapRef.current
+    if (location?.coord != null && map !== null) {
+      map.flyTo({
         center: [location.coord.lng, location.coord.lat],
-        padding: cameraPadding(),
+        // L3 fix (M7): the padding scale derives from the MAP'S OWN
+        // container — identical to the chrome scale source in main
+        // (board-filling map) and correct in any secondary hosting.
+        padding: cameraPadding(map.getContainer().clientWidth),
       })
     }
     // A no-fix location still gets its card focused (it has no marker).
@@ -52,11 +56,15 @@ export function useFlyTo(mapRef: RefObject<MapRef | null>): void {
  * (inline-end) and the NavRail (inline-start). Physical sides on
  * purpose — the map is screen-space — flipped for RTL, and scaled with
  * the AD15 chrome scale (the stack is 408 design-px wide × the shell
- * scale). ponytail: constants eyeballed from the 1920 design canvas;
- * the AD15 live check tunes them.
+ * scale). `boardWidth` is the MEASURED width of the surface hosting the
+ * map (ledger L3, fixed M7): `window.innerWidth` diverged from the
+ * chrome's `clientWidth / 1920` scale source the moment a secondary
+ * window hosted the map — callers pass `map.getContainer().clientWidth`.
+ * ponytail: constants eyeballed from the 1920 design canvas; the AD15
+ * live check tunes them.
  */
-export function cameraPadding() {
-  const scale = window.innerWidth / 1920
+export function cameraPadding(boardWidth: number) {
+  const scale = boardWidth > 0 ? boardWidth / 1920 : 1
   const rtl = document.documentElement.dir === 'rtl'
   const stackSide = Math.round(470 * scale)
   const railSide = Math.round(140 * scale)

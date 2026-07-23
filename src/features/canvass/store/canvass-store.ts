@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
+import type { PopOutView } from '@/lib/services/sessionEvents'
 import type { ActivityEntry } from '../types'
 
 /**
@@ -34,9 +35,13 @@ interface CanvassStore {
   activity: ActivityEntry[]
   /** locationId → last attention stamp (epoch ms). */
   attentionByLocation: Record<string, number>
+  /** M7 (7.3B): which views are popped out — the rail's indicator.
+   * Main-window state only; a plain record for selector safety. */
+  poppedViews: Record<PopOutView, boolean>
   selectCase: (caseId: string | null) => void
   selectLocation: (locationId: string | null) => void
   setView: (view: CanvassView) => void
+  setViewPopped: (view: PopOutView, popped: boolean) => void
   /** Prepends to the ring and stamps attention for the entry's location. */
   pushActivity: (entry: ActivityEntry) => void
   clearExpiredAttention: (now?: number) => void
@@ -51,6 +56,7 @@ export const useCanvassStore = create<CanvassStore>()(
       view: 'cases',
       activity: [],
       attentionByLocation: {},
+      poppedViews: { case: false, map: false },
 
       selectCase: caseId =>
         set(
@@ -70,6 +76,15 @@ export const useCanvassStore = create<CanvassStore>()(
         ),
 
       setView: view => set({ view }, undefined, 'setView'),
+
+      setViewPopped: (view, popped) =>
+        set(
+          current => ({
+            poppedViews: { ...current.poppedViews, [view]: popped },
+          }),
+          undefined,
+          'setViewPopped'
+        ),
 
       pushActivity: entry =>
         set(
@@ -118,5 +133,6 @@ export function resetCanvassStore(): void {
     view: 'cases',
     activity: [],
     attentionByLocation: {},
+    poppedViews: { case: false, map: false },
   })
 }
