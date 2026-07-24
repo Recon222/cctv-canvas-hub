@@ -25,24 +25,25 @@ export async function signIn(email: string, password: string): Promise<void> {
   }
   // Realtime sockets authenticate separately (Flow A step 4).
   await supabase.realtime.setAuth()
-  // A fresh sign-in always starts unlocked. Clear any stale persisted
-  // lock flag: a prior session that exited to `signed-out` WHILE locked
-  // (a genuine session death behind the idle lock) routes through
-  // `exitSignedOut`, NOT `signOut()`, so its `setLockedFlag(false)`
-  // never runs — without this, the next relaunch would boot locked.
-  // Non-fatal, like the email persist below.
-  setLockedFlag(false).catch((cause: unknown) => {
-    logger.warn('Failed to clear the stale lock flag on sign-in', { cause })
-  })
-  // Remember the email for the re-auth prompt (Flow F). Convenience only —
-  // failure must not fail the sign-in.
+  // ONE load-modify-save (PR #11 review H1): clear any stale lock flag
+  // AND persist the signed-in email in a SINGLE write. `saveConfig`
+  // overwrites the whole CloudConfig record, so two concurrent
+  // read-modify-writes on it last-writer-wins and could silently
+  // re-strand `locked:true`. Why clear the flag: a session that died to
+  // `signed-out` WHILE locked routes through `exitSignedOut`, not
+  // `signOut()`, so its `setLockedFlag(false)` never ran — without this
+  // the next relaunch boots locked. Durability + the re-auth-prompt
+  // convenience (Flow F); a failure must not fail the sign-in.
   try {
     const config = await loadConfig()
-    if (config && config.signed_in_email !== email) {
-      await saveConfig({ ...config, signed_in_email: email })
+    if (
+      config &&
+      (config.locked !== false || config.signed_in_email !== email)
+    ) {
+      await saveConfig({ ...config, locked: false, signed_in_email: email })
     }
   } catch (cause) {
-    logger.warn('Failed to persist signed-in email to cloud config', { cause })
+    logger.warn('Failed to persist sign-in state to cloud config', { cause })
   }
 }
 

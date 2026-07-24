@@ -97,6 +97,72 @@ describe('authService', () => {
     expect(mockCommands.vaultSet).toHaveBeenCalledWith(SESSION_JSON)
   })
 
+  // PR #11 review H1 — the lock-flag clear and the email persist must be
+  // ONE write. Two concurrent read-modify-writes on the whole-record
+  // CloudConfig last-writer-wins and could re-strand `locked:true`.
+  it('clears a stale lock flag and persists a new email in a SINGLE config write', async () => {
+    mockGetSupabase.mockReturnValue(fakeSupabase())
+    mockCommands.loadCloudConfig.mockResolvedValue({
+      status: 'ok',
+      data: {
+        url: 'https://testref.supabase.co',
+        publishable_key: 'sb_publishable_test',
+        signed_in_email: 'old@example.test',
+        locked: true,
+      },
+    })
+    mockCommands.saveCloudConfig.mockResolvedValue({ status: 'ok', data: null })
+
+    // Account switch (email changes) with a stale lock flag set — both
+    // mutations are needed, which is exactly when the old two-writer code
+    // raced. Exactly ONE write must land, carrying BOTH.
+    await signIn('new@example.test', 'pw')
+
+    expect(mockCommands.saveCloudConfig).toHaveBeenCalledTimes(1)
+    const saved = mockCommands.saveCloudConfig.mock.calls[0]?.[0]
+    expect(saved?.locked).toBe(false)
+    expect(saved?.signed_in_email).toBe('new@example.test')
+  })
+
+  // Same email but a stale lock flag: the write still fires to clear it.
+  it('clears a stale lock flag even when the email is unchanged', async () => {
+    mockGetSupabase.mockReturnValue(fakeSupabase())
+    mockCommands.loadCloudConfig.mockResolvedValue({
+      status: 'ok',
+      data: {
+        url: 'https://testref.supabase.co',
+        publishable_key: 'sb_publishable_test',
+        signed_in_email: 'coord@example.test',
+        locked: true,
+      },
+    })
+    mockCommands.saveCloudConfig.mockResolvedValue({ status: 'ok', data: null })
+
+    await signIn('coord@example.test', 'pw')
+
+    expect(mockCommands.saveCloudConfig).toHaveBeenCalledTimes(1)
+    expect(mockCommands.saveCloudConfig.mock.calls[0]?.[0]?.locked).toBe(false)
+  })
+
+  // Nothing to change (already unlocked, same email): no write at all.
+  it('writes nothing when the config is already unlocked with the same email', async () => {
+    mockGetSupabase.mockReturnValue(fakeSupabase())
+    mockCommands.loadCloudConfig.mockResolvedValue({
+      status: 'ok',
+      data: {
+        url: 'https://testref.supabase.co',
+        publishable_key: 'sb_publishable_test',
+        signed_in_email: 'coord@example.test',
+        locked: false,
+      },
+    })
+    mockCommands.saveCloudConfig.mockResolvedValue({ status: 'ok', data: null })
+
+    await signIn('coord@example.test', 'pw')
+
+    expect(mockCommands.saveCloudConfig).not.toHaveBeenCalled()
+  })
+
   // Test #16
   it('surfaces bad credentials as a typed sign-in failure', async () => {
     mockGetSupabase.mockReturnValue(
