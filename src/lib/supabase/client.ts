@@ -213,7 +213,18 @@ export async function ensureFreshSession(
   supabase: SupabaseClient
 ): Promise<SessionFreshness> {
   const { data, error } = await supabase.auth.getSession()
-  if (error !== null || data.session === null) {
+  if (error !== null) {
+    // getSession() refreshes internally when the access token has
+    // expired, so a retryable network error HERE is the same deferred
+    // case as the explicit refresh below — installed auth-js preserves
+    // the refresh token on retryable errors. Classify before the
+    // null-session check (v1-final-sweep HIGH: PR #9 M2 guarded only the
+    // explicit-refresh branch, unreachable once the token is fully
+    // expired, so a kiosk waking after an outage longer than the token
+    // TTL was wrongly signed out despite a valid refresh token).
+    return isNetworkAuthError(error) ? 'deferred' : 'failed'
+  }
+  if (data.session === null) {
     return 'failed'
   }
   const expiresAtMs = (data.session.expires_at ?? 0) * 1000
